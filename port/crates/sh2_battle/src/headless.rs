@@ -78,6 +78,24 @@ pub fn sturdy_session(data: &BattleData) -> GameSession {
     } else {
         bridge::init_new_game(data, &mut s);
     }
+    // the records themselves are made sturdy: the party-side engine (`flow::party_setup`) derives the battle stats from them every turn
+    for pc in s.battle_party() {
+        if let Some(mut r) = s.save.btl.pc(pc as usize) {
+            r.hp_max = 9999;
+            r.hp = 9999;
+            r.mp_max = r.mp_max.max(300);
+            r.mp = r.mp_max;
+            r.sp_max = r.sp_max.max(99);
+            r.sp = r.sp_max;
+            r.str_ = 200;
+            r.vit = 160;
+            r.int = 120;
+            r.pow = 160;
+            r.agl = 70;
+            r.luc = 60;
+            s.save.btl.set_pc(pc as usize, &r);
+        }
+    }
     s
 }
 
@@ -193,6 +211,15 @@ pub fn run_set(data: &BattleData, tables: &Arc<ActionTables>, disc: &PkbDisc, se
     let mut host = BtlHost::new(seed, tables.clone(), setup.fighters.len());
     run.scripted = host.setup_monsters(data, &setup, &read, &|pc| session.save.btl.pc(pc as usize).map(|r| r.model_nums[0] as i32).unwrap_or(0));
     let mut b = Battle::new(host, setup.fighters.clone(), setup.ambush, setup.escape, seed as u64);
+    // the party-side engine as the plugin sets it up (PC stats from the save, monster immunities / resists, item / spell / skill resolution for both
+    // sides), then the harness party made sturdy again (`party_setup` re-derives the PC stats)
+    crate::flow::party_setup(&mut b, data, tables.clone(), session, &setup.pc_ids);
+    for f in b.fighters.iter_mut().flatten().filter(|f| !f.is_enemy) {
+        let prot = crate::rules::StatMod { turns: 0, chance: 100, percent: false, kind: crate::rules::modkind::STATUS_PROTECT, value: 0xc0 };
+        if !f.passives.contains(&prot) {
+            f.passives.push(prot);
+        }
+    }
     let mut guard = 0u64;
     let mut seen_log = 0;
     let trace = std::env::var_os("BE_TRACE").is_some();
@@ -205,6 +232,7 @@ pub fn run_set(data: &BattleData, tables: &Arc<ActionTables>, disc: &PkbDisc, se
         // `CBattle+0x32` / `+0x36` as the AI conditions see them (the plugin refreshes the same flags every frame)
         b.host.combo_pend = !b.combo_queue.is_empty();
         b.host.combo_cnt = !b.combo.is_empty();
+        b.host.fused = b.fused.iter().map(|f| f.as_ref().map(|x| x.id).unwrap_or(-1)).collect();
         // the AI log is capped at 64 lines: count the decisions as they appear
         while seen_log < b.host.ai_log.len() {
             let l = &b.host.ai_log[seen_log];

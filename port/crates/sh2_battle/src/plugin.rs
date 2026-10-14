@@ -588,6 +588,44 @@ fn enter_battle(
         rules::Ambush::EnemyFirst => t.mes(47).to_string(),
         _ => String::new(),
     };
+    // CS1: the per-fighter SE banks.  `BTLDATA/SOUND/SE/%03dM.SSE` (motion sounds), `%03dW%02d.SSE` (weapon), `%03dC.SSE` (voice); the file number is a CHR
+    // number written in decimal and the bank's own wave-bank id is `0x9000 | BCD(n)` (005M -> 0x9005, 420M -> 0x9420, 005C -> 0x9105).  Party members' banks
+    // carry their base model number (Karin 005 while her battle model is 006), so every model number of the record is tried.
+    {
+        let exists = |p: &str| files.as_ref().map(|f| f.disc.exists(p)).unwrap_or(false);
+        let bcd = |n: u32| ((n / 100) % 10) << 8 | ((n / 10) % 10) << 4 | (n % 10);
+        let mut chrs: Vec<u16> = vec![];
+        let mut weapons: Vec<(u16, u8)> = vec![];
+        let mut voices: Vec<u16> = vec![];
+        for (i, f) in setup.fighters.iter().enumerate() {
+            let mut cands: Vec<u32> = vec![battle.host.models.get(i).copied().unwrap_or(0).max(0) as u32];
+            let rec = setup.pc_ids.get(i).copied().flatten().and_then(|pc| session.save.btl.pc(pc as usize));
+            if let Some(r) = rec.as_ref() {
+                cands.extend(r.model_nums.iter().map(|&m| m as u32));
+            }
+            let Some(n) = cands.into_iter().find(|n| exists(&format!("BTLDATA/SOUND/SE/{n:03}M.SSE"))) else { continue };
+            if let Some(slot) = battle.host.se_bank.get_mut(i) {
+                *slot = 0x9000 | bcd(n);
+            }
+            if !chrs.contains(&(n as u16)) {
+                chrs.push(n as u16);
+            }
+            if !f.is_enemy {
+                if exists(&format!("BTLDATA/SOUND/SE/{n:03}C.SSE")) {
+                    voices.push(n as u16);
+                }
+                if let Some(r) = rec.as_ref().filter(|r| r.weapon >= 0) {
+                    if let Some(w) = db.0.dat.record(crate::data::SEC_WEAPON, r.weapon as usize, 0x34) {
+                        let wm = i16::from_le_bytes([w[4], w[5]]);
+                        if wm >= 0 && exists(&format!("BTLDATA/SOUND/SE/{n:03}W{wm:02}.SSE")) {
+                            weapons.push((n as u16, wm as u8));
+                        }
+                    }
+                }
+            }
+        }
+        sh2_audio::post(sh2_audio::AudioRequest::LoadBattleBanks { chrs, weapons, voices });
+    }
     commands.insert_resource(BattleRuntime {
         battle,
         setup,
@@ -669,6 +707,7 @@ fn exit_battle(mut commands: Commands, mut canvas: ResMut<UiCanvas>, mut rv: Res
     commands.remove_resource::<BattleRuntime>();
     *rv = RingView::default();
     release_ui_loops();
+    sh2_audio::post(sh2_audio::AudioRequest::UnloadBattleBanks);
     for l in [layer::BATTLE, layer::FADER] {
         canvas.clear(l);
     }
@@ -882,6 +921,8 @@ fn begin_action_fx(rt: &mut BattleRuntime, cx: &Cx) {
         rt.fx_phase = FxPhase::Applied;
         return;
     };
+    let fused: Vec<i32> = rt.battle.fused.iter().map(|f| f.as_ref().map(|x| x.id).unwrap_or(-1)).collect();
+    rt.battle.host.fused = fused;
     let info = rt.battle.host.describe(actor, &rt.battle.cmd, &rt.battle.fighters);
     let Some(info) = info else {
         rt.fx_phase = FxPhase::Applied;
@@ -982,8 +1023,8 @@ fn fx_env(rt: &BattleRuntime, info: &ActionInfo) -> FxEnv {
 /// Drain `BtlHost::engine_fx` into the engine-program runner (`effects_bridge::ExtraFx`, FX X4).
 fn start_engine_fx(rt: Option<ResMut<BattleRuntime>>, extra: Option<ResMut<crate::effects_bridge::ExtraFx>>, disc: Option<Res<Sh2Disc>>) {
     let (Some(mut rt), Some(mut extra), Some(disc)) = (rt, extra, disc) else { return };
-    // opt-in until the program camera of `BD_%03d.EFD` hands the view back (FX request 13: with it on, the victory shots look at the floor)
-    let off = std::env::var_os("SH2_BATTLE_ENGINE_FX").is_none();
+    // `SH2_BATTLE_ENGINE_FX=0` turns them off (FX fixed the program camera, request 13)
+    let off = std::env::var("SH2_BATTLE_ENGINE_FX").map(|v| v == "0").unwrap_or(false);
     for (path, gen, tar) in std::mem::take(&mut rt.battle.host.engine_fx) {
         if off {
             continue;
@@ -1181,6 +1222,21 @@ fn consume_events(rt: &mut BattleRuntime, text: &BtlText) -> Option<(Option<rule
             // party-side engine reports (BP): shown by their presentation code when it lands; ignored here meanwhile
             // round 5 BP hook: floating MP / SP / status texts, "Miss", the berserk / paralysed messages
             BattleEvent::Party(p) => {
+                // round 5 BP hook: *Gathering* moves the gathered units' home places next to the target (the flow already moved its positions)
+                if let crate::flow::PartyEvent::Gather { centre, units } = &p {
+                    if let Some(&c) = rt.homes.get(*centre) {
+                        for (n, &k) in units.iter().enumerate() {
+                            let a = n as f32 * std::f32::consts::TAU / units.len().max(1) as f32;
+                            let at = c + Vec3::new(a.cos(), 0.0, a.sin()) * crate::flow::GATHER_SPACING;
+                            if let Some(h) = rt.homes.get_mut(k) {
+                                *h = at;
+                            }
+                            if let Some(q) = rt.positions.get_mut(k) {
+                                *q = at;
+                            }
+                        }
+                    }
+                }
                 let fighters = &rt.setup.fighters;
                 let names = &rt.setup.names;
                 let msg = crate::hud_hits::party_event_texts(&mut rt.hits, &p, &|i| fighters.get(i).map(|f| f.is_enemy).unwrap_or(true), &|i| names.get(i).cloned().unwrap_or_default(), text);
@@ -1269,6 +1325,9 @@ pub fn battle_tick(
     rt.battle.host.gm = rt.battle.gmod;
     rt.battle.host.combo_pend = !rt.battle.combo_queue.is_empty();
     rt.battle.host.combo_cnt = !rt.battle.combo.is_empty();
+    // the fusion of each party member (banner / effect of fusion skills, `BtlHost::record`)
+    let fused: Vec<i32> = rt.battle.fused.iter().map(|f| f.as_ref().map(|x| x.id).unwrap_or(-1)).collect();
+    rt.battle.host.fused = fused;
     let dt = 1.0 / 60.0;
     rt.cover.tick();
     for f in rt.floaters.iter_mut() {
@@ -2735,6 +2794,7 @@ impl Plugin for BattlePlugin {
                 .init_resource::<crate::effects_bridge::WeaponTrails>() // FX round 5 hook: weapon trails (`SwordLocusEffect1` / `BlowLocusEffect1`)
                 .add_systems(Update, crate::effects_bridge::drive_weapon_trails.after(crate::models::follow_weapons).run_if(in_state(Scene::Battle)).run_if(resource_exists::<sh2_gfx::bevy::Sh2Disc>))
                 .add_systems(Update, (crate::effects_bridge::effmdl_battle_hooks, crate::effects_bridge::drive_effmdls).chain().after(crate::effects_bridge::apply_fx_actor_events).run_if(in_state(Scene::Battle)))
+                .add_systems(Update, crate::effects_bridge::btlin_battle_stop)
                 .add_systems(OnEnter(Scene::Battle), spawn_battle_scene.after(enter_battle))
                 // round 5 BE: the engine-started programs the battle asks for (boss deaths `BD_%03d.EFD`, the last boss's `UNION.EFD`)
                 .add_systems(Update, start_engine_fx.before(crate::effects_bridge::step_extra_fx).run_if(in_state(Scene::Battle)))

@@ -25,7 +25,7 @@
 //! | `26 c id t..` | use "ITEM table entry" `id` as a monster spell (`Effect` kind 1, or phase 5 when the entry is a weapon-type attack) |
 //! | `27 c f t..`  | move / link (phase 7) |
 //! | `29 c a`      | flee (phase 8) |
-//! | `01` / `03`   | the monster leaves the field (phase 0x10, `cmd4 = 1 << actor`) |
+//! | `01` / `03`   | end the turn (JP phase 0x10 = retail 0x14 turn end, `cmd4 = 1 << actor`, push 3.0): the unit waits, it does not leave |
 //!
 //! `c` is the chance in percent (an operand), `t..` are three operands handed to `GetTarget` (criterion, parameter, unused).
 //!
@@ -251,7 +251,7 @@ pub enum AiDecision {
     Guard,
     /// US only: phase 0xe
     LastBoss,
-    /// phase 0x10 (the monster leaves)
+    /// tokens 1 / 3: the unit ends its turn (JP phase 0x10 / retail 0x14 with `nCmdKind = 1`, `nCmdMask = 1 << actor`, `flTurnPush = 3.0`: the turn-end phase, not a leave)
     Leave,
     /// the VM ran off the script
     Nothing,

@@ -235,6 +235,20 @@ pub fn build_setup(data: &BattleData, session: &GameSession, pcs: &[u8], monster
     Some(BattleSetup { fighters, names, pc_ids: ids, escape, ambush, formation: set.formation, set: monster_set, library_ids, battle_type })
 }
 
+/// The soul energy counter (`BTL0+0`, u16; the demo-shaped working copy and the retail block share bytes 0..3).
+pub fn soul_energy(session: &GameSession) -> u16 {
+    u16::from_le_bytes([session.save.btl.data[0], session.save.btl.data[1]])
+}
+
+/// Add `n` souls (retail cap 9999).
+pub fn add_soul_energy(session: &mut GameSession, n: i32) {
+    if n <= 0 {
+        return;
+    }
+    let v = (soul_energy(session) as i32 + n).min(9999) as u16;
+    session.save.btl.data[0..2].copy_from_slice(&v.to_le_bytes());
+}
+
 /// Level-ups caused by one battle: `(pc id, old level, new level)`.
 pub type LevelUps = Vec<(u8, u8, u8)>;
 
@@ -270,6 +284,8 @@ pub fn apply_end(session: &mut GameSession, tbl: &dyn LevelTable, setup: &Battle
     if let Some(rw) = reward {
         session.add_cash(rw.cash);
         session.battles_won += 1;
+        // soul energy (Yuri's Graveyard): `BtlResult::Polling` (SLUS 0x398190..0x3981f8) counts the battle's souls into the u16 at `BTL0+0`, capped at 9999
+        add_soul_energy(session, rw.sp);
         // US `BtlResult::Polling` 0x396fa0 (and the no-result-screen / chained-battle paths of `BtlSocket::Polling` 0x3657b0): every won
         // battle sets the library bit (`BTL0+0xf43`, demo `+0xdaf`) of its monsters; the field library lists a monster once the bit is set
         for &id in &setup.library_ids {
@@ -717,5 +733,16 @@ mod tests {
         }
         let reward = b.reward.clone().expect("victory over four Revenants");
         assert!(reward.cash > 0);
+    }
+
+    #[test]
+    fn soul_energy_counts_up_to_9999() {
+        let mut s = GameSession::default();
+        s.new_game("AP_00_U");
+        let base = soul_energy(&s);
+        add_soul_energy(&mut s, 40);
+        assert_eq!(soul_energy(&s), base + 40);
+        add_soul_energy(&mut s, 20000);
+        assert_eq!(soul_energy(&s), 9999);
     }
 }

@@ -72,6 +72,10 @@ pub struct BtlHost {
     pub us: bool,
     /// per fighter slot: soul reward `MONSTERParam+0x2c`
     pub souls: Vec<u16>,
+    /// per fighter slot: the `FUSM` row of a fused party member (-1 = not fused), synced by the plugin from `Battle::fused` (banner / effect choice of fusion skills)
+    pub fused: Vec<i32>,
+    /// per fighter slot: the wave-bank id of its motion SE bank (`0x9000 | BCD(chr)`, 0 = none), filled by the plugin when the banks are loaded
+    pub se_bank: Vec<u32>,
     /// per fighter slot: the boss death program `EFFECT/BD_%03d.EFD` of its CHR exists (retail phase 0x13, `DataReadEntry(0xc, 0xe, chr)`)
     pub bd_fx: Vec<bool>,
     /// engine-started effect programs requested by the battle (path, caster slot, target slot): `BD_%03d.EFD` when such a boss falls,
@@ -173,6 +177,8 @@ impl BtlHost {
             prev_actor: -1,
             us: false,
             souls: vec![0; slots],
+            fused: vec![-1; slots],
+            se_bank: vec![0; slots],
             bd_fx: vec![false; slots],
             engine_fx: vec![],
         }
@@ -320,12 +326,9 @@ impl BtlHost {
                     (t.magic_name(r.id as usize).to_string(), r.effect_id, r.is_offensive())
                 }
             }
-            k if k == EffectKind::Skill as i32 => {
-                let r = t.groups.get(me.char_id.max(0) as usize).and_then(|g| g.get(cmd.p44.max(0) as usize))?;
-                (t.skill_name(r.name_idx.max(0) as usize).to_string(), r.effect_id, r.is_offensive())
-            }
-            k if k == EffectKind::FusionSkill as i32 => {
-                let r = t.mon_skills.get(cmd.p44.max(0) as usize)?;
+            // PC skills and fusion skills: the character's `SKIL` group, the fusion's group while fused (`ActionTables::fusion_group`); monster skills: `SKIL` 0x19
+            k if k == EffectKind::Skill as i32 || k == EffectKind::FusionSkill as i32 => {
+                let r = self.record(actor, cmd, me)?;
                 (t.skill_name(r.name_idx.max(0) as usize).to_string(), r.effect_id, r.is_offensive())
             }
             7 => (if cmd.p44 < 0 { "Cancel".to_string() } else { t.fusion_names.get(cmd.p44 as usize).cloned().unwrap_or_else(|| "Fusion".to_string()) }, -1, false),
@@ -347,18 +350,29 @@ impl BtlHost {
         Some(ActionInfo { actor, kind: cmd.p4c, id: cmd.p44, name, effect_id, target: cmd.p48.max(0) as usize, offensive })
     }
 
+    /// The `FUSM` row fighter `actor` is fused into: the `fusion_changed` / plugin-synced value, else recognised by the fused name `Battle::set_fused` gives
+    /// the fighter (hosts driven without the hook).
+    fn fused_id(&self, actor: usize, me: &Fighter) -> i32 {
+        let id = self.fused.get(actor).copied().unwrap_or(-1);
+        if id >= 0 || me.is_enemy {
+            return id;
+        }
+        self.tables.fusion_names.iter().position(|n| !n.is_empty() && *n == me.name).map(|p| p as i32).unwrap_or(-1)
+    }
+
     fn record(&self, actor: usize, cmd: &Command, me: &Fighter) -> Option<ActionRec> {
         let t = &self.tables;
         match cmd.p4c {
             0 => t.items.get(cmd.p44.max(0) as usize).cloned(),
             1 if me.is_enemy => t.items.get(cmd.p44.max(0) as usize).cloned(),
             1 => t.magic.get(cmd.p44.max(0) as usize).cloned(),
+            2 | 3 if !me.is_enemy && self.fused_id(actor, me) >= 0 => {
+                let g = ActionTables::fusion_group(self.fused_id(actor, me) as usize);
+                t.groups.get(g).and_then(|g| g.get(cmd.p44.max(0) as usize)).cloned()
+            }
             2 => t.groups.get(me.char_id.max(0) as usize).and_then(|g| g.get(cmd.p44.max(0) as usize)).cloned(),
             3 => t.mon_skills.get(cmd.p44.max(0) as usize).cloned(),
-            _ => {
-                let _ = actor;
-                None
-            }
+            _ => None,
         }
     }
 }
@@ -430,8 +444,46 @@ impl Host for BtlHost {
         self.resist_of(t, physical)
     }
 
+    fn fusion_changed(&mut self, chr: usize, id: i32) {
+        if self.fused.len() <= chr {
+            self.fused.resize(chr + 1, -1);
+        }
+        self.fused[chr] = id;
+    }
+
     fn monster_soul(&self, k: usize) -> u16 {
         self.souls.get(k).copied().unwrap_or(0)
+    }
+
+    /// `PAtkEffectFunc` (US 0x696ab0) with a monster skill attack's record (AIS 0x24 index 0): the skill's effect words act on the struck target
+    /// (Paralysis, SP Lowering, Dying ...) through `EffectCodeFunc`, the monster immunity mask applied.
+    fn attack_rider(&mut self, actor: usize, target: usize, skill: i32, fighters: &mut [Option<Fighter>]) -> Vec<(usize, i32)> {
+        let Some(rec) = self.tables.mon_skills.get(skill.max(0) as usize).cloned() else { return vec![] };
+        let Some(me) = fighters.get(actor).and_then(|x| x.clone()) else { return vec![] };
+        let Some(tgt) = fighters.get(target).and_then(|x| x.clone()) else { return vec![] };
+        if tgt.hp <= 0 {
+            return vec![];
+        }
+        let recs: Vec<EffRec> = decode_effect_words(&rec.words, me.satk / 2, me.satk, !me.is_enemy).into_iter().filter(|r| r.kind != 1 && r.kind != 2).collect();
+        if recs.is_empty() {
+            return vec![];
+        }
+        let imm = if tgt.is_enemy { self.immune.get(target).copied().unwrap_or(0) } else { 0 };
+        let env = crate::actions::EcEnv { immune: imm, pc: if tgt.is_enemy { -1 } else { tgt.char_id }, ..Default::default() };
+        let mut copy = tgt.clone();
+        let mut rn = Rn(self);
+        let ap = crate::actions::effect_code(&recs, &mut copy, &env, &mut rn);
+        if let Some(Some(f)) = fighters.get_mut(target) {
+            f.mp = copy.mp;
+            f.sp = copy.sp;
+            f.status = copy.status.clone();
+        }
+        let dhp = if ap.fell && copy.hp <= 0 { tgt.hp } else { -ap.hp };
+        if dhp != 0 {
+            vec![(target, dhp)]
+        } else {
+            vec![]
+        }
     }
 
     fn fusion_info(&self, id: i32) -> Option<(String, u32, i32)> {
@@ -500,7 +552,9 @@ impl Host for BtlHost {
                 host.ai_scripted += 1;
                 match d {
                     AiDecision::Attack { target, shape } => MenuEvent::Attack { actor: me, target, kind: if (0..=3).contains(&shape) { shape } else { 0 }, skill: -1 },
-                    AiDecision::SkillAttack { target, skill } | AiDecision::MonsterSkill { skill, target } => MenuEvent::Special { a: skill, b: target, enemy_like: true },
+                    // AIS 0x24 index 0: a physical attack carrying the skill record (phase 5, `+0x54 = 1`, `+0x58 = skill`; the rider acts in `attack_rider`)
+                    AiDecision::SkillAttack { target, skill } => MenuEvent::Attack { actor: me, target, kind: 0, skill },
+                    AiDecision::MonsterSkill { skill, target } => MenuEvent::Special { a: skill, b: target, enemy_like: true },
                     AiDecision::Item { item, target } => MenuEvent::Item { item, target },
                     AiDecision::ItemAction { id, target, attack_kind: None } => MenuEvent::Magic { id, target },
                     AiDecision::ItemAction { target, attack_kind: Some(_), .. } => MenuEvent::Attack { actor: me, target, kind: 0, skill: -1 },
@@ -509,9 +563,11 @@ impl Host for BtlHost {
                     // AIS 0x2a: `LastBossFunc` -- `EFFECT/UNION.EFD` with the core and its parts, then `LastBossSpecial` re-arranges them; the turn ends
                     AiDecision::LastBoss => {
                         host.engine_fx.push(("EFFECT/UNION.EFD".to_string(), actor, actor));
-                        MenuEvent::Guard { actor: me }
+                        MenuEvent::Wait { actor: me }
                     }
-                    AiDecision::Move { .. } | AiDecision::Escape { .. } | AiDecision::Guard | AiDecision::Leave => MenuEvent::Guard { actor: me },
+                    // AIS 1 / 3: retail phase 0x14 with `nCmdKind = 1`, `flTurnPush = 3.0` -- the unit ends its turn (no guard stance, it stays in the battle)
+                    AiDecision::Leave => MenuEvent::Wait { actor: me },
+                    AiDecision::Move { .. } | AiDecision::Escape { .. } | AiDecision::Guard => MenuEvent::Guard { actor: me },
                     AiDecision::Nothing | AiDecision::PcSkill { .. } => unreachable!(),
                 }
             }
@@ -526,14 +582,8 @@ impl Host for BtlHost {
         let Some(me) = fighters.get(actor).and_then(|x| x.clone()) else { return vec![] };
         let t = cmd.p48.max(0) as usize;
         self.last = self.describe(actor, cmd, fighters);
-        // fusion: a timed attack boost / damage cut (the transformation model and the fusion monster tables are not ported)
+        // Fusion: the transformation (fused stats from the `FUSM` growth rows, SP upkeep) is applied by `Battle` (`actions::apply_fusion_stats`); nothing here
         if cmd.p4c == 7 {
-            if let Some(Some(f)) = fighters.get_mut(actor) {
-                for (k, v) in [(rules::modkind::DEAL_PHYS, 150), (rules::modkind::DEAL_MAG, 150), (rules::modkind::TAKE_PHYS, 70), (rules::modkind::TAKE_MAG, 70)] {
-                    f.status.push(StatMod { turns: 5, chance: 100, percent: true, kind: k, value: v });
-                }
-                f.sp = (f.sp - 2).max(0);
-            }
             return vec![];
         }
         // Snap Shot: only a monster target is recorded (JP `BtlFree` kind 6 returns early unless the target's `bFlagsB & 1`)

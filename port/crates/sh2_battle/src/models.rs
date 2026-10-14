@@ -951,6 +951,39 @@ pub fn follow_weapons(
 /// Adds the battle model systems; a no-op without a renderer.
 pub struct BattleModelsPlugin;
 
+/// Round 5 BE (CS1): the motion sound triggers.  A battle motion's `SEtrigg` event track (dash steps, swings, landings ...) keys the sound
+/// `value` of the fighter's own SE bank (`BTLDATA/SOUND/SE/%03dM.SSE`, wave bank `0x9000 | BCD(chr)` = `BtlHost::se_bank`, loaded by `LoadBattleBanks`);
+/// played through `AudioRequest::PlayGlobalSe { id: (bank << 16) | value }` when the motion clock passes the key.
+pub fn motion_sounds(rt: Option<Res<BattleRuntime>>, models: Query<&BattleModel>, anims: Query<&AnimatedModel>, mut last: Local<std::collections::HashMap<usize, (String, f32)>>) {
+    let Some(rt) = rt else { return };
+    if std::env::var_os("SH2_BATTLE_NO_MOTION_SE").is_some() {
+        return;
+    }
+    for m in &models {
+        let Ok(a) = anims.get(m.holder) else { continue };
+        let Some(name) = a.inst.current_name().map(|n| n.to_string()) else { continue };
+        let frame = a.inst.frame();
+        let prev = last.insert(m.chr, (name.clone(), frame));
+        let from = match prev {
+            Some((n, f)) if n == name && f <= frame => f,
+            // a new motion (or a loop restart): keys at its first frame count
+            _ => -0.01,
+        };
+        let Some(mo) = a.inst.motion(&name) else { continue };
+        let bank = rt.battle.host.se_bank.get(m.chr).copied().unwrap_or(0);
+        if bank == 0 {
+            continue;
+        }
+        for ev in mo.events.iter().filter(|e| e.base_name() == "SEtrigg") {
+            for k in ev.keys() {
+                if k.time > from && k.time <= frame && k.value >= 0 {
+                    sh2_audio::post(sh2_audio::AudioRequest::PlayGlobalSe { id: (bank << 16) | (k.value as u32 & 0xffff) });
+                }
+            }
+        }
+    }
+}
+
 impl Plugin for BattleModelsPlugin {
     fn build(&self, app: &mut App) {
         if !app.is_plugin_added::<bevy::pbr::PbrPlugin>() {
@@ -971,6 +1004,7 @@ impl Plugin for BattleModelsPlugin {
             .add_systems(OnEnter(Scene::Battle), reset_models)
             .add_systems(OnExit(Scene::Battle), restore_light)
             .add_systems(Update, drive_sparkles.run_if(in_state(Scene::Battle)))
+            .add_systems(Update, motion_sounds.after(drive_battle_models).run_if(in_state(Scene::Battle)))
             .add_systems(Update, (spawn_battle_models, drive_battle_models, follow_weapons).chain().run_if(in_state(Scene::Battle)).run_if(resource_exists::<Sh2Disc>))
             ;
     }
@@ -1116,5 +1150,31 @@ mod tests {
         assert_eq!(fighter_weapon_files(true, 13, None, None, &db, 0, Some(0)).unwrap()[0], "BTLDATA/WPN/013_00.WPN");
         // a party member with no weapon and no marionette
         assert!(fighter_weapon_files(true, 6, Some(5), Some(-1), &db, 0, None).is_none());
+    }
+
+    /// CS1: the battle SE banks load and the motion sound ids of `motion_sounds` (`0x9000 | BCD(chr)` << 16 | `SEtrigg` value) are audible; the battle BGM and the
+    /// result fanfare still play after the bank loads.
+    #[test]
+    fn battle_se_banks_play_motion_sounds() {
+        let Some(dir) = std::env::var_os("SH2_US_DISC_DIR") else { return };
+        let Ok(d) = sh2_core::fileio::Disc::open(&dir) else { return };
+        let mut rt = sh2_audio::AudioRuntime::new(sh2_audio::AudioEngine::new(sh2_audio::OutputKind::Null), Some(d));
+        let energy = |rt: &mut sh2_audio::AudioRuntime, secs: f32| {
+            let mut buf = vec![0.0f32; (secs * 48000.0) as usize * 2];
+            rt.engine.synth().render(&mut buf);
+            (buf.iter().map(|s| s * s).sum::<f32>() / buf.len() as f32).sqrt()
+        };
+        rt.handle(&sh2_audio::AudioRequest::LoadBattleBanks { chrs: vec![5, 18, 420], weapons: vec![], voices: vec![5] });
+        for id in [0x9005u32 << 16, 0x9018 << 16 | 1, 0x9420 << 16, 0x9105 << 16 | 2] {
+            rt.handle(&sh2_audio::AudioRequest::PlayGlobalSe { id });
+            assert!(energy(&mut rt, 0.4) > 0.0005, "SE {id:#x} is silent");
+        }
+        rt.handle(&sh2_audio::AudioRequest::PlayBattleBgm { number: 0x193 });
+        assert!(rt.bgm_playing());
+        assert!(energy(&mut rt, 1.5) > 0.002, "battle BGM 403 is silent");
+        rt.handle(&sh2_audio::AudioRequest::PlayBattleResultBgm);
+        assert!(energy(&mut rt, 1.5) > 0.002, "result fanfare is silent");
+        rt.handle(&sh2_audio::AudioRequest::UnloadBattleBanks);
+        rt.handle(&sh2_audio::AudioRequest::StopBattleBgm);
     }
 }

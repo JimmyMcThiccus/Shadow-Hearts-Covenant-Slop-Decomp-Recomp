@@ -102,14 +102,43 @@ music (`sbgCreate`) is faded when the program ends.
 (`Soul.` column).  The port now carries it to the result screen (`Host::monster_soul`); where the save stores the soul energy afterwards (`BtlResult` / `BtlSocket`
 path) is **not identified**, so nothing is written back yet.
 
+## 11. Round 2 (2026-10-14 afternoon)
+* **QA3 fused skills**: `BtlHost::{describe, record}` take a fused member's skills (kind 2 and the monster-skill kind 3) from the fusion's `SKIL` group
+  (`ActionTables::fusion_group`): banner / effect program now *Crag* / 85 for Sorm.  The fused id reaches the host three ways: the new `Host::fusion_changed`
+  hook (called by `Battle::set_fused`), the plugin's per-frame sync of `Battle::fused`, and as a fallback the fused name `set_fused` gives the fighter.
+* **QA4**: the +50 % / -30 % fusion stand-in is gone (`Battle` applies the `FUSM` stats).  **QA5**: AIS 1 / 3 -> `MenuEvent::Wait` (the retail turn end,
+  not a leave), AIS 0x2a -> `UNION.EFD` + `Wait`.  QA's battle / party rows owned by BE: 0 left (`run_all.sh run battle party`).
+* **Monster skill attacks** (AIS 0x24 index 0): `MenuEvent::Attack { skill }` -> BP's `do_attack` -> `BtlHost::attack_rider` (`EffectCodeFunc` of the skill
+  record on the struck target, immunity mask applied).
+* **Enemy actions through the party engine** (BP's open offer): `Battle::enemy_engine` (default on, `SH2_BATTLE_ENEMY_ENGINE=0` = old path) sends monster
+  items / spells / skills through `actions::resolve_action` -- target lists and area shapes (a Statue's spell now hits both party members), `EffectDamageSet`,
+  `EffectCodeFunc`; the party-only specials (0xe5 run away, 0xde drive away) are skipped for monster actors.  Headless matrix with the plugin's
+  `party_setup` (records made sturdy): 318 won / 7 lost / 2 endless (old path: 320 / 5 / 2).
+* **Engine effects on by default** (FX fixed the program camera); `SH2_BATTLE_ENGINE_FX=0` turns them off.
+* **Soul energy saved**: `BtlResult::Polling` (SLUS 0x398190..0x3981f8) counts the souls into the **u16 at `BTL0+0`, capped at 9999**; `bridge::apply_end`
+  now adds the result's souls there (`bridge::{soul_energy, add_soul_energy}`).
+* **Battle SE (CS1)**: `LoadBattleBanks` / `UnloadBattleBanks` at battle start / exit.  The bank files are numbered by a decimal CHR number and their own
+  wave-bank id is `0x9000 | BCD(n)` (005M -> 0x9005, 420M -> 0x9420, 005C -> 0x9105); party members use their base model number (Karin's 005 banks while
+  her battle model is 006), so every model number of the record is tried.  `models::motion_sounds` plays the motion `SEtrigg` keys (dash steps, swings, ...)
+  as `PlayGlobalSe { (bank << 16) | value }`; test `models::tests::battle_se_banks_play_motion_sounds` also checks the battle BGM 403 and the result fanfare
+  after the bank loads.  Not triggered yet: the weapon (`W`) and voice (`C`) banks' sounds (the retail code calls `HNMSnd::PlaySE` from the hit / damage
+  paths; the W banks share the M bank's wave id).
+* **Last boss, decoded (not ported)**: `LastBossSpecial` (JP 0x640840) toggles `CBattle+0x26` bit 2 between two forms of the core (CHR 499): *combined* --
+  the parts 500 / 501 / 502 are attached to the core as its right / left / centre weapons (`CreateRight/Left/CenterWeapon` from each part's package) and the core
+  plays its base motion set; *separated* -- the weapons are released (`ReleaseWeapon(7)`), the core switches to the alternate motion sets (`a2` / `a3`
+  entries of `CHRANM/499.ANM`, now parsed by FX) and the parts are placed on an arc in front of it (60..120 deg, radius = core box + part box + 12).  Whether
+  the parts can be targeted while combined is not visible in the decompile; porting it needs that (live check below).
+
+### Live checks wanted (for the user; agents cannot load states)
+1. Last boss (MONSET 302, debug map > Battle player > Event battle, monster set 302): after the boss's special turn (the white flash), are the parts
+   targetable / do they act?  `BtlChr` of slots 3..6 (`CBattle* = [0x440000]`, stride 0x510 from `+0xb0`): `+0xb2` flags, `+0xb8` bState, positions `+0xb0`.
+2. Formations 3 / 9 / 0x11 (MONSET 10, 22, 14 via Event battle): `BtlChr+0x160` positions against `formation::layout`.
+
 ## Open (priority order)
-1. BP: monster skill-attack riders (request 8: `Host::attack_rider` in `do_attack`; until then AIS skill-0 attacks resolve as an effect without the physical hit),
-   dead PCs keeping turns (request 9), `MenuEvent::Wait` for AIS 1 / 3 (accepted), the tutorial fights' turn seeding / pages (battle types 1 / 2).
-2. FX: `parse_package` drops the last-boss motion sets `a2` / `a3` (request 12); BD / UNION program camera (13).  Then `LastBossSpecial` (JP 0x640840: the core /
-   part re-arrangement and the motion-set switch) can be ported on top.
-3. Soul energy write-back (above); the knowledge array `+0xf83` (MN).
-4. AI pieces not modelled: skill-block records (conditions 0x1e / 0x40, criterion 124: always "not blocked"), the `'N'` dispel test (approximated by "has a timed
-   record"), condition 0x43's byte-5-bit-6 meaning, `GetTarget`'s Joachim filter (YOAH row flag), `CBattle+0x463c` target mask, the `bState` the AI sees (always 7).
-5. Live verification not done this round: the direct battle start (`SSHSys+0x44` / request 0x21) leaves the field black afterwards and agents cannot reload states --
-   needs the user (formations 3 / 9 / 0x11 and the last boss's part layout against `formation.rs`).
-6. FS: `SetSceneInit` for scenes > 0 (US 0x3bc710, 0x2150 B) was asked of BE / BP; it is save / party logic (`BtlSaveSec`) and not done here.
+1. `LastBossSpecial` port (section 11; needs live check 1).
+2. Weapon / voice SE triggers (the `W` / `C` banks are loaded, nothing plays them yet).
+3. AI pieces not modelled: skill-block records (conditions 0x1e / 0x40, criterion 124: "never blocked"), the `'N'` dispel test (approximated by "has a timed
+   record"), condition 0x43's byte-5-bit-6 meaning, `GetTarget`'s Joachim filter (a YOAH row flag indexed by a `gp-0x7c94` save value), the `CBattle+0x463c`
+   target mask, the `bState` the AI sees (always 7).
+4. The tutorial fights (battle types 1 / 2: turn seeding, Battle Basics / Combos pages) -- BP.
+5. FS: `SetSceneInit` for scenes > 0 (US 0x3bc710) -- save / party logic, not done here.
