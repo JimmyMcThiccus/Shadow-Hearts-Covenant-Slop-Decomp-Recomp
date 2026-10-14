@@ -1,0 +1,20 @@
+# build output
+/port/HOME/
+target/
+# screenshots / captures (large, regenerated)
+/notes/integration/screens/
+*.png
+# memory dumps / pickles
+*.pkl
+tools/live/*.bin
+notes/integration/pine_dumps/
+# locks + logs + mac junk
+/notes/integration/locks/
+*.log
+._*
+.DS_Store
+__pycache__/
+
+# game binaries extracted from the discs (stay on disk, never committed)
+/overlays/*.BIN
+*.ELF

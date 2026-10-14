@@ -1,0 +1,71 @@
+SH2US_FIELD.BIN 00526be0 Retail_shop_Sub526be0 NEW | primWin construction with textures/Yoahism check (shop window builder; class certain)
+SH2US_FIELD.BIN 00529290 Retail_shop_Sub529290 NEW | primWin + array construction (buy/sell list builder)
+SH2US_FIELD.BIN 00530730 Retail_shop_Sub530730 NEW | pure computation helper (mCheckSellItem family)
+SH2US_FIELD.BIN 00530c80 Retail_shop_Sub530c80 NEW | leaf helper
+SH2US_FIELD.BIN 00530d80 Retail_shop_CursorHolder_Dt NEW | Cursor dtor + delete
+SH2US_FIELD.BIN 0053a4b0 mReleaseYesNoWin__6tailorFv C1 | JP 0x4efec0
+SH2US_FIELD.BIN 00546860 Retail_solomon_Sub546860 NEW | small helper in the solomon (soul fusion) screen
+SH2US_FIELD.BIN 00547c00 mSetupMainWin__7solomonFv C1 | JP 0x4fb0b0 (MsgTable strings + primWin createText)
+SH2US_FIELD.BIN 00547f10 mReleaseMainWin__7solomonFv C1 | JP 0x4fb320 (ReleaseOT + delete)
+SH2US_FIELD.BIN 00547fa0 mReleaseHintWin__7solomonFv C1 | JP 0x4fb8d0
+SH2US_FIELD.BIN 00548d30 mReleaseMessWin__7solomonFv C1 | JP 0x4fc440
+SH2US_FIELD.BIN 00549ea0 mReleaseDemonWin__7solomonFv C1 | JP 0x4fd260
+SH2US_FIELD.BIN 0054a690 mSetupMainCursor__7solomonFi C1 | JP 0x4fd8e0 (Cursor ctor/Create/AddOT/Select)
+SH2US_FIELD.BIN 0054a8a0 mReleaseMainCursor__7solomonFv C1 | JP mReleaseMainCursor 
+SH2US_FIELD.BIN 0054b680 Retail_solomon_SetupResultWin NEW | primWin createPoly/buildWin
+SH2US_FIELD.BIN 0054b800 Retail_solomon_ReleaseResultWin NEW | ReleaseOT
+SH2US_FIELD.BIN 0054bd00 Retail_solomonEffect_GetState48 STUB | return this+0x48 byte
+SH2US_FIELD.BIN 0054e670 __ct__10floatDemonFv NEW | CPolObj ctor
+SH2US_FIELD.BIN 0054e6c0 __dt__10floatDemonFv C1 | Dispose, ReleaseOT, dtor chain
+SH2US_FIELD.BIN 0054e7b0 Retail_floatDemon_Start NEW | mSetupScrollMark + CPoller::Entry
+SH2US_FIELD.BIN 0054e860 Retail_floatDemon_Calc1 NEW | calc (calls eraseSlot helper)
+SH2US_FIELD.BIN 0054e9d0 Retail_floatDemon_Calc2 NEW | pure math
+SH2US_FIELD.BIN 0054ec80 Retail_floatDemon_Calc3 NEW | pure math
+SH2US_FIELD.BIN 0054f680 setPos__13solomonCursorFiii C1 | JP 0x501c10: primPacket setPos, GetPlace/Select/QuickMove
+SH2US_FIELD.BIN 0054fd10 removeCursor__13solomonCursorFv C1 | JP 0x5021c0
+SH2US_FIELD.BIN 00550250 Retail_solomonSlot_SetFade NEW | setRGBA based fade of a slot sprite
+SH2US_FIELD.BIN 00551b40 initialize__10solomonThmFP7primTexbii C1 | JP 0x503ee0
+SH2US_FIELD.BIN 00551ce0 Retail_solomonThm_Sub551ce0 NEW | leaf helper after setArea
+SH2US_FIELD.BIN 00552460 mSetupThmBaseWin__10solomonThmFv C1 | JP 0x505610 (0x6b0 -> 0xa10)
+SH2US_FIELD.BIN 00552e70 mReleaseThmBaseWin__10solomonThmFv C1 | JP 0x505e00
+SH2US_FIELD.BIN 00553050 mSetupDemonWin__10solomonThmFv C1 | JP 0x505? (0x280)
+SH2US_FIELD.BIN 00553320 mSetupHintWin__10solomonThmFv C1 | JP (0x2d0)
+SH2US_FIELD.BIN 005539b0 Retail_solomonEffect_SwapLSDHandlers NEW | UnplugDevice + PlugDevice of the solomon scene handlers
+SH2US_FIELD.BIN 00553ad0 __ct__13worldMapPanelFv NEW | retail-new worldMap panel class: CPolObj + Font
+SH2US_FIELD.BIN 00553ba0 __dt__13worldMapPanelFv NEW | ReleaseField, MsgTable/primTex/primSound/Font dtors
+SH2US_FIELD.BIN 00553da0 initialize__13worldMapPanelFv NEW | primSound, SetPathname, DvdromOrder::ReadOrder, create
+SH2US_FIELD.BIN 00553ed0 Retail_worldMapPanel_Nop STUB | sets a flag byte
+SH2US_FIELD.BIN 00553ef0 Polling__13worldMapPanelFv NEW | 0x14d0 state machine: pad, SetFader, SetFFMode, windows
+SH2US_FIELD.BIN 005553c0 mSetupMainWin__13worldMapPanelFv NEW | GetTitleShared + primWin textures/text
+SH2US_FIELD.BIN 00555900 mSetupSubWin__13worldMapPanelFv NEW | ReleaseOT, primWin build (0x700)
+SH2US_FIELD.BIN 00556000 mSetupMsgTable__13worldMapPanelFv NEW | MsgTable from primTex data
+SH2US_FIELD.BIN 00556110 mPlugLSD__13worldMapPanelFv NEW | new LSDPlayer, PlugDevice, Reset
+SH2US_FIELD.BIN 005562c0 mUnplugLSD__13worldMapPanelFv NEW | LSDPlayer::UnplugDevice
+SH2US_FIELD.BIN 005563d0 mSelectDestination__13worldMapPanelFv NEW | GetTitleShared + strcmp loop over destination names (0x480)
+SH2US_FIELD.BIN 00556850 Retail_worldMapPanel_Sub556850 NEW | pure compute helper
+SH2US_FIELD.BIN 005569d0 mSetupScrollMarks__13worldMapPanelFv NEW | new udScrollMark + initialize
+SH2US_FIELD.BIN 00556ae0 __ct__14pageScrollMarkFv NEW | CPolObj ctor
+SH2US_FIELD.BIN 00556b30 __dt__14pageScrollMarkFv NEW | Dispose, ReleaseOT, dtor chain
+SH2US_FIELD.BIN 00556cd0 setDisp__14pageScrollMarkFi NEW | JP 0x5010d0 (calls select)
+SH2US_FIELD.BIN 00556dd0 Polling__14pageScrollMarkFv NEW | JP 0x5011b0
+SH2US_FIELD.BIN 00557000 select__14pageScrollMarkFi NEW | JP 0x501410
+SH2US_FIELD.BIN 00557280 Retail_pageScrollMark_CreateTitleWin NEW | primWin with setWinMenuTex/setUVBlock
+SH2US_FIELD.BIN 00557430 Retail_pageScrollMark_SelectDestination NEW | calls mSelectDestination
+SH2US_FIELD.BIN 005574f0 Retail_pageScrollMark_CreateTextWin NEW | primWin + MsgTable text
+SH2US_FIELD.BIN 005576c0 Retail_pageScrollMark_ReleaseWins NEW | ReleaseOT
+SH2US_FIELD.BIN 00559510 Retail_worldMap_CheckKeyHelperA NEW | leaf helper in mCheckKey family
+SH2US_FIELD.BIN 00559560 Retail_worldMap_CheckKeyHelperB NEW | leaf helper in mCheckKey family
+SH2US_FIELD.BIN 0055a4a0 mSetupMenuFadeOut__8worldMapFv C1 | JP 0x508db0
+SH2US_FIELD.BIN 0055a590 Retail_worldMap_GetField118 STUB | return (this+0x98)->+0x118
+SH2US_FIELD.BIN 0055aa50 mReleaseSelectWin__8worldMapFv C1 | JP 0x5091b0
+SH2US_FIELD.BIN 0055ae10 mReleaseSelectWinCursor__8worldMapFv C1 | JP 0x5093c0
+SH2US_FIELD.BIN 0055e290 mReleaseThmWin__11worldMapThmFv C1 | JP 0x50bde0
+SH2US_FIELD.BIN 0055f590 setPos__13worldMapPointFff C1 | JP 0x50cff0
+SH2US_FIELD.BIN 0055f6b0 __ct__13worldMapPointFv NEW | CPolObj ctor
+SH2US_FIELD.BIN 0055f700 __dt__13worldMapPointFv NEW | ReleaseOT, Dispose, dtor chain
+SH2US_FIELD.BIN 0055f800 Retail_worldMapPoint_Start NEW | CPoller::Entry + mSetupWin
+SH2US_FIELD.BIN 0055f880 Retail_worldMapPoint_Sub NEW | leaf helper
+SH2US_FIELD.BIN 0055f8f0 Retail_worldMapPoint_Sub2 NEW | leaf helper
+SH2US_FIELD.BIN 0055f940 mSetupWin__13worldMapPointFv NEW | primWin + setWinMenuTex
+SH2US_FIELD.BIN 0055fb60 Polling__13worldMapPointFv NEW | animation (SetUV) 0x400
+SH2US_FIELD.BIN 0055ff60 Retail_worldMapPoint_Tail NEW | field flag copy then mSetupWin chain (if +0x102 == 0)

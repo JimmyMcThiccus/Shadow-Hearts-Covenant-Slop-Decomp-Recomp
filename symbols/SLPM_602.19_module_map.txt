@@ -1,0 +1,1564 @@
+##### main (5163 funcs, 002001e0-00404914)
+002001e0-00200224    2 <free>                   _dpflt, _dpfle
+00200228-00200430    3 SCE:sceGs                sceGsResetGraph, sceGsGetGParam, sceGsResetPath
+00200430-002004e0    2 <free>                   checkModelVersion, _GetGsDxDyOffset
+002004e0-00200914    2 SCE:sceGs                sceGsSetDefDispEnv, sceGsPutDispEnv
+00200918-002009e0    1 SCE:sceGszbufaddr        sceGszbufaddr
+002009e0-00201b58    9 SCE:sceGs                sceGsSetDefDrawEnv, sceGsSetDefClear, sceGsSyncV, sceGsSyncPath, sceGsSetDefStoreImage, sceGsExecStoreImage
+00201b58-00201cac    4 <free>                   WaitDma, WatchDma, CheckAddress, memclr
+00201cb0-0020239c   15 SCE:sceDma               sceDmaGetChan, sceDmaReset, sceDmaPutEnv, sceDmaGetEnv, sceDmaPutStallAddr, sceDmaSend
+002023a0-002023f8    1 SCE:sceVif               sceVif1PkTerminate
+002023f8-00202748   22 SCE:sceVu                sceVu0ApplyMatrix, sceVu0MulMatrix, sceVu0OuterProduct, sceVu0InnerProduct, sceVu0Normalize, sceVu0TransposeMatrix
+00202748-002027bc    1 <free>                   _sceVu0ecossin
+002027c0-002030dc   18 SCE:sceVu                sceVu0RotMatrixZ, sceVu0RotMatrixX, sceVu0RotMatrixY, sceVu0RotMatrix, sceVu0ClampVector, sceVu0CameraMatrix
+002030e0-0020313c    1 SCE:sceVpu               sceVpu0Reset
+00203140-00208650   70 <free>                   _motionComp0, _getAllRefs, _getRef0, _doMC, _rix_000, _ri0_000
+00208650-00208b74   15 SCE:sceMpeg              sceMpegInit, sceMpegCreate, sceMpegDelete, sceMpegAddBs, sceMpegGetPicture, sceMpegGetPictureRAW8
+00208b78-00208bf0    2 <free>                   _dispatchMpegCallback, _dispatchMpegCbNodata
+00208bf0-00208c6c    7 SCE:sceMpeg              sceMpegSetDefaultPtsGap, sceMpegResetDefaultPtsGap, sceMpegSetImageBuff, sceMpegDispWidth, sceMpegDispHeight, sceMpegDispCenterOffX
+00208c70-00208c98    2 SCE:sceSet               sceSetBrokenLink, sceSetPtm
+00208c98-00209e34   33 <free>                   _alalcInit, _alalcSetDynamic, _alalcFree, _alalcAlloc, _alalcRest, _getpic
+00209e38-0020a0d8    3 SCE:sceIpu               sceIpuStopDMA, sceIpuRestartDMA, sceIpuSync
+0020a0d8-0020a13c    1 <free>                   setD4_CHCR
+0020a140-0020a378    1 SCE:sceIpu               sceIpuInit
+0020a380-0020aa70  111 <free>                   RFU000_FullReset, ResetEE, SetGsCrt, RFU003, _Exit, RFU005
+0020aa70-0020aa80    1 SCE:sceSif               sceSifStopDma
+0020aa80-0020ab40   12 <free>                   SetCPUTimerHandler, SetCPUTimer, SetOsdConfigParam2, GetOsdConfigParam2, GsGetIMR, iGsGetIMR
+0020ab40-0020ab50    1 SCE:sceSif               sceSifDmaStat
+0020ab50-0020ab60    1 <free>                   isceSifDmaStat
+0020ab60-0020ab70    1 SCE:sceSif               sceSifSetDma
+0020ab70-0020ab80    1 <free>                   isceSifSetDma
+0020ab80-0020ab90    1 SCE:sceSif               sceSifSetDChain
+0020ab90-0020aba0    1 <free>                   isceSifSetDChain
+0020aba0-0020abc0    2 SCE:sceSif               sceSifSetReg, sceSifGetReg
+0020abc0-0020ac20    6 <free>                   _ExecOSD, Deci2Call, PSMode, MachineType, GetMemorySize, _InitTLB
+0020ac20-0020ac2c    1 SCE:sceResetttyinit      sceResetttyinit
+0020ac30-0020b800   35 <free>                   VSync, VSync2, write, read, open, close
+0020b800-0020b9b4    9 SCE:sceDeci              sceDeci2Open, sceDeci2Close, sceDeci2ReqSend, sceDeci2Poll, sceDeci2ExRecv, sceDeci2ExSend
+0020b9b8-0020ba84    4 <free>                   kputs, QueueInit, QueuePeekWriteDone, QueuePeekReadDone
+0020ba88-0020befc    4 SCE:sceTty               sceTtyHandler, sceTtyWrite, sceTtyRead, sceTtyInit
+0020bf00-0020c840    7 <free>                   kputchar, deci2Putchar, serialPutchar, ftoi, printfloat, _printf
+0020c840-0020c8a0    1 SCE:scePrintf            scePrintf
+0020c8a0-0020c8cc    2 <free>                   _set_sreg, _change_addr
+0020c8d0-0020cc58    9 SCE:sceSif               sceSifGetSreg, sceSifSetSreg, sceSifGetDataTable, sceSifInitCmd, sceSifExitCmd, sceSifSetCmdBuffer
+0020cc58-0020cd8c    1 <free>                   _sceSifSendCmd
+0020cd90-0020cdcc    1 SCE:sceSif               sceSifSendCmd
+0020cdd0-0020cf38    2 <free>                   isceSifSendCmd, _sceSifCmdIntrHdlr
+0020cf38-0020d1ac    3 SCE:sceSif               sceSifWriteBackDCache, sceSifInitRpc, sceSifExitRpc
+0020d1b0-0020d4d0    7 <free>                   _sceRpcGetPacket, _sceRpcFreePacket, _sceRpcGetFPacket, _sceRpcGetFPacket2, _request_end, _alarm_rdata
+0020d4d0-0020d628    1 SCE:sceSif               sceSifGetOtherData
+0020d628-0020d728    2 <free>                   _search_svdata, _request_bind
+0020d728-0020d868    1 SCE:sceSif               sceSifBindRpc
+0020d868-0020d8f4    1 <free>                   _request_call
+0020d8f8-0020e018    9 SCE:sceSif               sceSifCallRpc, sceSifCheckStatRpc, sceSifSetRpcQueue, sceSifRegisterRpc, sceSifRemoveRpc, sceSifRemoveRpcQueue
+0020e018-0020e5a4    7 <free>                   _sceFsIobSemaMK, new_iob, get_iob, _sceFs_Rcv_Intr, _sceFsSemInit, _sceFsWaitS
+0020e5a8-0020e640    1 SCE:scePower             scePowerOffHandler
+0020e640-0020e66c    1 <free>                   _sceFs_Poff_Intr
+0020e670-0020e874    1 SCE:sceFs                sceFsInit
+0020e878-0020e904    1 <free>                   _fs_version
+0020e908-0020e93c    1 SCE:sceFs                sceFsReset
+0020e940-0020ebc4    1 SCE:sceOpen              sceOpen
+0020ebc8-0020ed44    1 SCE:sceClose             sceClose
+0020ed48-0020ef80    1 SCE:sceLseek             sceLseek
+0020ef80-0020f1e0    1 SCE:sceRead              sceRead
+0020f1e0-0020f4a0    1 SCE:sceWrite             sceWrite
+0020f4a0-0020f9f4    2 SCE:sceIoctl             sceIoctl, sceIoctl2
+0020f9f8-0020fb9c    1 <free>                   _sceCallCode
+0020fba0-0020fbbc    1 SCE:sceRemove            sceRemove
+0020fbc0-0020fd6c    1 SCE:sceMkdir             sceMkdir
+0020fd70-0020fd8c    1 SCE:sceRmdir             sceRmdir
+0020fd90-0020fffc    1 SCE:sceFormat            sceFormat
+00210000-00210120    1 SCE:sceAdd               sceAddDrv
+00210120-0021013c    1 SCE:sceDel               sceDelDrv
+00210140-00210208    1 SCE:sceDopen             sceDopen
+00210208-00210370    1 SCE:sceDclose            sceDclose
+00210370-002104c8    1 SCE:sceDread             sceDread
+002104c8-00210668    1 SCE:sceGetstat           sceGetstat
+00210668-002108a4    1 SCE:sceChstat            sceChstat
+002108a8-00210a98    1 SCE:sceRename            sceRename
+00210a98-00210ab4    1 SCE:sceChdir             sceChdir
+00210ab8-00210c50    1 SCE:sceSync              sceSync
+00210c50-00210ebc    1 SCE:sceMount             sceMount
+00210ec0-00210edc    1 SCE:sceUmount            sceUmount
+00210ee0-00211118    1 SCE:sceLseek             sceLseek64
+00211118-00211350    1 SCE:sceDevctl            sceDevctl
+00211350-00211530    1 SCE:sceSymlink           sceSymlink
+00211530-002116f8    1 SCE:sceReadlink          sceReadlink
+002116f8-00211c44   11 SCE:sceSif               sceSifInitIopHeap, sceSifAllocIopHeap, sceSifAllocSysMemory, sceSifFreeSysMemory, sceSifFreeIopHeap, sceSifLoadIopHeap
+00211c48-00211dd4    2 <free>                   _lf_bind, _lf_version
+00211dd8-00211e10    1 SCE:sceSif               sceSifLoadFileReset
+00211e10-00212018    1 <free>                   _sceSifLoadModuleBuffer
+00212018-0021241c    6 SCE:sceSif               sceSifStopModule, sceSifUnloadModule, sceSifSearchModuleByName, sceSifSearchModuleByAddress, sceSifLoadModuleBuffer, sceSifLoadStartModuleBu
+00212420-00212644    1 <free>                   _sceSifLoadModule
+00212648-00212684    2 SCE:sceSif               sceSifLoadModule, sceSifLoadStartModule
+00212688-0021278c    1 <free>                   _sceSifLoadElfPart
+00212790-00212c58    8 SCE:sceSif               sceSifLoadElfPart, sceSifLoadElf, sceSifGetIopAddr, sceSifSetIopAddr, sceSifResetIop, sceSifIsAliveIop
+00212c58-00213e1c   54 <free>                   SetTLBHandler, SetDebugHandler, Copy, kCopy, GetEntryAddress, setup
+00213e20-00215188   29 SCE:scePad               scePadInit, scePadInit2, scePadEnd, scePadPortOpen, scePadPortClose, scePadGetDmaStr
+00215188-002151ac    1 <free>                   CB_DelayTh
+002151b0-00215280    2 SCE:sceCd                sceCdDelayThread, sceCdCallback
+00215280-002153f0    2 <free>                   _sceCd_cd_callback, _Cdvd_cbLoop
+002153f0-002154bc    1 SCE:sceCd                sceCdInitEeCB
+002154c0-002156d0    3 <free>                   _sceCd_cd_read_intr, cmd_sem_init, cdvd_exit
+002156d0-00215750    1 SCE:sceCd                sceCdPOffCallback
+00215750-00215820    2 <free>                   _sceCd_Poff_Intr, PowerOffCB
+00215820-00215b54    2 SCE:sceCd                sceCdLayerSearchFile, sceCdSearchFile
+00215b58-00215cc8    1 <free>                   _sceCd_ncmd_prechk
+00215cc8-00215e6c    3 SCE:sceCd                sceCdNcmdDiskReady, sceCdSync, sceCdSyncS
+00215e70-00216090    2 <free>                   _sceCd_scmd_prechk, _sceCdSC
+00216090-00216b90    7 SCE:sceCd                sceCdInit, sceCdDiskReady_old, sceCdDiskReady, sceCdRead, sceCdStatus, sceCdPowerOff
+00216b90-00216dac    2 SCE:sceMc                sceMcInit, sceMcEnd
+00216db0-00216de0    1 <free>                   _lmcGetClientPtr
+00216de0-00217250    6 SCE:sceMc                sceMcChangeThreadPriority, sceMcGetSlotMax, sceMcOpen, sceMcMkdir, sceMcClose, sceMcSeek
+00217250-002172e0    1 <free>                   mceIntrReadFixAlign
+002172e0-0021756c    2 SCE:sceMc                sceMcRead, sceMcWrite
+00217570-002175b0    2 <free>                   mcHearAlarm, mcDelayThread
+002175b0-00217690    1 SCE:sceMc                sceMcSync
+00217690-002176e4    1 <free>                   mceGetInfoApdx
+002176e8-00217a20    3 SCE:sceMc                sceMcGetInfo, sceMcUdCheckNewCard, sceMcGetDir
+00217a20-00217aa4    1 <free>                   mceStorePwd
+00217aa8-00218380    8 SCE:sceMc                sceMcChdir, sceMcFormat, sceMcDelete, sceMcFlush, sceMcSetFileInfo, sceMcRename
+00218380-00221f58  112 <free>                   __ieee754_rem_pio2, __ieee754_acosf, __ieee754_asinf, __ieee754_atan2f, __ieee754_powf, __ieee754_rem_pio2f
+00221f60-00222048    1 CApp                     __ct__4CAppFUsUsUi
+00222050-002220c4    1 DelayDeleteObject        __dt__17DelayDeleteObjectFv
+002220d0-00222124    1 CList                    __dt__5CListFv
+00222130-00222150    1 FVector                  __ct__7FVectorFv
+00222150-0022218c    1 DelayDeleteObject        __ct__17DelayDeleteObjectFv
+00222190-002221b8    1 CList                    __ct__5CListFv
+002221c0-002221c8    1 CApp                     InitialReset__4CAppFv
+002221d0-00222230    1 <free>                   InitMain__Fv
+00222230-002222a8    1 _DMAREQ                  Init__7_DMAREQFii
+002222b0-002227b0    4 DmaMan                   InitialReset__6DmaManFv, DmaSend__6DmaManFiPv, Request__6DmaManFP7_DMAREQ, DmaSync__6DmaManFii
+002227b0-002228bc    1 <free>                   ClearLocalMemory__Fv
+002228c0-00222aa8    5 Gsx                      Initialize__3GsxFv, Reset__3GsxFv, __ct__3GsxFv, Open__3GsxFiiiiUi, Close__3GsxFv
+00222ab0-00222b8c    1 <free>                   cbVSync__Fi
+00222b90-00222bb4    1 Gsx                      VSync__3GsxFi
+00222bc0-00222c38    3 <free>                   GsxGetVSyncCount__Fv, GsxClrVSyncCount__Fv, GsxForceFlip__Fv
+00222c40-002231d4    7 Gsx                      Start__3GsxFv, SetRenderTarget__3GsxFP13sceGsDrawEnv1, SetRenderTarget2__3GsxFP13sceGsDrawEnv2, GetBPPtoPSM__3GsxFii, SetInter30__3GsxFi, Se
+002231e0-002234c0    5 GsxFrameBuf              __ct__11GsxFrameBufFv, __dt__11GsxFrameBufFv, InitialReset__11GsxFrameBufFv, GetFreePtr__11GsxFrameBufFbPUiUi, MarkTbl__11GsxFrameBufFiPUiUi
+002234c0-00223e44    6 <free>                   GetPSMtoBPP, GetBufferWidth, GetTexWidth, GetTexBit, MakeFlags__F6GS_PSMiiPUi, MakeFlagsChain__F6GS_PSMUi
+00223e50-00224b28    8 GsxFrameBuf              Create__11GsxFrameBufFb6GS_PSMUiUi, Create__11GsxFrameBufFb6GS_PSMUi, CreateS__11GsxFrameBufFbUi6GS_PSMUiUi, CreateS__11GsxFrameBufFbUi6GS_P
+00224b30-00224b3c    1 _QWD                     __ct__4_QWDFv
+00224b40-00224c10    1 GsxFrameBuf              StoreImage__11GsxFrameBufFP1P9_tagSRect
+00224c10-00224ce4    3 GsxRaster                __ct__9GsxRasterFv, __dt__9GsxRasterFv, Release__9GsxRasterFv
+00224cf0-00225370    5 GsxSpline                __ct__9GsxSplineFv, __dt__9GsxSplineFv, Release__9GsxSplineFv, Create__9GsxSplineFUiUiP7FVector, GetPosition__9GsxSplineFf
+00225370-002255ac    6 Matrix                   MulMatrix__6MatrixCFRC6Matrix, __ct__6MatrixFffffffffffffffff, __ct__6MatrixFRC7FVectorRC7FVector, __ct__6MatrixFRC6Matrix, __ct__6MatrixFPC
+002255b0-00225670    1 <free>                   GetRad
+00225670-002257c8    8 FVector                  __ct__7FVectorFRC7FVector, __ct__7FVectorFPC7FVector, Normalize__7FVectorFv, Clamp__7FVectorFff, OuterProduct__7FVectorCFRC7FVector, Length_
+002257d0-002258a4    3 VIF1Prim                 __ct__8VIF1PrimFv, __dt__8VIF1PrimFv, setZvolume__8VIF1PrimFs
+002258b0-00225b50    7 VIF1PrimChain            insert__13VIF1PrimChainFP13VIF1PrimChain, add__13VIF1PrimChainFP13VIF1PrimChain, addPrim__13VIF1PrimChainFP8VIF1Prim, findPrim__13VIF1PrimCh
+00225b50-00225c4c    1 World                    __ct__5WorldFv
+00225c50-00225cb4    2 VIF1PrimChain            __dt__13VIF1PrimChainFv, __ct__13VIF1PrimChainFv
+00225cc0-00225f5c    4 World                    __dt__5WorldFv, WorldGetPacket__5WorldFv, changebActiveFlg__5WorldFv, LayerGetPacket__5WorldFiP1
+00225f60-00225f68    1 VIF1Prim                 getPacket__8VIF1PrimFv
+00225f70-00226520   13 World                    WorldRender__5WorldFv, ReleaseOT__5WorldFP8VIF1Prim, FindOT__5WorldFP8VIF1Prim, FindOTindex__5WorldFP8VIF1Prim, AddDoubleOT__5WorldFiiP8VIF1
+00226520-00226570    1 DelayDeleteObject        DelayDelete__17DelayDeleteObjectFv
+00226570-00226634    3 ClutAdressControl        __ct__17ClutAdressControlFv, __dt__17ClutAdressControlFv, getAdress__17ClutAdressControlFi
+00226640-00226b8c    7 CImage                   __ct__6CImageFv, __dt__6CImageFv, Release__6CImageFv, ReleasePal__6CImageFv, Create__6CImageFiiiPUc, CreatePal__6CImageFiPv
+00226b90-00227938   10 GsxCamera                __ct__9GsxCameraFv, __dt__9GsxCameraFv, __ct__9GsxCameraFUiUiUiUiUi, CommonInit__9GsxCameraFv, Create__9GsxCameraFUiUiUiUiUi, CaptureOut__9G
+00227940-002279d4    1 SCE:sceVu                sceVu0ViewClipMatrix__FR6Matrixfffff
+002279e0-00227d54    4 GsxCamera                MakeViewMatrix__9GsxCameraFv, GetViewScreenMatrix__9GsxCameraFv, ApplyFrame__9GsxCameraFv, ClearRaster__9GsxCameraFv
+00227d60-0022841c   12 LightData                install__9LightDataFP9LightData, uninstall__9LightDataFP9LightData, upDate__9LightDataFP9LightData, HightClear__9LightDataFv, LengthClear__9
+00228420-0022a1f0    9 LightControl             Init__12LightControlFv, addLightNum__12LightControlFP9LightData, relLightNum__12LightControlFP9LightData, CreateAmbient__12LightControlF7FVe
+0022a1f0-0022a200    1 FVector                  __as__7FVectorFRC7FVector
+0022a200-0022a830   15 LightControl             referenceEmpty__12LightControlFv, changeDeclineType__12LightControlFiQ29LightData11DeclineType, changeAngle__12LightControlFif, changeLevel_
+0022a830-0022a84c    1 <free>                   __arraydtor$546
+0022a850-0022a904    2 LightData                __dt__9LightDataFv, __ct__9LightDataFv
+0022a910-0022b64c   11 FileIOLib                __ct__9FileIOLibFv, checkHddStatus__9FileIOLibFPCc, checkPFSFreeSize__9FileIOLibFPCc, SetHddDeviceName__9FileIOLibFPCc, SetPfsDeviceName__9F
+0022b650-0022b66c    1 BufMemory                getBuffer__9BufMemoryFv
+0022b670-0022dc40   26 FileIOLib                Command_Process__9FileIOLibFPvPv, getFileHand__9FileIOLibFv, releaseFileHand__9FileIOLibFP7_FIOHND, Initialize__9FileIOLibFv, getBuffer__9Fi
+0022dc40-0022de34    4 BufMemory                __ct__9BufMemoryFv, SetBuffer__9BufMemoryFUlPUc, __ct__9BufMemoryFUlUi, __dt__9BufMemoryFv
+0022de40-0022df18    3 FileIOLib                __dt__9FileIOLibFv, @24@Run__9FileIOLibFv, @24@__dt__9FileIOLibFv
+0022df20-0022e0c0    4 List                     __dt__4ListFv, __ct__4ListFv, add__4ListFP4List, remove__4ListFP4List
+0022e0c0-0022e278    5 OrderPacket              __dt__11OrderPacketFv, setData__11OrderPacketFiPFiP9BufMemoryiPcPv_iiPCcPvP9BufMemoryi, __ct__11OrderPacketFv, clear__11OrderPacketFv, used_
+0022e280-0022ea54    6 DvdromOrder              __ct__11DvdromOrderFv, Polling__11DvdromOrderFv, deleteOrder__11DvdromOrderFi, ReadOrder__11DvdromOrderFPCcPFiP9BufMemoryiPcPv_iiP9BufMemory
+0022ea60-0022ea98    1 <free>                   __arraydtor$1312
+0022eaa0-0022f764   10 RingBuffer               __ct__10RingBufferFUlUi, init__10RingBufferFv, __dt__10RingBufferFv, getEmptySize__10RingBufferFv, writeData__10RingBufferFPUclUi, setSector
+0022f770-0022fee8    8 StreamFile               __ct__10StreamFileFPcUlUi, __dt__10StreamFileFv, stopStream__10StreamFileFv, Polling__10StreamFileFv, startStream__10StreamFileFv, setStream
+0022fef0-00230d48   18 CPad                     Initialize__4CPadFii, ResetSystem__4CPadFv, Polling__4CPadFv, QueryInterface__4CPadFii, SetAssign__4CPadFiPCUs, GetAssign__4CPadFiPUs
+00230d50-00230e28    1 CPadMan                  __ct__7CPadManFv
+00230e30-00230e7c    1 CLibpad                  __dt__7CLibpadFv
+00230e80-00231760   19 CPadMan                  __dt__7CPadManFv, Invalidate__7CPadManFv, Open__7CPadManFii, Close__7CPadManFv, Polling__7CPadManFv, Disconnected__7CPadManFQ27CLibpad9State
+00231760-00231b20    6 CAnalogStick             __ct__12CAnalogStickFv, __dt__12CAnalogStickFv, Clear__12CAnalogStickFv, Make__12CAnalogStickFUcUc, Make__12CAnalogStickFUs, Calculate__12CA
+00231b20-0023c074  118 <free>                   abort, atof, atoi, atol, _calloc_r, _close_r
+0023c080-0023c118    2 SysTool                  __dt__7SysToolFv, __ct__7SysToolFv
+0023c120-0023c2b0    4 CPacket                  __ct__7CPacketFv, __dt__7CPacketFv, Create__7CPacketFii, Destroy__7CPacketFv
+0023c2b0-0023c318    2 Libcpkt                  Align__7LibcpktFPvi, QwordMemCopy__7LibcpktFPvPCvi
+0023c320-0023c650    6 CVif1Packet              __ct__11CVif1PacketFv, __ct__11CVif1PacketFii, __dt__11CVif1PacketFv, Create__11CVif1PacketFii, Destroy__11CVif1PacketFv, RefLoadImage__11CV
+0023c650-0023ca5c   10 SysTool                  SetPathname__7SysToolFPcPCc, SysInitialize__7SysToolFPv, SysTerminate__7SysToolFv, PluginAttach__7SysToolFv, GetTimer__7SysToolFv, CBPause__
+0023ca60-0023cb10    2 <free>                   GetRomName, IsT10K
+0023cb10-0023cd98    8 SCE:sceScf               sceScfGetLanguage, sceScfSetT10kConfig, sceScfGetAspect, sceScfGetSpdif, sceScfGetTimeZone, sceScfGetDateNotation
+0023cd98-0023d0fc    9 <free>                   tobcd, frombcd, convertfrombcd, converttobcd, adddate, subdate
+0023d100-0023d150    2 SCE:sceScf               sceScfGetGMTfromRTC, sceScfGetLocalTimefromRTC
+0023d150-0023d1d8    2 <free>                   cbOverlayLoad__FiP9BufMemoryiPcPv, cbOverlayPreLoad__FiP9BufMemoryiPcPv
+0023d1e0-0023d424    5 Overlay                  __ct__7OverlayFv, __dt__7OverlayFv, PreloadDone__7OverlayFP9BufMemoryi, CopyFromPrebuffer__7OverlayFv, Init__7OverlayFUi
+0023d430-0023d45c    1 <free>                   mwGetGroupAddress
+0023d460-0023d770    4 Overlay                  Load__7OverlayFPCcPFibiPv_viPv, PreLoad__7OverlayFP9BufMemoryPCcPFibiPv_viPv, Unload__7OverlayFPFibiPv_v, InitCashe__7OverlayFi
+0023d770-0023d7e0    1 <free>                   FTOI20__Ffi
+0023d7e0-0023d974    2 SVector                  setFloatToShort__7SVectorFPf, ShortToFloat__7SVectorFPf
+0023d980-0023d9c4    2 <free>                   loadMatrix1__FR6MatrixR6Matrix, loadMatrix2__FR6Matrix
+0023d9d0-0023dc48    1 Model                    __ct__5ModelFv
+0023dc50-0023dc84    1 LevelsModel              __ct__11LevelsModelFv
+0023dc90-0023f048    8 Model                    __dt__5ModelFv, DeleteSetUp__5ModelFv, getModelColor__5ModelFv, setModelColor__5ModelFR7FVector, Initialize__5ModelFv, create__5ModelFP9BufM
+0023f050-0023f07c    1 BBoxResult               __ct__10BBoxResultFv
+0023f080-0024237c   36 Model                    createInterMotion__5ModelFv, createMotion__5ModelFPUc, deleteMotion__5ModelFPCc, createLevelofDetale__5ModelFP9BufMemoryUi, createLevelofDet
+00242380-00242610    4 LevelsModel              setData__11LevelsModelFP5Model, searchGroup__11LevelsModelFi, releasetData__11LevelsModelFv, __dt__11LevelsModelFv
+00242610-00242618    1 Model                    @20@__dt__5ModelFv
+00242620-00242adc   10 Atomic                   __ct__6AtomicFv, __dt__6AtomicFv, setAtomicAlpha__6AtomicFUc, set2PathColor__6AtomicFR7FVector, set2PathAlpha__6AtomicFi, calcNeedPacket__6A
+00242ae0-00242fb0    5 RotAnim                  __ct__7RotAnimFUs, __dt__7RotAnimFv, Cleate__7RotAnimFPUcP15SequenceControl, getQuaternion__7RotAnimFf, getMatrix__7RotAnimFf
+00242fb0-002433bc    4 TranceAnim               __ct__10TranceAnimFUs, __dt__10TranceAnimFv, Cleate__10TranceAnimFPUcP15SequenceControl, getTrance__10TranceAnimFf
+002433c0-00243d3c   12 Frame                    __ct__5FrameFv, __dt__5FrameFv, myMatrixUpdate__5FrameFv, Cleate__5FrameFPUcP5Frame, searchFrameIndex__5FrameFPCc, searchFrame__5FrameFPCc
+00243d40-00243ed0    3 Quaternion               __ct__10QuaternionFRC10Quaternion, __as__10QuaternionFRC10Quaternion, __ml__10QuaternionFRC10Quaternion
+00243ed0-002442d0    2 Frame                    calcMotion__5FrameFv, calcMatrix__5FrameFP6Matrixi
+002442d0-002454bc    3 InterSequenceControl     __ct__20InterSequenceControlFP5FrameiPc, __dt__20InterSequenceControlFv, setInterData__20InterSequenceControlFP5Modelii
+002454c0-002455a0    2 SequenceControl          __ct__15SequenceControlFv, __dt__15SequenceControlFv
+002455a0-002455e4    1 Event                    __dt__5EventFv
+002455f0-00245a18    7 SequenceControl          getProgress__15SequenceControlFv, getMotionName__15SequenceControlFv, setInterData__15SequenceControlFP5Modelii, addTime__15SequenceControlF
+00245a20-00245a28    1 Event                    __ct__5EventFv
+00245a30-00245d5c    7 Sequence                 __ct__8SequenceFv, __dt__8SequenceFv, Cleate__8SequenceFPUcP15SequenceControl, SeachSequence__8SequenceFPUc, getMatrix__8SequenceFf, getQuat
+00245d60-00245e20    1 Event                    Cleate__5EventFPUcP15SequenceControl
+00245e20-00245f4c    2 SequenceControl          eventaddTime__15SequenceControlFfP5Model, setCTime__15SequenceControlFf
+00245f50-002466d4    3 Event                    setIndex__5EventFf, addTime__5EventFfP5Model, checkEvent__5EventFfP5Model
+002466e0-0024717c    7 Quaternion               __ct__10QuaternionFP6Matrix, normalize__10QuaternionFv, norm__10QuaternionFv, __apl__10QuaternionFRC10Quaternion, getMatrix__10QuaternionFPf
+00247180-002472dc    3 Clut                     __ct__4ClutFv, __dt__4ClutFv, CreateData__4ClutFPUciii
+002472e0-00248620   13 Texture                  __ct__7TextureFv, __dt__7TextureFv, CreateMipMapData__7TextureFPUc, CreateData__7TextureFPUciii, createRegsterPacket__7TextureFiiiiiii, setF
+00248620-0024878c    3 gTextureColtrol          setTexture__15gTextureColtrolFPcP8gTexture, CreateTexture__15gTextureColtrolFPcP9BufMemory, findTexture__15gTextureColtrolFPc
+00248790-00248910    5 gTexture                 __ct__8gTextureFv, __ct__8gTextureFii, addTex__8gTextureFP8gTexture, removeTex__8gTextureFv, deleteTexture__8gTextureFv
+00248910-00248cc8    5 TextureAnim              __ct__11TextureAnimFv, __dt__11TextureAnimFv, getTexAnimPacket__11TextureAnimFv, setCurrentIndex__11TextureAnimFUi, CreateData__11TextureAni
+00248cd0-002490e8    4 IPUTexture               __ct__10IPUTextureFv, __dt__10IPUTextureFv, create__10IPUTextureFP19_ModelTextureHeaderiPc, decodeFrame__10IPUTextureFi
+002490f0-00249168    1 gTexture                 __dt__8gTextureFv
+00249170-00249290    3 BRN_Link                 __ct__8BRN_LinkFv, __dt__8BRN_LinkFv, __as__8BRN_LinkFRC8BRN_Link
+00249290-0024b46c   19 BRN_LinkList             __ct__12BRN_LinkListFi, __dt__12BRN_LinkListFv, setLinkParams__12BRN_LinkListFiRC7FVectorRC7FVectorf, getLinkGeometry__12BRN_LinkListFiP7FVe
+0024b470-0024b4e4    2 BRN_CollisionInfo        __ct__17BRN_CollisionInfoFv, __dt__17BRN_CollisionInfoFv
+0024b4f0-0024b670    2 BlendShape               __ct__10BlendShapeFv, __dt__10BlendShapeFv
+0024b670-0024b700    2 ShapeForm                __ct__9ShapeFormFv, __dt__9ShapeFormFv
+0024b700-0024ccc8   16 BlendShape               create__10BlendShapeFPcP5Model, getPacket__10BlendShapeFi, changePercent__10BlendShapeFf, changeShape__10BlendShapeFi, changeSlider__10Blend
+0024ccd0-0024d294    7 BlendShapeControl        __dt__17BlendShapeControlFv, create__17BlendShapeControlFPcP5Model, getPacket__17BlendShapeControlFiP1, addTime__17BlendShapeControlFf, chan
+0024d2a0-0024e5e8    6 Pack1Atomic              __ct__11Pack1AtomicFv, __dt__11Pack1AtomicFv, Cleate__11Pack1AtomicFPUcPP6AtomicP5Model, getPacket__11Pack1AtomicFiP6Atomic, calcNeedPacket_
+0024e5f0-0024f718    6 Pack2Atomic              __ct__11Pack2AtomicFv, __dt__11Pack2AtomicFv, Cleate__11Pack2AtomicFPUcPP6AtomicP5Model, getPacket__11Pack2AtomicFiP6Atomic, calcNeedPacket_
+0024f720-00250d54    9 SkinAtomicPack2          __ct__15SkinAtomicPack2Fv, __dt__15SkinAtomicPack2Fv, Cleate__15SkinAtomicPack2FPUcPP6AtomicP5Model, set2PathColor__15SkinAtomicPack2FR7FVec
+00250d60-00251f90    6 SkinAtomicPack2NL        __ct__17SkinAtomicPack2NLFv, __dt__17SkinAtomicPack2NLFv, Cleate__17SkinAtomicPack2NLFPUcPP6AtomicP5Model, getPacket__17SkinAtomicPack2NLFiP
+00251f90-00252190    3 <free>                   checkArea__FR7FVector, checkArea5__FR7FVectorR7FVector, checkBoundingArea2__FR7FVectorR7FVector
+00252190-00252848    7 ExpansionTexture         __ct__16ExpansionTextureFv, __dt__16ExpansionTextureFv, changeLayer__16ExpansionTextureFi, setTexture__16ExpansionTextureFv, resetTexture__1
+00252850-00252e54    5 BRN_inertia              __ct__11BRN_inertiaFv, __dt__11BRN_inertiaFv, moveTo__11BRN_inertiaFR7FVectorR10Quaternionf, resetPos__11BRN_inertiaFRC7FVector, resetAtt__1
+00252e60-00253288    8 DynamicsControl          __ct__15DynamicsControlFv, __dt__15DynamicsControlFv, Create__15DynamicsControlFPUcP5Model, ResetLink__15DynamicsControlFv, SetDynaGRV__15Dy
+00253290-00253cb4    9 Dynamics                 __ct__8DynamicsFv, __dt__8DynamicsFv, ResetLink__8DynamicsFv, SetGrv__8DynamicsFR7FVector, Create__8DynamicsFPUcP5Frame, Init__8DynamicsFv
+00253cc0-00254b7c    5 BoundingCircle           __ct__14BoundingCircleFv, __dt__14BoundingCircleFv, checkCollision__14BoundingCircleFP8DynamicsP7FVectorP17BRN_CollisionInfo, CollisionFnc__
+00254b80-00254b98    1 CIRCLED                  __ct__7CIRCLEDFv
+00254ba0-00254bac    1 IKControl                calcIK__9IKControlFv
+00254bb0-0025528c    2 IKs                      calcMatrix__3IKsFP5FrameR6Matrix, calcIK__3IKsFR7FVector
+00255290-002565f0    6 PLP1Atomic               __ct__10PLP1AtomicFv, __dt__10PLP1AtomicFv, Cleate__10PLP1AtomicFPUcPP6AtomicP5Model, calcNeedPacket__10PLP1AtomicFv, getPacket__10PLP1Atomi
+002565f0-00257728    6 PLP2Atomic               __ct__10PLP2AtomicFv, __dt__10PLP2AtomicFv, Cleate__10PLP2AtomicFPUcPP6AtomicP5Model, calcNeedPacket__10PLP2AtomicFv, getPacket__10PLP2Atomi
+00257730-00257f30    4 FrameWeight              __ct__11FrameWeightFv, __dt__11FrameWeightFv, Create__11FrameWeightFPUcP5Framei, calcWeight__11FrameWeightFi
+00257f30-0025801c    4 ReceiveModel             __ct__12ReceiveModelFv, __dt__12ReceiveModelFv, setModel__12ReceiveModelFP5Model, deleteModel__12ReceiveModelFP5Model
+00258020-0025822c    4 ReleaseModel             __ct__12ReleaseModelFv, __dt__12ReleaseModelFv, setModel__12ReleaseModelFP5Model, deleteModel__12ReleaseModelFP5Model
+00258230-00259e78    9 ShadowControl            __ct__13ShadowControlFv, __dt__13ShadowControlFv, releaseShadow__13ShadowControlFP5Model, setDropShadow__13ShadowControlFP5Model, setReciveS
+00259e80-0025a1c8    2 <free>                   BRN_cropVector__FfR7FVector, BRN_RotVecWithQuatInv__FR10QuaternionR7FVector
+0025a1d0-0025a4cc    1 BRN_BendCalc             calcBendForce__12BRN_BendCalcFv
+0025a4d0-0025aa68    5 BRN_Math                 gauss__8BRN_MathFiPPfPf, new_workMat__8BRN_MathFi, delete_workMat__8BRN_MathFPPf, new_workVec__8BRN_MathFi, delete_workVec__8BRN_MathFPf
+0025aa70-0025af40    4 WaterAtomicP1            __ct__13WaterAtomicP1Fv, __dt__13WaterAtomicP1Fv, addTime__13WaterAtomicP1Ff, Cleate__13WaterAtomicP1FPUcPP6AtomicP5Model
+0025af40-0025bb00    6 BAtomic                  __ct__7BAtomicFv, __dt__7BAtomicFv, Cleate__7BAtomicFPUcPP6AtomicP5Model, initPacket__7BAtomicFP5FramePUc, getPacket__7BAtomicFiP6Atomic, ca
+0025bb00-0025ca58    8 MirrorModel              __ct__11MirrorModelFv, __dt__11MirrorModelFv, addTime__11MirrorModelFf, calcMatrix__11MirrorModelFP6Matrix, getPacket__11MirrorModelFv, Shad
+0025ca60-0025cf10    1 PutiObject               __ct__10PutiObjectFiPv
+0025cf10-0025cf3c    1 _QWD                     __as__4_QWDFRC4_QWD
+0025cf40-0025cfa4    1 tagPutiEnv               __as__10tagPutiEnvFRC10tagPutiEnv
+0025cfb0-0025d0b8    5 FVector                  __ct__7FVectorFffff, vw__7FVectorFv, vz__7FVectorFv, vy__7FVectorFv, vx__7FVectorFv
+0025d0c0-0025d0fc    1 tagPutiUV                __as__9tagPutiUVFRC9tagPutiUV
+0025d100-0025d1f4    1 tagPutiFlags             Init__12tagPutiFlagsFv
+0025d200-0025d24c    1 tagPutiEnv               __ct__10tagPutiEnvFv
+0025d250-0025daf8    7 PutiObject               __dt__10PutiObjectFv, getPacket__10PutiObjectFv, UpdateFrame__10PutiObjectFv, Calculate__10PutiObjectFv, CalcColor__10PutiObjectFv, CalcUv__
+0025db00-0025db1c    1 FVector                  __apl__7FVectorFRC7FVector
+0025db20-0025e084    3 PutiObject               CalcSpeed__10PutiObjectFv, CalcPos__10PutiObjectFv, CalcVertex__10PutiObjectFv
+0025e090-0025e124    3 Matrix                   RotMatrix__6MatrixFRC7FVector, __ct__6MatrixFv, UnitMatrix__6MatrixFv
+0025e130-0025e1d0    1 PutiObject               GetPos__10PutiObjectFfffR7FVector
+0025e1d0-0025e224    1 <free>                   Rand1__Fv
+0025e230-0025e70c    7 PutiObject               SetRegAlpha__10PutiObjectFUl, SetRegTest__10PutiObjectFUl, RotTransPer__10PutiObjectFP7FVectorP4_QWD, ClipFlag__10PutiObjectFv, SetPacket__1
+0025e710-0025e7b8    1 DelayPutiObject          __dt__15DelayPutiObjectFv
+0025e7c0-0025e8ac    1 PutiPrim                 __ct__8PutiPrimFi
+0025e8b0-0025e8dc    1 sceGsZbuf                __as__9sceGsZbufFRC9sceGsZbuf
+0025e8e0-0025eb54    2 PutiPrim                 __dt__8PutiPrimFv, SetTexture__8PutiPrimFP12tagPTexParamUc
+0025eb60-0025eb90    1 CList                    Add__5CListFP5CList
+0025eb90-0025ebfc    1 PutiPrim                 SetState__8PutiPrimFi
+0025ec00-0025ec1c    1 CList                    GetNext__5CListCFv
+0025ec20-0025ec44    1 PutiObject               OnChangeState__10PutiObjectFi
+0025ec50-0025ee80    1 PutiPrim                 getPacket__8PutiPrimFv
+0025ee80-0025eee4    2 PutiObject               ClosePacket__10PutiObjectFv, OpenPacket__10PutiObjectFv
+0025eef0-0025ef0c    1 CPacket                  GetBuffer__7CPacketCFv
+0025ef10-0025f1bc    5 PutiPrim                 Delete__8PutiPrimFv, Update__8PutiPrimFv, OnDelete__8PutiPrimFv, TimeCall__8PutiPrimFv, AddObject__8PutiPrimFP10PutiObject
+0025f1c0-0025f230    2 CList                    AddTail__5CListFP5CList, AddAfter__5CListFP5CList
+0025f230-0025f358    2 PutiPrim                 RemoveObject__8PutiPrimFP10PutiObject, DelayAdd__8PutiPrimFv
+0025f360-0025f9c0    8 PutiManager              __ct__11PutiManagerFv, __dt__11PutiManagerFv, Init__11PutiManagerFv, AddPrim__11PutiManagerFiP8PutiPrim, RemovePrim__11PutiManagerFP8PutiPri
+0025f9c0-0025fa6c    3 Matrix                   Invers__6MatrixFv, GetPos__6MatrixFv, __as__6MatrixFRC6Matrix
+0025fa70-0025fa8c    1 GsxCamera                GetMatrix__9GsxCameraFv
+0025fa90-0025fa98    1 PutiPrim                 @20@__dt__8PutiPrimFv
+0025faa0-0025faec    1 <free>                   GetBekijo__FUi
+0025faf0-002602cc    4 PutiTexture              __ct__11PutiTextureFv, __ct__Q211PutiTexture26@class$1573PutiTexture_cppFv, __dt__11PutiTextureFv, Create__11PutiTextureFUcP12tagPTexParam
+002602d0-002604e4    5 CVif1Packet              Terminate__11CVif1PacketFv, Ret__11CVif1PacketFUi, WritebackQwc__11CVif1PacketFv, Align__11CVif1PacketFv, Ref__11CVif1PacketFP1UiUiUiUi
+002604f0-00260510    1 GsxFrameBuf              GetBufEntry__11GsxFrameBufFv
+00260510-00260590    1 PutiTexture              FindTexture__11PutiTextureFUc
+00260590-00260b70    3 PutiTexAnim              __ct__11PutiTexAnimFiiP11tagPAnimSeq, __dt__11PutiTexAnimFv, GetUVA__11PutiTexAnimFiPfPfPfPfPf
+00260b70-00260cc0    4 <free>                   GetFileCount, GetFileID, GetFileSize, GetFileEntry
+00260cc0-00262728   17 ExModel                  __ct__7ExModelFv, __ct__7ExModelFPUc, __dt__7ExModelFv, InitInstance__7ExModelFv, Setup__7ExModelFv, create__7ExModelFP9BufMemory
+00262730-002628a4    3 Deleter                  Reserve__7DeleterFP9BufMemory, __ct__Q27Deleter17CBufMemoryDeleterFP9BufMemory, __dt__Q27Deleter17CBufMemoryDeleterFv
+002628b0-00262fd0    5 CBBox                    __dt__5CBBoxFv, Release__5CBBoxFv, Destroy__5CBBoxFv, Clip__5CBBoxFPC9GsxCameraPC6Matrix, GetCenter__5CBBoxCFv
+00262fd0-00263090    2 CBVolume                 __dt__8CBVolumeFv, Clip__8CBVolumeFPC6MatrixPC7FVectorP7FVectori
+00263090-00264aa4    6 BBAtomic                 __ct__8BBAtomicFP7ExModel, __dt__8BBAtomicFv, Cleate__8BBAtomicFPUcPP6AtomicP5Model, initPacket__8BBAtomicFP5FramePUc, getPacket__8BBAtomicF
+00264ab0-00264ddc    4 Scissor                  __ct__7ScissorFv, __dt__7ScissorFv, Create__7ScissorFv, Update__7ScissorFUsii
+00264de0-00265628   16 Menu                     __ct__4MenuFv, __dt__4MenuFv, Run__4MenuFv, Shutdown__4MenuFv, Restore__4MenuFv, DestroyList__4MenuFv
+00265630-00265ab4    8 MenuPacket               __ct__10MenuPacketFv, __dt__10MenuPacketFv, ConnectPacket__10MenuPacketFP4_QWD, CreatePacket__10MenuPacketFUs, CreateSinglePacket__10MenuPac
+00265ac0-00266138   12 MenuRender               __ct__10MenuRenderFv, __dt__10MenuRenderFv, Create__10MenuRenderFv, Release__10MenuRenderFv, Entry__10MenuRenderFi, Dispose__10MenuRenderFv
+00266140-00266ab8   10 MenuSprite               __ct__10MenuSpriteFv, __dt__10MenuSpriteFv, Create__10MenuSpriteFUc, SetUV__10MenuSpriteFUsUsUsUs, SetScale__10MenuSpriteFf, Update__10MenuS
+00266ac0-00267084    5 RasterPacket             __ct__12RasterPacketFv, __dt__12RasterPacketFv, CreatePacket__12RasterPacketFUi, SetRaster__12RasterPacketF6GS_PSMUiUiUiUi, Destroy__12Raste
+00267090-002676a4    7 ClutRaster               __ct__10ClutRasterFv, __dt__10ClutRasterFv, Create__10ClutRasterFiUiib, Release__10ClutRasterFv, ClutSort__10ClutRasterFv, GetClutFlag__10Cl
+002676b0-00267e38    9 MenuTexture              __ct__11MenuTextureFv, __dt__11MenuTextureFv, ReadBuffer__11MenuTextureFP9BufMemoryi, Create__11MenuTextureFP9BufMemory6GS_PSMUiiUc, Create_
+00267e40-0026c59c   39 MenuWindow               __ct__10MenuWindowFv, __dt__10MenuWindowFv, Create__10MenuWindowFUcUcffff, CreateScroll__10MenuWindowFUissffUc, CreateScrollMark__10MenuWind
+0026c5a0-0026c658    1 ScrollData               __dt__10ScrollDataFv
+0026c660-0026c7b8    3 MenuWindow               Clear__10MenuWindowFv, @24@__dt__10MenuWindowFv, @36@__dt__10MenuWindowFv
+0026c7c0-00270314   18 FontDraw                 CreateClut__8FontDrawFi, GetRaster__8FontDrawFUsPcP11RasterData_UcP8MenuText, GetRect__8FontDrawFUsPcPsPsUcUcUc, SetShadow4__8FontDrawFP6CIm
+00270320-00270358    1 <free>                   __arraydtor$2874
+00270360-00270368    1 FontDraw                 @24@__dt__8FontDrawFv
+00270370-00272c84   29 Cursor                   __ct__6CursorFv, __dt__6CursorFv, Create__6CursorFUcUcUcUc, SetBackObject__6CursorFUc, Select__6CursorFP9MenuPlace, QuickMove__6CursorFv
+00272c90-00273db4    8 Font                     CreateFont__4FontFiPUc, ClearFont__4FontFi, GetFontCode__4FontFUs, __ct__4FontFv, __ct__4FontFUc, __dt__4FontFv
+00273dc0-002744a8   13 MenuItem                 __ct__8MenuItemFv, __dt__8MenuItemFv, SetBlink__8MenuItemFUcUc, CleanPacket__8MenuItemFv, SetAlpha__8MenuItemFUc, SetBright__8MenuItemFf
+002744b0-00274ebc   19 MenuObj                  Initialize__7MenuObjFv, IsReady__7MenuObjFv, UpdateTimer__7MenuObjFv, SetBright__7MenuObjFP7_rgba32f, CreateField__7MenuObjFv, CreateCmdMenu
+00274ec0-00275134    3 <free>                   StrLen__FPUcPi, GetBitCount__F6GS_PSM, GetCoefficient__Fi
+00275140-002758c4   12 MenuObjTable             __ct__12MenuObjTableFv, __dt__12MenuObjTableFv, AddPriority__12MenuObjTableFP7MenuObj, RemoveObj__12MenuObjTableFP7MenuObj, FindObj__12MenuO
+002758d0-00276638   18 MenuGroup                __ct__9MenuGroupFv, __dt__9MenuGroupFv, AddPlace__9MenuGroupFP9MenuPlace, RemovePlace__9MenuGroupFP9MenuPlace, FindPlace__9MenuGroupFs, GetK
+00276640-00277818   16 MenuPolygon              __ct__11MenuPolygonFv, __dt__11MenuPolygonFv, Create__11MenuPolygonFUcUc, SetRect__11MenuPolygonFv, SetVertex__11MenuPolygonFiffb, SetUV__11
+00277820-002781e8   12 SendOnLocal              __ct__11SendOnLocalFv, __dt__11SendOnLocalFv, Create__11SendOnLocalFP12RasterPacketP10ClutRasterbi, Create__11SendOnLocalFP4_QWDUl, UpdatePa
+002781f0-00278c98    9 MenuFrame                __ct__9MenuFrameFv, __dt__9MenuFrameFv, Destroy__9MenuFrameFv, Create__9MenuFrameFP10MenuWindowP8DrawRect, SetAlpha__9MenuFrameFUc, Update__
+00278ca0-00279320   17 MenuPlace                __ct__9MenuPlaceFv, __dt__9MenuPlaceFv, IsSelected__9MenuPlaceFP6Cursor, IsCanceled__9MenuPlaceFP6Cursor, SetPosition__9MenuPlaceFff, SetSiz
+00279320-0027b330   23 MenuScene                ReadScene__9MenuSceneFiP9BufMemoryiPcPv, __ct__9MenuSceneFv, __dt__9MenuSceneFv, OrderFile__9MenuSceneFPCcP4Menu, Initialize__9MenuSceneFPUc
+0027b330-0027bfcc   10 ScrollMark               __ct__10ScrollMarkFv, __dt__10ScrollMarkFv, Create__10ScrollMarkFUcP10MenuWindowUc, SetMark__10ScrollMarkFUc, SetArea__10ScrollMarkFUcffff, 
+0027bfd0-0027d488    9 MenuText                 __ct__8MenuTextFv, __dt__8MenuTextFv, Create__8MenuTextFUcUc, SetMessage__8MenuTextFPcUiUcUc, AllotPacket__8MenuTextFP4_QWDP4_QWD, Update__8
+0027d490-0027f4e8   19 MenuMessage              __ct__11MenuMessageFv, __dt__11MenuMessageFv, Create__11MenuMessageFUsUc, ClearMessage__11MenuMessageFv, Return__11MenuMessageFv, Start__11M
+0027f4f0-0027f7c4    6 FileHandle               ReadFile__10FileHandleFiP9BufMemoryiPcPv, __ct__10FileHandleFv, __dt__10FileHandleFv, Create__10FileHandleFP9BufMemory, CloseHandle__10FileH
+0027f7d0-0027fd98    6 FileManeger              __ct__11FileManegerFPCcPCc, __dt__11FileManegerFv, GetHandle__11FileManegerFib, ReleaseHandle__11FileManegerFi, CreateHandle__11FileManegerF
+0027fda0-00280898   15 FontItem                 __ct__8FontItemFv, __dt__8FontItemFv, DeleteString__8FontItemFv, GetRealWidth__8FontItemCFv, GetRealHeight__8FontItemCFv, GetOrderInfo__8Fon
+002808a0-002810e4    9 KeyWait                  __ct__7KeyWaitFv, __dt__7KeyWaitFv, Create__7KeyWaitFv, SetPosition__7KeyWaitFi, Polling__7KeyWaitFv, Update__7KeyWaitFiiUs
+002810f0-00281a78    8 MenuCapture              __ct__11MenuCaptureFv, __dt__11MenuCaptureFv, Capture__11MenuCaptureFiss6GS_PSMUc, Release__11MenuCaptureFv, getPacket__11MenuCaptureFv, Pol
+00281a80-00282240    9 MenuModel                __ct__9MenuModelFv, __dt__9MenuModelFv, Order__9MenuModelFP13MenuModelPackii, CalcMatrix__9MenuModelFv, EnableAlpha__9MenuModelFv, DisableAl
+00282240-00282258    1 _rgba32                  __ct__7_rgba32Fv
+00282260-00282588    7 MenuModel                DeleteSetUp__9MenuModelFv, TranseCallBack__9MenuModelFRC7FVector7FVector, EventCallBack__9MenuModelFPCcPCciiUi, MotionEndCallBack__9MenuMode
+00282590-00283760   11 MenuModelManeger         ReadComplete__16MenuModelManegerFiP9BufMemoryiPcPv, __ct__16MenuModelManegerFv, __dt__16MenuModelManegerFv, Create__16MenuModelManegerFPCc, 
+00283760-00283b68    8 MenuDataTable            Convert__13MenuDataTableFPUci, __ct__13MenuDataTableFv, __dt__13MenuDataTableFv, Order__13MenuDataTableFPCc, ReadDataFunc__13MenuDataTableFi
+00283b70-00285198   14 PluralFontItem           __ct__14PluralFontItemFv, __dt__14PluralFontItemFv, Create__14PluralFontItemFUsUc, GetFontPacket__14PluralFontItemCFUc, GetUpdatePacket__14P
+002851a0-00285a20    9 MenuFont                 ReleaseImage__8MenuFontFv, __ct__8MenuFontFv, __dt__8MenuFontFv, CreateFont__8MenuFontFiUsUc, Order__8MenuFontFPve, GetFontEnv__8MenuFontFv
+00285a20-00285a58    1 <free>                   __arraydtor$2825
+00285a60-00285a68    1 MenuFont                 @60@__dt__8MenuFontFv
+00285a70-00286198    7 MenuFontItalic           SetImage__14MenuFontItalicFPUc, ReleaseImage__14MenuFontItalicFv, __ct__14MenuFontItalicFv, __dt__14MenuFontItalicFv, CreateItalic__14MenuFo
+002861a0-00286568    7 MenuBar                  __ct__7MenuBarFv, __dt__7MenuBarFv, SetBar__7MenuBarFv, SetRange__7MenuBarFii, Round__7MenuBarFv, Clear__7MenuBarFv
+00286570-002871b0   10 MenuFlare                __ct__9MenuFlareFv, __dt__9MenuFlareFv, Create__9MenuFlareFv, SetOffset__9MenuFlareFffff, ClearAfter__9MenuFlareFv, Polling__9MenuFlareFv
+002871b0-002875c0    9 MenuWindowFace           __ct__14MenuWindowFaceFv, __dt__14MenuWindowFaceFv, Create__14MenuWindowFaceFP10MenuWindow, SetColor__14MenuWindowFaceFUcUcUc, SetAlpha__14M
+002875c0-00287bc0   10 MenuWindowFrame          __ct__15MenuWindowFrameFv, __dt__15MenuWindowFrameFv, Create__15MenuWindowFrameFP10MenuWindow, SetForm__15MenuWindowFrameFffff, SetColor__15
+00287bc0-0028838c    8 MenuWindowMessage        __ct__17MenuWindowMessageFv, __dt__17MenuWindowMessageFv, Create__17MenuWindowMessageFP10MenuWindow, SetAlpha__17MenuWindowMessageFUc, Updat
+00288390-00288ab4    8 MenuWindowNote           __ct__14MenuWindowNoteFv, __dt__14MenuWindowNoteFv, Create__14MenuWindowNoteFP10MenuWindow, SetAlpha__14MenuWindowNoteFUc, Update__14MenuWin
+00288ac0-00288bf0    4 MenuWindowObject         __ct__16MenuWindowObjectFv, __dt__16MenuWindowObjectFv, SetForm__16MenuWindowObjectFffff, SetColor__16MenuWindowObjectFUcUcUc
+00288bf0-002890d8   10 MenuWindowPlain          __ct__15MenuWindowPlainFv, __dt__15MenuWindowPlainFv, Create__15MenuWindowPlainFP10MenuWindow, SetForm__15MenuWindowPlainFffff, SetColor__15
+002890e0-0028a5b4   22 SaveMenuSection          SceneInit__15SaveMenuSectionFi, Update__15SaveMenuSectionFv, UpdateSoundOut__15SaveMenuSectionFv, UpdatePad__15SaveMenuSectionFv, UpdateVibr
+0028a5c0-0028b208    8 LSDCaptionHandler        __ct__17LSDCaptionHandlerFv, __dt__17LSDCaptionHandlerFv, CheckData__17LSDCaptionHandlerFP12_LSDTrackHdr, Open__17LSDCaptionHandlerFP10RingB
+0028b210-0028b3cc    2 LSDCaptionData           __ct__14LSDCaptionDataFv, __dt__14LSDCaptionDataFv
+0028b3d0-0028cb68   12 SoulEnergy               __ct__10SoulEnergyFv, __dt__10SoulEnergyFv, Create__10SoulEnergyFP11MenuTextureP11MenuTextureP11MenuTexture, SetMeter__10SoulEnergyFf, SetAl
+0028cb70-0028cff4    6 CmdSoulEnergy            __ct__13CmdSoulEnergyFv, __dt__13CmdSoulEnergyFv, GetReady__13CmdSoulEnergyFv, Release__13CmdSoulEnergyFv, DelayDelete__13CmdSoulEnergyFv, S
+0028d000-0028d438    8 MenuRegister             __ct__12MenuRegisterFv, __dt__12MenuRegisterFv, SetRegister__12MenuRegisterFiUlUl, Update__12MenuRegisterFiiUs, Connect__12MenuRegisterFP4_Q
+0028d440-0028dbb0    4 MenuCommon               SetIcon__10MenuCommonFcP10MenuSprite, __ct__10MenuCommonFv, __dt__10MenuCommonFv, GetReady__10MenuCommonFv
+0028dbb0-0028e63c    8 MenuWindowGeneral        __ct__17MenuWindowGeneralFv, __dt__17MenuWindowGeneralFv, Create__17MenuWindowGeneralFP10MenuWindow, SetAlpha__17MenuWindowGeneralFUc, Updat
+0028e640-0028eb38    6 MenuIcon                 __ct__8MenuIconFv, __dt__8MenuIconFv, Create__8MenuIconFc, Destroy__8MenuIconFv, SetOwner__8MenuIconFP10MenuWindow, Finish__8MenuIconFv
+0028eb40-0028f7c4   13 MenuSound                ReadComplete__9MenuSoundFiP9BufMemoryiPcPv, __ct__9MenuSoundFv, __dt__9MenuSoundFv, ReadSDH__9MenuSoundFP9BufMemoryi, FindSDH__9MenuSoundFUi
+0028f7d0-00290ca8   19 MenuModelPack            FindMotion__13MenuModelPackFP17MenuMotionConnectPCc, __ct__13MenuModelPackFv, __dt__13MenuModelPackFv, Create__13MenuModelPackFP16MenuModelM
+00290cb0-002913a4    8 MenuWindowCompact        __ct__17MenuWindowCompactFv, __dt__17MenuWindowCompactFv, Create__17MenuWindowCompactFP10MenuWindow, SetAlpha__17MenuWindowCompactFUc, Updat
+002913b0-00291664    5 MenuFieldData            __ct__13MenuFieldDataFv, __dt__13MenuFieldDataFv, GetReady__13MenuFieldDataFv, GetRealHeap__13MenuFieldDataFP9BufMemoryi, Release__13MenuFie
+00291670-00291778    3 MenuFieldStationed       __ct__18MenuFieldStationedFv, __dt__18MenuFieldStationedFv, GetReady__18MenuFieldStationedFv
+00291780-00291a88    8 MenuEffectModel          __ct__15MenuEffectModelFv, __dt__15MenuEffectModelFv, Order__15MenuEffectModelFv, Release__15MenuEffectModelFv, SetTest__15MenuEffectModelFi
+00291a90-00291b9c    3 MenuModelPrim            __ct__13MenuModelPrimFv, __dt__13MenuModelPrimFv, getPacket__13MenuModelPrimFv
+00291ba0-002937e0   25 CScript                  __ct__7CScriptFv, __dt__7CScriptFv, GetBufferSize__7CScriptFii, Create__7CScriptFPUciii, Release__7CScriptFi, Delete__7CScriptFv
+002937e0-00293880    3 <free>                   ipRandomize__Fv, ipMakeRand__Fv, iprnd__Fi
+00293880-002955e4    9 CScript                  ResetScene__7CScriptFv, CheckDlyEvent__7CScriptFv, GetDlyEvent__7CScriptFi, JobExec__7CScriptFv, GetCodePtr__7CScriptFRPUc, Statement__7CScr
+002955f0-0029583c    3 <free>                   SafeGetFlagAddr__Fii, ReadDataE__FP9_ParStackPvi, GetSize__FRiRiRPUc
+00295840-00298098   13 CScript                  Expression__7CScriptFUiRPUc, ExecFunc__7CScriptFiii, ifc_chain__7CScriptFP9_ParStack, ifc_callEvent__7CScriptFiP9_ParStack, ifc_callEventDly
+002980a0-002980c4    1 <free>                   ifc_randomize__Fv
+002980d0-002986a8    9 CScript                  ifc_rnd__7CScriptFP9_ParStack, ifc_dprintf__7CScriptFiP9_ParStack, ifc_sprintf__7CScriptFiP9_ParStack, ifc_xprintf__7CScriptFPcPciP9_ParStac
+002986b0-00298b54   11 CScriptEx                __ct__9CScriptExFv, Link__9CScriptExFiP7CScript, OnStart__9CScriptExFv, OnEnd__9CScriptExFi, CallFunc__9CScriptExFiiiP9_ParStack, Entry__9CS
+00298b60-0029921c    4 FpFog                    __ct__5FpFogFv, __dt__5FpFogFv, Create__5FpFogF7FVector7FVector7FVector7FVectorfffiifff, Create__5FpFogFPv
+00299220-00299b48    4 FpObjectFog              __ct__11FpObjectFogFiPv, __dt__11FpObjectFogFv, CreateData__11FpObjectFogFib, Init__11FpObjectFogFib
+00299b50-00299bd0    1 _FpData                  __ct__7_FpDataFv
+00299bd0-0029a398    2 FpObjectFog              CalculateFunc__11FpObjectFogFv, SetPacket__11FpObjectFogFv
+0029a3a0-0029a5d8    5 FpFogMCES                __ct__9FpFogMCESFv, __dt__9FpFogMCESFv, Create__9FpFogMCESFv, Create__9FpFogMCESFPv, getPacket__9FpFogMCESFv
+0029a5e0-0029d2c8    7 FpObjectFogMCES          __ct__15FpObjectFogMCESFiPv, __dt__15FpObjectFogMCESFv, Init__15FpObjectFogMCESFib, Calculate__15FpObjectFogMCESFv, FuncChangeData__15FpObje
+0029d2d0-0029e588    8 FpObjectFogBox           __ct__14FpObjectFogBoxFiPv, __dt__14FpObjectFogBoxFv, ChangeDataCup__14FpObjectFogBoxF7FVector7FVector7FVector7FVectorfffffff, CreateData__1
+0029e590-0029e5e4    2 FpPrim                   setZtest__6FpPrimFb, SetDrawFlag__6FpPrimFb
+0029e5f0-0029e5f8    1 FpFog                    @20@__dt__5FpFogFv
+0029e600-0029e608    1 FpFogMCES                @20@__dt__9FpFogMCESFv
+0029e610-0029f208    8 FpTorch                  __ct__7FpTorchFv, __dt__7FpTorchFv, SetColor1__7FpTorchFUcUcUcUc, SetColor2__7FpTorchFUcUcUcUc, SetColor3__7FpTorchFUcUcUcUc, SetPos1__7FpTo
+0029f210-002a0310    6 FpObjectTorch            __ct__13FpObjectTorchFiPv, __dt__13FpObjectTorchFv, CreateData__13FpObjectTorchFib, Init__13FpObjectTorchFib, CalculateFunc__13FpObjectTorch
+002a0310-002a0318    1 FpTorch                  @20@__dt__7FpTorchFv
+002a0320-002a03ec    1 <free>                   SetWhiteTex__FP12tagPTexParam
+002a03f0-002a2ae0   17 FpObject                 __ct__8FpObjectFiPv, __dt__8FpObjectFv, SetRGB__8FpObjectFUcUcUc, SetRGBA__8FpObjectFUcUcUcUc, InitData__8FpObjectFi, InitBBox__8FpObjectF7F
+002a2ae0-002a3318   16 FpPrim                   __ct__6FpPrimFv, __dt__6FpPrimFv, FuncbDrawNum__6FpPrimFv, FuncAlphaPowerAdd__6FpPrimFv, InitFpFlag__6FpPrimFf, GetFrameSpeed__6FpPrimFv
+002a3320-002a3738    1 <free>                   CreateFpEffect__FiPv
+002a3740-002a4454    7 FpFlare                  __ct__7FpFlareFv, __dt__7FpFlareFv, CreateEffect__7FpFlareFP12FpFlareParam, SetColor1__7FpFlareFUcUcUcUc, SetPos1__7FpFlareF7FVectorb, Creat
+002a4460-002a65c8    8 FpObjectFlare            __ct__13FpObjectFlareFiPv, __dt__13FpObjectFlareFv, SetData__13FpObjectFlareF7FVector7FVectorffffffi7FVector, CreateData__13FpObjectFlareFib
+002a65d0-002a65d8    1 FpFlare                  @20@__dt__7FpFlareFv
+002a65e0-002a7058    8 FpCandle                 __ct__8FpCandleFv, __dt__8FpCandleFv, SetColor1__8FpCandleFUcUcUcUc, SetColor2__8FpCandleFUcUcUcUc, SetColor3__8FpCandleFUcUcUcUc, SetPos1__
+002a7060-002a8190    6 FpObjectCandle           __ct__14FpObjectCandleFiPv, __dt__14FpObjectCandleFv, CreateData__14FpObjectCandleFib, Init__14FpObjectCandleFib, CalculateFunc__14FpObjectC
+002a8190-002a8198    1 FpCandle                 @20@__dt__8FpCandleFv
+002a81a0-002aa084   13 FpSmoke                  __ct__7FpSmokeFv, __dt__7FpSmokeFv, SetColor1__7FpSmokeFUcUcUcUc, SetColor2__7FpSmokeFUcUcUcUc, SetPos1__7FpSmokeF7FVectorb, CreateEffect__7
+002aa090-002ab190    6 FpObjectSmoke            __ct__13FpObjectSmokeFiPv, __dt__13FpObjectSmokeFv, CreateData__13FpObjectSmokeFib, Init__13FpObjectSmokeFib, CalculateFunc__13FpObjectSmoke
+002ab190-002ab198    1 FpSmoke                  @20@__dt__7FpSmokeFv
+002ab1a0-002ab610    3 FpSun                    __ct__5FpSunFv, __dt__5FpSunFv, Create__5FpSunF7FVectorP11FpLenzFlare
+002ab610-002ac8e8    8 FpLenzFlare              __ct__11FpLenzFlareFv, __dt__11FpLenzFlareFv, setLayer__11FpLenzFlareFi, SetDrawFlag__11FpLenzFlareFb, SetAlphaPower__11FpLenzFlareFfUi, Del
+002ac8f0-002ade9c    6 FpObjectLenzFlare        __ct__17FpObjectLenzFlareFiPv, __dt__17FpObjectLenzFlareFv, CreateData__17FpObjectLenzFlareFib, Init__17FpObjectLenzFlareFib, CalculateFunc_
+002adea0-002aed54    7 FpObjectLenz             __ct__12FpObjectLenzFiPv, __dt__12FpObjectLenzFv, CreateData__12FpObjectLenzFib, Init__12FpObjectLenzFib, SetData__12FpObjectLenzF7FVectorff
+002aed60-002b02c0    8 FpObjectSunFlare         __ct__16FpObjectSunFlareFiPv, __dt__16FpObjectSunFlareFv, SetData__16FpObjectSunFlareF7FVector7FVectorfUifbb, CreateData__16FpObjectSunFlare
+002b02c0-002b02c8    1 FpSun                    @20@__dt__5FpSunFv
+002b02d0-002b02e8    2 FpLenzFlare              @20@DelayDelete__11FpLenzFlareFv, @20@__dt__11FpLenzFlareFv
+002b02f0-002b0858    4 FpFunsui                 __ct__8FpFunsuiFv, __dt__8FpFunsuiFv, Create__8FpFunsuiF7FVector, Create__8FpFunsuiFPv
+002b0860-002b1838    6 FpObjectFunsui           __ct__14FpObjectFunsuiFiPv, __dt__14FpObjectFunsuiFv, CreateData__14FpObjectFunsuiFib, Init__14FpObjectFunsuiFib, CalculateFunc__14FpObjectF
+002b1840-002b1848    1 FpFunsui                 @20@__dt__8FpFunsuiFv
+002b1850-002b1c38    6 FpThunder                __ct__9FpThunderFv, __dt__9FpThunderFv, CreateEffect__9FpThunderFP14FpThunderParam, Create__9FpThunderF7FVector7FVector7_rgba327_rgba32fffib
+002b1c40-002b4810    9 FpObjectThunder          __ct__15FpObjectThunderFiPv, __dt__15FpObjectThunderFv, Init__15FpObjectThunderFib, InitData__15FpObjectThunderF7FVector7FVector7_rgba327_rg
+002b4810-002b6944    7 FpObjectTnder            __ct__13FpObjectTnderFiPv, __dt__13FpObjectTnderFv, Init__13FpObjectTnderFib, CreateData__13FpObjectTnderFib, CalculateFunc__13FpObjectTnder
+002b6950-002b6958    1 FpThunder                @20@__dt__9FpThunderFv
+002b6960-002b7a28    5 FpBlackHole              __ct__11FpBlackHoleFv, __dt__11FpBlackHoleFv, DelayDelete__11FpBlackHoleFv, Create__11FpBlackHoleFv, Create__11FpBlackHoleFPv
+002b7a30-002b915c    8 FpObjectBlackHole        __ct__17FpObjectBlackHoleFiPv, __dt__17FpObjectBlackHoleFv, FuncPos__17FpObjectBlackHoleFP7_FpData, CreateData__17FpObjectBlackHoleFib, Init
+002b9160-002baf74    6 FpObjectTnderBH          __ct__15FpObjectTnderBHFiPv, __dt__15FpObjectTnderBHFv, InitData__15FpObjectTnderBHF7FVector7FVectorfffff, CreateData__15FpObjectTnderBHFib,
+002baf80-002bbab4    3 FpObjectTnderBH2         __ct__16FpObjectTnderBH2FiPv, __dt__16FpObjectTnderBH2Fv, CreateData__16FpObjectTnderBH2Fib
+002bbac0-002bbad8    2 FpBlackHole              @20@DelayDelete__11FpBlackHoleFv, @20@__dt__11FpBlackHoleFv
+002bbae0-002bbe64    3 FpAreaSmoke              __ct__11FpAreaSmokeFv, __dt__11FpAreaSmokeFv, Create__11FpAreaSmokeF7FVector7FVector7FVector7FVectoriiffff
+002bbe70-002bcd50    6 FpObjectAreaSmoke        __ct__17FpObjectAreaSmokeFiPv, __dt__17FpObjectAreaSmokeFv, CreateData__17FpObjectAreaSmokeFib, Init__17FpObjectAreaSmokeFib, CalculateFunc_
+002bcd50-002bcd58    1 FpAreaSmoke              @20@__dt__11FpAreaSmokeFv
+002bcd60-002bd0a0    4 FpTaki                   __ct__6FpTakiFv, __dt__6FpTakiFv, Create__6FpTakiFi, Create__6FpTakiFPv
+002bd0a0-002bec10    8 FpObjectTaki             __ct__12FpObjectTakiFiPv, __dt__12FpObjectTakiFv, InitSetData__12FpObjectTakiFv, CreateFpDataInit__12FpObjectTakiFP7_FpDatai, CreateFpData__
+002bec10-002bf6d8    6 FpObjectTaki2            __ct__13FpObjectTaki2FiPv, __dt__13FpObjectTaki2Fv, InitSetData__13FpObjectTaki2Fv, CreateFpDataInit__13FpObjectTaki2FP7_FpDatai, CreateFpDa
+002bf6e0-002bf6e8    1 FpTaki                   @20@__dt__6FpTakiFv
+002bf6f0-002c9750   15 JRing                    __ct__5JRingFsi, __dt__5JRingFv, Destruct__5JRingFb, Initialize__5JRingFv, Polling__5JRingFv, Sequence__5JRingFv
+002c9750-002c9794    1 ComboTrial               getPacket__10ComboTrialFv
+002c97a0-002c97e4    1 HitMes                   getPacket__6HitMesFv
+002c97f0-002c9834    1 HitBar                   getPacket__6HitBarFv
+002c9840-002c9884    1 HitArea                  getPacket__7HitAreaFv
+002c9890-002e0fb8   35 JRing                    SetCallBack__5JRingFPFiPvPv_bPvUi, SetRingPos__5JRingFff, SetRotSpeed__5JRingFfff, AllAreaInitialize__5JRingFv, AddStepArea__5JRingFssP7_rgb
+002e0fc0-002e1ab8    4 <free>                   RotTransVector, AreaHitCheck, EasyAreaHitCheck, HitStopAngle
+002e1ac0-002e4038    5 ComboTrial               __ct__10ComboTrialFP5JRingis, __dt__10ComboTrialFv, Destruct__10ComboTrialFv, Polling__10ComboTrialFv, MakePacket__10ComboTrialFv
+002e4040-002e5ce4    6 HitMes                   __ct__6HitMesFP5JRingP6JRAREAs, __dt__6HitMesFv, Destruct__6HitMesFv, Polling__6HitMesFv, MakePacket__6HitMesFv, Initialize__6HitMesFP5JRing
+002e5cf0-002e6c18    5 HitBar                   __ct__6HitBarFP5JRingf, __dt__6HitBarFv, Destruct__6HitBarFv, Polling__6HitBarFv, MakePacket__6HitBarFv
+002e6c20-002e8094    5 HitArea                  __ct__7HitAreaFP5JRingffP7_rgba32, __dt__7HitAreaFv, Destruct__7HitAreaFv, Polling__7HitAreaFv, MakePacket__7HitAreaFv
+002e80a0-002f0d10    6 CrackJRing               __ct__10CrackJRingFP5JRingib, __dt__10CrackJRingFv, Update__10CrackJRingFf, MakePacket__10CrackJRingFP4_QWD, GetPacketCnt__10CrackJRingFv, I
+002f0d10-002f0d40    1 CrackInfo                __ct__9CrackInfoFv
+002f0d40-002f6e90    1 CrackJRing               Initialize2__10CrackJRingFv
+002f6e90-002fa2b8    6 CutJRing                 __ct__8CutJRingFP5JRingi, __dt__8CutJRingFv, Update__8CutJRingFf, MakePacket__8CutJRingFP4_QWD, GetPacketCnt__8CutJRingFv, Initialize__8CutJ
+002fa2c0-002fa2e8    3 ComboTrial               @24@getPacket__10ComboTrialFv, @24@__dt__10ComboTrialFv, @44@__dt__10ComboTrialFv
+002fa2f0-002fa318    3 HitMes                   @24@getPacket__6HitMesFv, @24@__dt__6HitMesFv, @44@__dt__6HitMesFv
+002fa320-002fa348    3 HitBar                   @24@getPacket__6HitBarFv, @24@__dt__6HitBarFv, @44@__dt__6HitBarFv
+002fa350-002fa378    3 HitArea                  @24@getPacket__7HitAreaFv, @24@__dt__7HitAreaFv, @44@__dt__7HitAreaFv
+002fa380-002fb464   10 JRCTex                   __ct__6JRCTexFUs, __dt__6JRCTexFv, RasterCreate__6JRCTexF6GS_PSMUiUi, ClutCreate__6JRCTexF6GS_PSMUiUi, Create__6JRCTexFPvUsUsUs, Create4BIT_
+002fb470-002fc0b4   16 JRing                    SystemInitialize__5JRingFv, Entry__5JRingFP5JRing, Release__5JRingFP5JRing, DataLoad__5JRingFPc, DataLoadEndCheck__5JRingFv, DataDelete__5JR
+002fc0c0-002fc234    1 VEC                      __ct__3VECFiP10EffectCorei
+002fc240-002fc25c    1 tagEffectLoadWait        Init__17tagEffectLoadWaitFv
+002fc260-002fe060   17 VEC                      __dt__3VECFv, Start__3VECFv, Continue__3VECFv, DecodeVSM__3VECFv, GetCore__3VECFv, __as__Q23VEC4OpdSFRCQ23VEC4OpdS
+002fe060-002fe394    4 <free>                   InitSysFunc__Fv, GetSysCallFunc__Fi, CleanSysFunc__Fv, GetBekijo__FUi
+002fe3a0-002feb7c    5 vpTexture                __ct__9vpTextureFv, __ct__Q29vpTexture24@class$1573vpTexture_cppFv, __dt__9vpTextureFv, Create__9vpTextureFPc, GetPacket__9vpTextureFv
+002feb80-002fed14    3 vpSeq                    __ct__5vpSeqFv, __dt__5vpSeqFv, Create__5vpSeqFPcP9vpTexture
+002fed20-002ff0e8    4 vpTextureFile            __ct__13vpTextureFileFv, __dt__13vpTextureFileFv, Create__13vpTextureFileFPc, FindTexture__13vpTextureFileFi
+002ff0f0-002ff504    8 Effect                   __ct__6EffectFPFPvi_vPvi, __dt__6EffectFv, SetReplaceCallback__6EffectFPFP6EffectPvi_vPvi, DelayDeleteCore__6EffectFv, Create__6EffectFP9Buf
+002ff510-002ff544    1 GsxCamera                SetBgColor__9GsxCameraFRC7_rgba32
+002ff550-002ff56c    1 _rgba32                  GetVal__7_rgba32CFv
+002ff570-002ff6e0    3 Effect                   Continue__6EffectFv, PollDelete__6EffectFv, Polling__6EffectFv
+002ff6e0-002ff70c    1 CPolObj                  SetAutoDelete__7CPolObjFb
+002ff710-002ff7a4    1 Effect                   SetGenModel__6EffectFiP11tagModelSet
+002ff7b0-002ff7dc    1 tagModelSet              Init__11tagModelSetFv
+002ff7e0-002ff810    1 tagHitParam              Init__11tagHitParamFv
+002ff810-002ffb60    6 Effect                   SetTarModel__6EffectFiP11tagModelSet, SetGenPos__6EffectFiP7FVector, SetTarPos__6EffectFiP7FVector, EffectNext__6EffectFv, Pause__6EffectFb,
+002ffb60-002ffbbc    1 _rgba32                  __as__7_rgba32FRC7_rgba32
+002ffbc0-002ffc04    1 Effect                   SetEndCallback__6EffectFPFPvi_vPvi
+002ffc10-002ffc4c    1 <free>                   cbEndCallback__FPvi
+002ffc50-002fffb8    1 EffectCore               __ct__10EffectCoreFP6Effect
+002fffc0-00300014    1 EffProcParam             __dt__12EffProcParamFv
+00300020-00300044    1 _VibInfo                 Init__8_VibInfoFv
+00300050-00300074    1 tagFpPrimInfo            Init__13tagFpPrimInfoFv
+00300080-00300124    1 tagEffSeCtrl             Init__12tagEffSeCtrlFv
+00300130-00300160    1 tagEffCoreFlags          Init__15tagEffCoreFlagsFv
+00300160-00300dd8    2 EffectCore               __dt__10EffectCoreFv, Cleanup__10EffectCoreFv
+00300de0-00300e74    1 GsxCamera                SetFogParam__9GsxCameraFff
+00300e80-00300e9c    1 LevelsModel              isCreate__11LevelsModelFv
+00300ea0-0030152c   10 EffectCore               DelayDeleteCore__10EffectCoreFv, Create__10EffectCoreFP9BufMemory, CreateVec__10EffectCoreFPc, CreateTexture__10EffectCoreFPc, GetModel__10E
+00301530-00301554    1 VEC                      SetRunState__3VECFi
+00301560-00301770    1 EffectCore               Continue__10EffectCoreFv
+00301770-0030178c    1 VEC                      GetRunState__3VECFv
+00301790-00301ae8    1 EffectCore               AddTimeAll__10EffectCoreFv
+00301af0-00301b2c    1 tagEFCMMotionData        __ct__17tagEFCMMotionDataFv
+00301b30-00301b7c    1 tagEFLTMotionData        __ct__17tagEFLTMotionDataFv
+00301b80-00301d90    4 EffectCore               CalcMatrix__10EffectCoreFv, AddThread__10EffectCoreFP3VEC, RemoveThread__10EffectCoreFP3VEC, KillThread__10EffectCoreFi
+00301d90-00301db0    1 VEC                      Stop__3VECFv
+00301db0-00304cb0   41 EffectCore               KillThreadAll__10EffectCoreFv, UpdateFader__10EffectCoreFv, FindWorkModel__10EffectCoreFUi, FindIndexWorkModel__10EffectCoreFUi, DeleteWorkM
+00304cb0-00304cec    1 tagFpPrimInfo            __as__13tagFpPrimInfoFRC13tagFpPrimInfo
+00304cf0-00304d3c    1 tagSaveFog               __as__10tagSaveFogFRC10tagSaveFog
+00304d40-00304dac    1 MotionAddInfo            __as__13MotionAddInfoFRC13MotionAddInfo
+00304db0-00304e4c    1 EffProcParam             __as__12EffProcParamFRC12EffProcParam
+00304e50-00304f4c    2 EffectCore               FindLineBlurIndex__10EffectCoreFUi, FindVibIndex__10EffectCoreFUi
+00304f50-00305024    2 EffProcParam             __ct__12EffProcParamFv, AddHandle__12EffProcParamFiUiUi
+00305030-003050e4    1 EffectModel              __ct__11EffectModelFP10EffectCore
+003050f0-0030510c    1 tagEMFlag                Init__9tagEMFlagFv
+00305110-0030543c    4 EffectModel              __dt__11EffectModelFv, MotionEndCallBack__11EffectModelFPCc, UnChain__11EffectModelFv, TranseCallBack__11EffectModelFRC7FVector7FVector
+00305440-00305480    1 FVector                  Origin__7FVectorFv
+00305480-003054dc    1 EffectModel              create__11EffectModelFPUc
+003054e0-0030551c    1 Model                    setAlwayDrawFlg__5ModelFb
+00305520-00305a70    4 EffectModel              create__11EffectModelFP9BufMemory, SetEffectTestReg__11EffectModelFv, AddCustom__11EffectModelFP11CustomModelPc, calcMatrix__11EffectModelFP
+00305a70-00305adc    1 FVector                  __pl__7FVectorCFRC7FVector
+00305ae0-00305cd4    4 EffectModel              addTime__11EffectModelFf, getPacket__11EffectModelFv, SetTrans__11EffectModelFP7FVector, SetRot__11EffectModelFP7FVector
+00305ce0-00305d38    3 Matrix                   GetAt__6MatrixFv, GetUp__6MatrixFv, GetRight__6MatrixFv
+00305d40-00305ee8    4 CustomList               __ct__10CustomListFP11CustomModel, __dt__10CustomListFv, Remove__10CustomListFv, DeleteObject__10CustomListFv
+00305ef0-00305ef8    1 EffectModel              @20@__dt__11EffectModelFv
+00305f00-00306018    3 CustomModel              __dt__11CustomModelFv, __ct__11CustomModelFv, @20@__dt__11CustomModelFv
+00306020-00306054    1 Matrix                   RotZMatrix__6MatrixFf
+00306060-00306150    3 BBPLine                  __ct__7BBPLineFv, __dt__7BBPLineFv, Create__7BBPLineFPcP8BBPFrame
+00306150-003064d8    4 BBPFrame                 __ct__8BBPFrameFv, __dt__8BBPFrameFv, Create__8BBPFrameFPc, CalcMatrix__8BBPFrameFP6Matrix
+003064e0-00306530    1 tagBBPFrameData          __ct__15tagBBPFrameDataFv
+00306530-00306c70    1 BBPFrame                 GetMiddle__8BBPFrameFP15tagBBPFrameData
+00306c70-00306d54    1 tagBBPFrameData          __as__15tagBBPFrameDataFRC15tagBBPFrameData
+00306d60-00307994   10 BBPLineModel             __ct__12BBPLineModelFv, __dt__12BBPLineModelFv, Show__12BBPLineModelFv, Hide__12BBPLineModelFv, Create__12BBPLineModelFP9BufMemoryb, Create_
+003079a0-003079cc    1 BBPFrame                 AddTime__8BBPFrameFf
+003079d0-00307b98    2 BBPLineModel             CalcMatrix__12BBPLineModelFv, @20@__dt__12BBPLineModelFv
+00307ba0-00307d34    1 EffectCamera             __ct__12EffectCameraFv
+00307d40-00307e44    1 tagEcFlag                Init__9tagEcFlagFv
+00307e50-003083c8    6 EffectCamera             __dt__12EffectCameraFv, Create__12EffectCameraFPc, CreateVector__12EffectCameraFP7FVectorP7FVectorf, AddTime__12EffectCameraFf, GetData__12E
+003083d0-00308408    1 GsxCamera                SetScreenZ__9GsxCameraFf
+00308410-00308544    5 Matrix                   SetPos__6MatrixFRC7FVector, SetVector__6MatrixFiRC7FVector, SetRight__6MatrixFRC7FVector, SetUp__6MatrixFRC7FVector, SetAt__6MatrixFRC7FVect
+00308550-003085bc    1 FVector                  __mi__7FVectorCFRC7FVector
+003085c0-0030999c    6 EffectCamera             GetInter__12EffectCameraFR7FVector, GetPos__12EffectCameraFR7FVector, GetBoxInter__12EffectCameraFR7FVector, GetBoxPos__12EffectCameraFR7FVe
+003099a0-00309a14    1 FVector                  __ml__7FVectorCFf
+00309a20-00309a54    1 Matrix                   RotYMatrix__6MatrixFf
+00309a60-0030a1d4    3 EffectCamera             GetVecPos__12EffectCameraFR7FVector, SetVibratePower__12EffectCameraFP7FVector7FVector7FVectorif, GetVibPower__12EffectCameraFR7FVector
+0030a1e0-0030a27c    2 FVector                  __ami__7FVectorFRC7FVector, __dv__7FVectorCFf
+0030a280-0030a2e8    1 EffectCamera             SetBoxCamera__12EffectCameraFPvP7FVector
+0030a2f0-0030a7bc    5 EffectCameraMotion       __ct__18EffectCameraMotionFv, __dt__18EffectCameraMotionFv, Create__18EffectCameraMotionFPc, AddTime__18EffectCameraMotionFf, GetData__18Eff
+0030a7c0-0030a898    1 tagEFCMMotionData        __as__17tagEFCMMotionDataFRC17tagEFCMMotionData
+0030a8a0-0030ac8c    4 HitCylinder              __ct__11HitCylinderFPFPvi_vPv, __dt__11HitCylinderFv, Create__11HitCylinderFPcR7FVector, GetMiddle__11HitCylinderFP20tagHitMotionCylinder
+0030ac90-0030ad0c    1 tagHitMotionCylinder     __as__20tagHitMotionCylinderFRC20tagHitMotionCylinder
+0030ad10-0030adc0    1 HitCylinder              AddTime__11HitCylinderFf
+0030adc0-0030afe8    3 HitShot                  __ct__7HitShotFPFPvi_vPv, Init__Q27HitShot22@class$1793HitShot_cppFv, __dt__7HitShotFv
+0030aff0-0030b08c    1 HitDynaKey               __dt__10HitDynaKeyFv
+0030b090-0030b9e0    7 HitShot                  Create__7HitShotFPc, SetPoint__7HitShotFR7FVectorR7FVector, AddTime__7HitShotFff, IsAtEnd__7HitShotFv, SetUpdateMode__7HitShotFi, AddKey__7H
+0030b9e0-0030ba14    1 Matrix                   RotXMatrix__6MatrixFf
+0030ba20-0030c33c    5 <free>                   IsHit_CylinderToSphere__FR7FVectorR7FVectorfR7FVectorf, FindFieldModel__Fii, FindLsdModel__FPc, CheckLsdModel__FP5Model, GetTargetAngle__FP5
+0030c340-0030c364    1 FVector                  InnerProduct__7FVectorCFRC7FVector
+0030c370-0030c938    8 <free>                   _MotionEndCallback__FPvPCc, _MotionEndCallback2__FPcPv, mdlCreate__FiiPPcPv, mdlShow__FiiPPcPv, mdlSetMotion__FiiPPcPv, mdlSetTrans__FiiPPcP
+0030c940-0030c974    1 ExModel                  SetScale__7ExModelFR7FVector
+0030c980-0030d8fc   14 <free>                   mdlDelete__FiiPPcPv, mdlAttach__FiiPPcPv, mdlDetach__FiiPPcPv, mdlAttach2__FiiPPcPv, mdlDetach2__FiiPPcPv, mdlAttach3__FiiPPcPv
+0030d900-0030d944    1 EffectModel              SetMatrix__11EffectModelFP6Matrix
+0030d950-0030d968    1 Matrix                   TransMatrix__6MatrixFRC7FVector
+0030d970-0030efdc   20 <free>                   mdlSetAutoDelete__FiiPPcPv, mdlWaitMotion__FiiPPcPv, mdlWaitMotionFrame__FiiPPcPv, mdlManyDelete__FiiPPcPv, mdlCreateMemory__FiiPPcPv, mdlCr
+0030efe0-0030f03c    1 HitDynaKey               __ct__10HitDynaKeyFff
+0030f040-0030fcfc   11 <free>                   hitResetHitMark__FiiPPcPv, hitSetShotEndMode__FiiPPcPv, hitGetShotHitFrame__FiiPPcPv, camCreate__FiiPPcPv, camCreateVector__FiiPPcPv, camPla
+0030fd00-0030fd70    1 GsxCamera                SetFogColor__9GsxCameraFRC7_rgba32
+0030fd70-0030fe64    2 <free>                   camSetFogParam__FiiPPcPv, camGetMatrix__FiiPPcPv
+0030fe70-0030fe8c    1 GsxCamera                GetViewMatrix__9GsxCameraFv
+0030fe90-003109dc   20 <free>                   camSetFogOriginal__FiiPPcPv, camSetVectorPos__FiiPPcPv, camSetVectorHight__FiiPPcPv, camSetVibPower__FiiPPcPv, camSetVibParam__FiiPPcPv, vec
+003109e0-00310a0c    1 Matrix                   Transpose__6MatrixFv
+00310a10-00310ba4    3 <free>                   matInvers__FiiPPcPv, matGetAngle__FiiPPcPv, _cbNewEffectRead__FiP9BufMemoryiPcPv
+00310bb0-00310bcc    1 EffectCore               GetParent__10EffectCoreFv
+00310bd0-00310fc0   10 <free>                   sysWaitSystem__FiiPPcPv, sysGetTime__FiiPPcPv, sysSetTick__FiiPPcPv, sysGetTick__FiiPPcPv, sysSetAddTime__FiiPPcPv, sysGetAddTime__FiiPPcPv
+00310fc0-00310fdc    1 EffProcParam             GetCount__12EffProcParamFv
+00310fe0-003133c0   50 <free>                   sysWaitCreateEffect__FiiPPcPv, sysStartEffect__FiiPPcPv, calRand__FiiPPcPv, calFRand__FiiPPcPv, calSin__FiiPPcPv, calCos__FiiPPcPv
+003133c0-003133f4    1 LightData                changeCol__9LightDataF7FVector
+00313400-00313a08    7 <free>                   sprCreate__FiiPPcPv, sprShow__FiiPPcPv, sprSetColor__FiiPPcPv, sprDelete__FiiPPcPv, sprSetZ__FiiPPcPv, sprSetTestReg__FiiPPcPv
+00313a10-00314118    5 EffectSprite             __ct__12EffectSpriteFP7FVectorP7FVectorP7FVectorP7FVectorP7FVectori, __dt__12EffectSpriteFv, getPacket__12EffectSpriteFv, GetPacket__12Effec
+00314120-003143b0    1 ModelFader               __ct__10ModelFaderFP5ModelR7FVectorib
+003143b0-003143cc    1 Atomic                   getAtomicAlpha__6AtomicFv
+003143d0-003149e0    4 ModelFader               Init__Q210ModelFader25@class$1773ModelFader_cppFv, __dt__10ModelFaderFv, Update__10ModelFaderFv, SetModelAlpha__10ModelFaderFP5Modelf
+003149e0-00315a9c   14 <free>                   shrGetModelColor__FiiPPcPv, shrSetModelColor__FiiPPcPv, shrStartModelColorFader__FiiPPcPv, shrStartModelAlphaFader__FiiPPcPv, shrSetModelRoo
+00315aa0-00316498    9 PolGroup                 __ct__8PolGroupFv, __dt__8PolGroupFv, Create__8PolGroupFv, CreateDrawPacket__8PolGroupFv, CreateEnvReg__8PolGroupFv, SetTestReg__8PolGroupFi
+003164a0-003164b4    1 PolData                  GetCount__7PolDataFv
+003164c0-00316730    7 PolGroup                 SetTrans__8PolGroupFP7FVector, SetRot__8PolGroupFP7FVector, SetMatrix__8PolGroupFP6Matrix, AddData__8PolGroupFP7PolData, GetEnvPacket__8PolG
+00316730-00316d98    7 PolPacket                __ct__9PolPacketFv, __dt__9PolPacketFv, getPacket__9PolPacketFv, AddGroup__9PolPacketFiP8PolGroup, RemoveGroup__9PolPacketFiP8PolGroup, Show
+00316da0-00317a50    9 PolData                  __ct__7PolDataFv, Init__Q27PolData22@class$1368PolData_cppFv, __dt__7PolDataFv, SetCenter__7PolDataFfff, SetVertex__7PolDataFff, SetSt__7Pol
+00317a50-003180a0   10 <free>                   pgrCreate__FiiPPcPv, pgrSetTrans__FiiPPcPv, pgrSetRot__FiiPPcPv, pgrSetMatrix__FiiPPcPv, pgrSetTexture__FiiPPcPv, pgrSetTestReg__FiiPPcPv
+003180a0-003188f8    4 BbPolData                __ct__9BbPolDataFv, __dt__9BbPolDataFv, SetCenter__9BbPolDataFfff, GetPacket__9BbPolDataFv
+00318900-00318f74    5 DirectPolData            __ct__13DirectPolDataFv, __dt__13DirectPolDataFv, SetCenter__13DirectPolDataFfff, GetPacket__13DirectPolDataFv, GetCount__13DirectPolDataFv
+00318f80-00318f94    1 BbPolData                GetCount__9BbPolDataFv
+00318fa0-00319490    9 <free>                   polCreate3D__FiiPPcPv, polCreateBB__FiiPPcPv, polCreateDirect__FiiPPcPv, polSetRot__FiiPPcPv, polSetCenter__FiiPPcPv, polSetVertex__FiiPPcPv
+00319490-003194e8    1 PolData                  DelayDelete__7PolDataFv
+003194f0-003198ac    5 EffectLightMotion        __ct__17EffectLightMotionFv, __dt__17EffectLightMotionFv, Create__17EffectLightMotionFPc, AddTime__17EffectLightMotionFf, GetData__17EffectL
+003198b0-0031994c    1 tagEFLTMotionData        __as__17tagEFLTMotionDataFRC17tagEFLTMotionData
+00319950-0031a03c    7 EffectLight              __ct__11EffectLightFv, __dt__11EffectLightFv, Create__11EffectLightFPc, LightOn__11EffectLightFb, AddTime__11EffectLightFf, GetData__11Effec
+0031a040-0031a5dc    8 <free>                   lgtCreate__FiiPPcPv, lgtShow__FiiPPcPv, lgtAttach__FiiPPcPv, lgtSetOffset__FiiPPcPv, lgtDelete__FiiPPcPv, sseLoadSe__FiiPPcPv
+0031a5e0-0031a62c    1 tagEffSeCtrl             IsLoaded__12tagEffSeCtrlFv
+0031a630-0031a968    4 <free>                   sseGetSysSe__FiiPPcPv, ssePlayLoopSe__FiiPPcPv, sseStopLoopSe__FiiPPcPv, sseWaitLoadSe__FiiPPcPv
+0031a970-0031ab28    1 EffectBlur               __ct__10EffectBlurFv
+0031ab30-0031ab88    1 _rgba32                  __ct__7_rgba32FUcUcUcUc
+0031ab90-0031b388    5 EffectBlur               __dt__10EffectBlurFv, Create__10EffectBlurFv, getPacket__10EffectBlurFv, SetAlpha__10EffectBlurFi, @20@__dt__10EffectBlurFv
+0031b390-0031bb10   10 <free>                   xxxCall__FiiPPcPv, chrGetTrans__FiiPPcPv, chrGetGTCount__FiiPPcPv, chrGetRootMatrix__FiiPPcPv, chrCreateMotion__FiiPPcPv, chrSetMotion__FiiP
+0031bb10-0031bbc4    1 SdState                  __ct__7SdStateFPvUiPFPvPUiUiUiP8_SeParam_bUiUiP8_SeParam
+0031bbd0-0031bc4c    1 _SeParam                 __as__8_SeParamFRC8_SeParam
+0031bc50-0031bdd8    4 SdState                  __dt__7SdStateFv, Request__7SdStateFv, Polling__7SdStateFv, AddState__7SdStateFv
+0031bde0-0031cb04   12 <free>                   cbAutoLoad__FPvPUiUiUiP8_SeParam, cbPlaySe__FPvPUiUiUiP8_SeParam, cbGetSEStat__FPvPUiUiUiP8_SeParam, cbReleaseSE__FPvPUiUiUiP8_SeParam, cbRe
+0031cb10-0031cbb0    2 LineBlur                 SetCenter__8LineBlurFUiUi, SetPower__8LineBlurFf
+0031cbb0-0031d758   14 <free>                   blrShowLine__FiiPPcPv, blrSetLinePower__FiiPPcPv, blrSetLineCenter__FiiPPcPv, blrDeleteLine__FiiPPcPv, blrSetLineRect__FiiPPcPv, pphCreate__
+0031d760-0031d8bc    1 EffectGunya              __ct__11EffectGunyaFv
+0031d8c0-0031d924    1 FBufTex                  __dt__7FBufTexFv
+0031d930-0031f020    6 EffectGunya              __dt__11EffectGunyaFv, Initialize__11EffectGunyaFv, getPacket__11EffectGunyaFv, ClumpSt__11EffectGunyaFP7FVector, AddTime__11EffectGunyaFf, 
+0031f020-0031f304    4 GunyaKey                 __ct__8GunyaKeyFff, __dt__8GunyaKeyFv, AddKey__8GunyaKeyFP8GunyaKey, GetMiddle__8GunyaKeyFf
+0031f310-0031f328    2 EffectGunya              @20@__dt__11EffectGunyaFv, @32@__dt__11EffectGunyaFv
+0031f330-0031f964    8 <free>                   fldGetPos__FiiPPcPv, fldGetGTCount__FiiPPcPv, fldAttachBG__FiiPPcPv, fldAttachBG2__FiiPPcPv, gnyCreate__FiiPPcPv, gnyDelete__FiiPPcPv
+0031f970-0031ff28    2 FBufTex                  __ct__7FBufTexFb, getFBTexPacket__7FBufTexFv
+0031ff30-00321cc0    6 FreePol                  __ct__7FreePolFi, __dt__7FreePolFv, Update__7FreePolFv, GetPacket__7FreePolFR6Matrix, CalcCenter__7FreePolFv, CalcOffset__7FreePolFv
+00321cc0-00321e18    3 FreePolUser              __ct__11FreePolUserFv, __dt__11FreePolUserFv, Update__11FreePolUserFv
+00321e20-003227a8    9 EffectBarin              __ct__11EffectBarinFv, Init__Q211EffectBarin23@class$1589EffBarin_cppFv, __dt__11EffectBarinFv, getPacket__11EffectBarinFv, PixelTo3D__11Eff
+003227b0-00322f14    9 <free>                   bngCreate__FiiPPcPv, bngCreateUser__FiiPPcPv, bngDelete__FiiPPcPv, bngShow__FiiPPcPv, bngSetBackColor__FiiPPcPv, bngAddPolygon__FiiPPcPv
+00322f20-00323f38    6 LocalHostImage           __ct__14LocalHostImageFv, __ct__Q214LocalHostImage29@class$1532LocalHostImage_cppFv, __dt__14LocalHostImageFv, Create__14LocalHostImageFiiii
+00323f40-00324310    6 <free>                   strStrCopy__FiiPPcPv, strStrNCopy__FiiPPcPv, pthCreate__FiiPPcPv, pthDelete__FiiPPcPv, pthAddPath__FiiPPcPv, pthGetPath__FiiPPcPv
+00324310-0032434c    1 PATHDATA                 __ct__8PATHDATAFv
+00324350-003243e4    2 <free>                   pthAddTime__FiiPPcPv, padGetKeyPress__FiiPPcPv
+003243f0-00324694    7 AnimLight                __ct__9AnimLightFv, __dt__9AnimLightFv, Show__9AnimLightFv, OnShow__9AnimLightFv, OnCreate__9AnimLightFv, Hide__9AnimLightFv
+003246a0-003246cc    1 CPause                   isPaused__6CPauseFv
+003246d0-00324afc    3 <free>                   bfdSetMode__FiiPPcPv, bfdSetAlphaMode__FiiPPcPv, bfdSetColor__FiiPPcPv
+00324b00-00324df8    5 LsdEffectServer          __ct__15LsdEffectServerFv, __dt__15LsdEffectServerFv, CheckData__15LsdEffectServerFP12_LSDTrackHdr, Open__15LsdEffectServerFP10RingBuffer, R
+00324e00-00324e4c    1 RingBuffer               getReadTopAdress__10RingBufferFv
+00324e50-00324fac    2 LsdEffectServer          Event__15LsdEffectServerFP10_LSDHANDLEiff, Close__15LsdEffectServerFP10_LSDHANDLE
+00324fb0-00325098    2 LsdEffect                __ct__9LsdEffectFv, __dt__9LsdEffectFv
+003250a0-0032574c    4 <free>                   lsdGetModel__FiiPPcPv, lsdAttach__FiiPPcPv, lsdDetach__FiiPPcPv, fefCreateSmoke__FiiPPcPv
+00325750-0032593c    2 FpSmokeParam             Init__12FpSmokeParamFv, __ct__12FpSmokeParamFv
+00325940-00325cf4    1 <free>                   fefCreateFlare__FiiPPcPv
+00325d00-00325edc    2 FpFlareParam             Init__12FpFlareParamFv, __ct__12FpFlareParamFv
+00325ee0-00326368    1 <free>                   fefCreateThunder__FiiPPcPv
+00326370-0032654c    2 FpThunderParam           Init__14FpThunderParamFv, __ct__14FpThunderParamFv
+00326550-00326860    5 <free>                   fefDelete__FiiPPcPv, fefSetLayer__FiiPPcPv, fefSetZTest__FiiPPcPv, fefSetAlphaPower__FiiPPcPv, fefSetPos__FiiPPcPv
+00326860-003276f8    9 LineBlur                 __ct__8LineBlurFv, __dt__8LineBlurFv, Create__8LineBlurFv, getPacket__8LineBlurFv, SetPacket__8LineBlurFP4_QWD, ChangeLine__8LineBlurFv
+00327700-00327ee4   13 <free>                   vibCreate__FiiPPcPv, vibStart__FiiPPcPv, vibStart2__FiiPPcPv, vibStop__FiiPPcPv, vibDelete__FiiPPcPv, vibSetFade__FiiPPcPv
+00327ef0-003280b8    7 SaveDataSection          __ct__15SaveDataSectionFv, __dt__15SaveDataSectionFv, CreateSection__15SaveDataSectionFPCcUiUs, SetDefault__15SaveDataSectionFv, SetSection_
+003280c0-00328a48   16 SaveData                 SetCRC__8SaveDataFPUcUi, CheckCRC__8SaveDataFPUcUi, __ct__8SaveDataFv, __dt__8SaveDataFv, Release__8SaveDataFv, GetSection__8SaveDataFPCUc
+00328a50-00329710   11 SaveDeviceMC             __ct__12SaveDeviceMCFv, __dt__12SaveDeviceMCFv, Sync__12SaveDeviceMCFv, Open__12SaveDeviceMCFi, Close__12SaveDeviceMCFv, CreateSystem__12Sav
+00329710-0032a238   11 SaveDeviceHDD            __ct__13SaveDeviceHDDFv, __dt__13SaveDeviceHDDFv, Sync__13SaveDeviceHDDFv, Open__13SaveDeviceHDDFi, Close__13SaveDeviceHDDFv, CreateSystem__
+0032a240-0032a700    9 SaveDevice               cbReadFile__10SaveDeviceFiP9BufMemoryiPcPv, __ct__10SaveDeviceFv, __dt__10SaveDeviceFv, LoadIcon__10SaveDeviceFv, CreateIcon__10SaveDeviceFP
+0032a700-0032aad8    9 SystemFile               __ct__10SystemFileFv, __dt__10SystemFileFv, Create__10SystemFileFi, Release__10SystemFileFv, SetData__10SystemFileFP14_SystemFileHdr, GetHea
+0032aae0-0032bd98   11 CPath                    __ct__5CPathFv, __dt__5CPathFv, AddColorKey__5CPathFfR9_RGBAReal, AddSTKey__5CPathFfR7FVector, getSTKey__5CPathFf, getColorKey__5CPathFf
+0032bda0-0032cc54    8 CPolyPath                ClearPath__9CPolyPathFv, __ct__9CPolyPathFv, __dt__9CPolyPathFv, AddTime__9CPolyPathFf, Create__9CPolyPathFif, initPacket__9CPolyPathFb
+0032cc60-0032d478   13 CPathControl             __ct__12CPathControlFv, __dt__12CPathControlFv, Create__12CPathControlFif, CreateTexture__12CPathControlFPc, AddTime__12CPathControlFf, AddP
+0032d480-0032d610    3 <free>                   BtlCallBack__FiiPvPv, InitBtlSocket__Fv, olLoadCB__FibiPv
+0032d610-0032d7ec    1 BtlSocket                __ct__9BtlSocketFv
+0032d7f0-0032d854    1 SSHApi                   __dt__6SSHApiFv
+0032d860-0032f728   17 BtlSocket                __dt__9BtlSocketFv, btlLoadCB__9BtlSocketFibi, preLoad__9BtlSocketFv, Start__9BtlSocketFv, Polling__9BtlSocketFv, closeInquiry__9BtlSocketFv
+0032f730-0032fb08    4 HNMApi                   FileReadEntry__6HNMApiFPc, ReadCallBack__6HNMApiFiP9BufMemoryiPcPv, DataGetCall__6HNMApiFi, FileReadCancel__6HNMApiFi
+0032fb10-00345e60    2 <free>                   SpecialEffectCode__FiiiP7ECParamP6EFFTBLP11BtlChrParam, EffectCodeFunc__FiiP6EFFTBLfP8ECResultPfP11BtlChrParambb
+00345e60-00345e6c    1 BtlSaveSec               GetCommonParam__10BtlSaveSecFv
+00345e70-0034c804   32 HNMSnd                   __ct__6HNMSndFv, __dt__6HNMSndFv, Polling__6HNMSndFv, ReleaseCheck__6HNMSndFv, IOPEntry__6HNMSndFPUc, IOPEntryCheck__6HNMSndFi
+0034c810-0034c96c    1 BtlBonus                 __ct__8BtlBonusFv
+0034c970-0034c9ec    1 WINParam                 __dt__8WINParamFv
+0034c9f0-00359998    5 BtlBonus                 __dt__8BtlBonusFv, Polling__8BtlBonusFv, MakePacket__8BtlBonusFv, WinSequence__8BtlBonusFv, WinCreate__8BtlBonusFv
+003599a0-00359b94    1 BtlResult                __ct__9BtlResultFv
+00359ba0-00359be0    1 WINParam                 __ct__8WINParamFv
+00359be0-00371714    4 BtlResult                __dt__9BtlResultFv, Polling__9BtlResultFv, WinSequence__9BtlResultFv, WinCreate__9BtlResultFi
+00371720-003717e0    2 MenuObj                  UpdateRgba__7MenuObjFv, UpdateEnv__7MenuObjFv
+003717e0-00371858    4 BtlBonus                 getPacket__8BtlBonusFv, @24@getPacket__8BtlBonusFv, @24@__dt__8BtlBonusFv, @44@__dt__8BtlBonusFv
+00371860-00371868    1 BtlResult                @24@__dt__9BtlResultFv
+00371870-003723f8   14 BtlFader                 __ct__8BtlFaderFv, __dt__8BtlFaderFv, Destruct__8BtlFaderFv, Polling__8BtlFaderFv, MakePacket__8BtlFaderFv, SetMode__8BtlFaderFsf7_rgba32
+00372400-00372740    4 Sdrv                     Reset__4SdrvFi, __dt__4SdrvFv, Start__4SdrvFv, __ct__4SdrvFv
+00372740-0037277c    1 SdrvEE                   SetID__6SdrvEEFii
+00372780-003727c8    1 Sdrv                     Release__4SdrvFv
+003727d0-0037282c    1 SdrvEE                   __dt__6SdrvEEFv
+00372830-00372cb4   13 Sdrv                     Polling__4SdrvFv, InitSeParam__4SdrvFP8_SeParamiPv, GetStatus__4SdrvFUi, GetOption__4SdrvFUi, CloseHandle__4SdrvFUi, AutoLoad__4SdrvFPvPv
+00372cc0-00372cdc    1 SdrvEE                   StreamGetValue__6SdrvEEFv
+00372ce0-003733f0   22 Sdrv                     StreamClose__4SdrvFUi, StreamCreate__4SdrvFUiUiUi, StreamSetParam__4SdrvFUiUiUi, StreamGetStat__4SdrvFUiUi, StreamAllocBuf__4SdrvFUiUi, Stre
+003733f0-00375e4c   36 SdrvEE                   CmdTest__6SdrvEEFv, __ct__6SdrvEEFv, InitTransReqWk__6SdrvEEFiiPUi, Init__6SdrvEEFv, Release__6SdrvEEFv, Reset__6SdrvEEFv
+00375e50-00375e90    1 Gsx                      GetHCount__3GsxFv
+00375e90-003765dc    6 SdrvEE                   InvokeReqHandlerA__6SdrvEEFUii, isInQ__Q26SdrvEE11_TransReqWkFv, GetCurReqHandle__6SdrvEEFi, HandleCurReq__6SdrvEEFv, HandleCurReqA__6SdrvEE
+003765e0-003767fc    3 <free>                   SdhFindBlock__FPUcPCcUi, SdhNextBlock__FPUc, WaveBankToAddr__FUi
+00376800-0037a468   42 SdrvEE                   GetWaveBank__6SdrvEEFPv, GetWaveTransAddr__6SdrvEEFP12_WaveDataHdrPUcUi, SetSeOverlap__6SdrvEEFUiUi, ClrSeOverlap__6SdrvEEFUi, ChkSeOverlap_
+0037a470-0037ad34    5 Sdrv                     CreateSoundBuffer__4SdrvFUi, ResetSoundBuffer__4SdrvFi, GetSoundMemory__4SdrvFiUi, FreeSoundMemory__4SdrvFPv, ResizeSoundMemory__4SdrvFPvUi
+0037ad40-0037b128    4 SifCmd                   Init__6SifCmdFv, GetBuffer__6SifCmdFi, CheckID__6SifCmdFPCc, Receive__6SifCmdFP13sceSifCmdDataPv
+0037b130-0037d98c   10 RegDatApi                RegDataReadEntry__9RegDatApiFPcPcPFiPcPvbPv_vPv, ReadCallBack__9RegDatApiFiP9BufMemoryiPcPv, DataRelease__9RegDatApiFP13_REGDATAParam, Initi
+0037d990-0037da00    1 BtlSaveSec               __ct__10BtlSaveSecFv
+0037da00-0037da0c    1 SaveDataSection          GetSection__15SaveDataSectionFv
+0037da10-00380c58   15 BtlSaveSec               __dt__10BtlSaveSecFv, SetDefault__10BtlSaveSecFv, SetSection__10BtlSaveSecFP19_SaveDataSectionHdrPUc, CheckVersion__10BtlSaveSecFUs, SetScen
+00380c60-00380c7c    1 SaveMenuSection          GetCurrentPartySet__15SaveMenuSectionFv
+00380c80-00383d38   21 BtlSaveSec               GetNextExp__10BtlSaveSecFi, GetFusMonParam__10BtlSaveSecFi, GetPCParam__10BtlSaveSecFii, SetPCParam__10BtlSaveSecFiii, AddPCParam__10BtlSave
+00383d40-00384178    6 <free>                   __destroy_new_array, __destroy_arr, __construct_array, __construct_new_array, __dla__FPv, __dl__FPv
+00384180-003841dc    2 std                      __dt__Q23std9exceptionFv, what__Q23std9exceptionCFv
+003841e0-003841fc    1 <free>                   __nwa__FUi
+00384200-003842ec    3 std                      default_new_handler__3stdFv, __dt__Q23std9bad_allocFv, what__Q23std9bad_allocCFv
+003842f0-00384638    2 <free>                   __nw__FUi, __throw_catch_compare
+00384640-003846ec    4 std                      unexpected__3stdFv, terminate__3stdFv, duhandler__3stdFv, dthandler__3stdFv
+003846f0-00384be4    9 <free>                   __destroy_global_chain, __register_global_object, __initialize_cpp_rts, __ptmf_scall, __ptmf_test, __DecodeUnsignedNumber__FPcPUi
+00384bf0-00384c5c    2 std                      __dt__Q23std13bad_exceptionFv, what__Q23std13bad_exceptionCFv
+00384c60-00384d14    3 <free>                   mwOverlayInit, mwExit, mwInit
+00384d20-003851cc    6 ModelServerHandler       __dt__18ModelServerHandlerFv, CheckData__18ModelServerHandlerFP12_LSDTrackHdr, Open__18ModelServerHandlerFP10RingBuffer, Read__18ModelServer
+003851d0-003857a4    6 AnimServerHandler        __dt__17AnimServerHandlerFv, CheckData__17AnimServerHandlerFP12_LSDTrackHdr, Open__17AnimServerHandlerFP10RingBuffer, Read__17AnimServerHand
+003857b0-00385890    2 LSDModel                 __ct__8LSDModelFv, __dt__8LSDModelFv
+00385890-003871e0    5 LSDAnim                  __ct__7LSDAnimFv, __dt__7LSDAnimFv, setFrameData__7LSDAnimFf, checkFrameData__7LSDAnimFP10RingBuffer, getFrameData__7LSDAnimFP10RingBuffer
+003871e0-0038736c    4 ModelServer              __ct__11ModelServerFv, __dt__11ModelServerFv, SerchHdr__11ModelServerFPc, SerchModel__11ModelServerFPc
+00387370-003884e0   16 LSDPlayer                __ct__9LSDPlayerFv, __dt__9LSDPlayerFv, InitialReset__9LSDPlayerFv, StreamPolling__9LSDPlayerFPv, PlugDevice__9LSDPlayerFP16LSDDeviceHandler
+003884e0-0038854c    2 LSDDeviceHandler         __ct__16LSDDeviceHandlerFv, __dt__16LSDDeviceHandlerFv
+00388550-0038889c    6 LSDPlayerHandler         __dt__16LSDPlayerHandlerFv, CheckData__16LSDPlayerHandlerFP12_LSDTrackHdr, Open__16LSDPlayerHandlerFP10RingBuffer, Read__16LSDPlayerHandlerF
+003888a0-00388924    2 <free>                   msSVectorToFloat__FPfPs, msSQuatToFloat__FPfPs
+00388930-00388bf4    6 CameraServerHandler      __dt__19CameraServerHandlerFv, CheckData__19CameraServerHandlerFP12_LSDTrackHdr, Open__19CameraServerHandlerFP10RingBuffer, Read__19CameraSe
+00388c00-003897ac    5 LSDCam                   __ct__6LSDCamFv, __dt__6LSDCamFv, checkCameraData__6LSDCamFP10RingBuffer, getCameraData__6LSDCamFP10RingBuffer, setCameraData__6LSDCamFf
+003897b0-0038a0a8    9 BGMServerHandler         __dt__16BGMServerHandlerFv, CheckData__16BGMServerHandlerFP12_LSDTrackHdr, Open__16BGMServerHandlerFP10RingBuffer, Read__16BGMServerHandlerF
+0038a0b0-0038a424    6 LightServerHandler       __dt__18LightServerHandlerFv, CheckData__18LightServerHandlerFP12_LSDTrackHdr, Open__18LightServerHandlerFP10RingBuffer, Read__18LightServer
+0038a430-0038b848    3 LSDLight                 __ct__8LSDLightFv, __dt__8LSDLightFv, setLightData__8LSDLightFf
+0038b850-0038b920    2 <free>                   STOFVector__FPfPs, EEItoF15__FPfPs
+0038b920-0038c89c    8 MovieServerHandler       __dt__18MovieServerHandlerFv, CheckData__18MovieServerHandlerFP12_LSDTrackHdr, Open__18MovieServerHandlerFP10RingBuffer, Read__18MovieServer
+0038c8a0-0038c900    1 TransePacket             __dt__12TransePacketFv
+0038c900-0038cc58    9 MovieServerHandler       NoDataCallBack__18MovieServerHandlerFP7sceMpegP13sceMpegCbDataPv, ErrorCallBack__18MovieServerHandlerFP7sceMpegP13sceMpegCbDataPv, StopDmaCa
+0038cc60-0038d3d8    6 MCESModel                __ct__9MCESModelFv, __dt__9MCESModelFv, EventCallBack__9MCESModelFPCcPCciiUi, calcMatrix__9MCESModelFP6Matrix, addTime__9MCESModelFf, @20@__
+0038d3e0-0038d630    3 LipsHandler              __dt__11LipsHandlerFv, CheckData__11LipsHandlerFP12_LSDTrackHdr, Open__11LipsHandlerFP10RingBuffer
+0038d630-0038d6a0    2 LipControl               __dt__10LipControlFv, __ct__10LipControlFv
+0038d6a0-0038e024    6 LipsHandler              Read__11LipsHandlerFP10_LSDHANDLEP10RingBuffer, EventProcess__11LipsHandlerFf, calcLips__11LipsHandlerFf, Event__11LipsHandlerFP10_LSDHANDLE
+0038e030-0038e3d4    6 MPSServerHandler         __dt__16MPSServerHandlerFv, CheckData__16MPSServerHandlerFP12_LSDTrackHdr, Open__16MPSServerHandlerFP10RingBuffer, Read__16MPSServerHandlerF
+0038e3e0-0038e4dc    2 MPSModel                 __ct__8MPSModelFv, __dt__8MPSModelFv
+0038e4e0-0038e6a8    1 SmoothFilter             __ct__12SmoothFilterFv
+0038e6b0-0038e708    1 <free>                   Memset128__FP11i
+0038e710-0038f068    6 SmoothFilter             LayerSetUp__12SmoothFilterFi, LayerRelease__12SmoothFilterFv, __dt__12SmoothFilterFv, FilterLevel__12SmoothFilterFf, FilterAlpha__12SmoothFi
+0038f070-0038f0c8    2 ScreenTexture            getH__13ScreenTextureFv, getW__13ScreenTextureFv
+0038f0d0-0038f0d8    1 SmoothFilter             @20@__dt__12SmoothFilterFv
+0038f0e0-0038fbe8    7 BlurFilter               __ct__10BlurFilterFv, __dt__10BlurFilterFv, LayerSetUp__10BlurFilterFi, LayerRelease__10BlurFilterFv, FilterAlpha__10BlurFilterFi, getPacket
+0038fbf0-0038fd48    4 LayeredTexture           __ct__14LayeredTextureFv, __dt__14LayeredTextureFv, @128@__dt__14LayeredTextureFv, @148@__dt__14LayeredTextureFv
+0038fd50-00390770    5 ScreenTexture            __ct__13ScreenTextureFv, __dt__13ScreenTextureFv, Init__13ScreenTextureFii, setValue__13ScreenTextureFf, getPacket__13ScreenTextureFv
+00390770-00390bb8    4 BackScreenTexture        __ct__17BackScreenTextureFv, __dt__17BackScreenTextureFv, Init__17BackScreenTextureFii, getPacket__17BackScreenTextureFv
+00390bc0-00391c38    7 WriteTexture             __ct__12WriteTextureFv, __dt__12WriteTextureFv, Init__12WriteTextureFii, setValue__12WriteTextureFf, getPacket__12WriteTextureFv, getW__12Wr
+00391c40-00391c68    3 ScreenTexture            @128@getPacket__13ScreenTextureFv, @128@__dt__13ScreenTextureFv, @148@__dt__13ScreenTextureFv
+00391c70-00391c98    3 BackScreenTexture        @128@getPacket__17BackScreenTextureFv, @128@__dt__17BackScreenTextureFv, @148@__dt__17BackScreenTextureFv
+00391ca0-00391cc8    3 WriteTexture             @128@getPacket__12WriteTextureFv, @128@__dt__12WriteTextureFv, @148@__dt__12WriteTextureFv
+00391cd0-003990e8   38 dataAccess               DVD_CBFunc__10dataAccessFiP9BufMemoryiPcPv, __ct__10dataAccessFv, __dt__10dataAccessFv, initialize__10dataAccessFQ210dataAccess10ACCESSMODEP
+003990f0-00399d9c   16 deviceChecker            __ct__13deviceCheckerFv, __dt__13deviceCheckerFv, initialize__13deviceCheckerFv, checkDeviceAll__13deviceCheckerFv, checkPollMC__13deviceChe
+00399da0-0039a058    7 primFade                 __ct__8primFadeFv, __dt__8primFadeFv, fadein__8primFadeFi, fadeout__8primFadeFi, isFade__8primFadeFv, isIdle__8primFadeFv
+0039a060-0039a84c   13 primPacket               __ct__10primPacketFv, __dt__10primPacketFv, DelayDeleteRequest__10primPacketFv, setDisp__10primPacketFP9primLayeriffff, setUV__10primPacketF
+0039a850-0039b114   17 prim2D                   __ct__6prim2DFi, __dt__6prim2DFv, DelayDeleteRequest__6prim2DFv, setDisp__6prim2DFiffff, setUV__6prim2DFiiii, setSize__6prim2DFii
+0039b120-0039b16c    2 primPacket               connect__10primPacketFP10primPacket, getNextPacket__10primPacketFv
+0039b170-0039c41c    3 prim2D                   getPacket__6prim2DFv, calcPos__6prim2DFv, mSetCenterPos__6prim2DFv
+0039c420-0039ca78    2 primSprite               __ct__10primSpriteFb, mSetStaticPacket__10primSpriteFv
+0039ca80-0039ca94    1 primPacket               getPacket__10primPacketFv
+0039caa0-0039d0fc    2 primSprite               getPacket__10primSpriteFv, calcPos__10primSpriteFv
+0039d100-0039e04c    8 primSprites              __ct__11primSpritesFi, __dt__11primSpritesFv, setPos__11primSpritesFiff, setScale__11primSpritesFiff, mSetStaticPacket__11primSpritesFv, get
+0039e050-0039efa4   12 primLayer                __ct__9primLayerFv, __dt__9primLayerFv, __dt__Q29primLayer5LayerFv, DelayDeleteRequest__9primLayerFv, initialize__9primLayerFPUci, __ct__Q29
+0039efb0-0039f024    1 primSprite               __dt__10primSpriteFv
+0039f030-0039f038    1 prim2D                   @20@__dt__6prim2DFv
+0039f040-0039f048    1 primLayer                @20@__dt__9primLayerFv
+0039f050-003a004c   12 primTex                  __ct__7primTexFv, __dt__7primTexFv, initialize__7primTexFP9BufMemory, getData__7primTexFi, setBufData__7primTexFiP9BufMemory, setWinTex__7pr
+003a0050-003a03d4    2 primWin                  __ct__7primWinFv, __dt__7primWinFv
+003a03e0-003a046c    1 primText                 __dt__8primTextFv
+003a0470-003a04fc    1 primPoly                 __dt__8primPolyFv
+003a0500-003a0834    3 primWin                  DelayDeleteRequest__7primWinFv, initialize__7primWinFP7primTex, setItem__7primWinFiii
+003a0840-003a08a0    1 primText                 __ct__8primTextFv
+003a08a0-003a0900    1 primPoly                 __ct__8primPolyFv
+003a0900-003a3b60   36 primWin                  setTexBlock__7primWinFiii, setPolySize__7primWinFiff, setPolyFadeScroll__7primWinFiii, setPolyAlpha__7primWinFii, setPolyRGBA__7primWinFiiii
+003a3b60-003a3ffc   13 primCursor               __ct__10primCursorFv, __dt__10primCursorFv, createCursor__10primCursorFiiii, getCursor__10primCursorFv, setItem__10primCursorFP10MenuWindowi
+003a4000-003a4620    6 udScrollMark             __ct__12udScrollMarkFv, __dt__12udScrollMarkFv, initialize__12udScrollMarkFP7primTexiiiii, Polling__12udScrollMarkFv, select__12udScrollMark
+003a4620-003a4628    1 primWin                  @24@__dt__7primWinFv
+003a4630-003a4638    1 primText                 @60@__dt__8primTextFv
+003a4640-003a4648    1 primPoly                 @60@__dt__8primPolyFv
+003a4650-003a59a4    6 dispSaveFile             __ct__12dispSaveFileFiiiQ210dataAccess10ACCESSMODEP7primTexPPc, __dt__12dispSaveFileFv, mSetupDispFile__12dispSaveFileFv, setMove__12dispSav
+003a59b0-003a61e8    8 dispTime                 __ct__8dispTimeFv, __dt__8dispTimeFv, initialize__8dispTimeFP7primTexiiib, setPos__8dispTimeFff, getPW__8dispTimeFv, mSetupTime__8dispTimeFv
+003a61f0-003a678c    7 dispCash                 __ct__8dispCashFv, __dt__8dispCashFv, initialize__8dispCashFP7primTexiii, setPos__8dispCashFff, getPW__8dispCashFv, mSetupCash__8dispCashFv
+003a6790-003a6cb8   11 primSound                __ct__9primSoundFv, __dt__9primSoundFv, initialize__9primSoundFv, DelayDeleteRequest__9primSoundFv, Polling__9primSoundFv, loadSE__9primSoun
+003a6cc0-003a7378   10 primMusic                DVD_CB__9primMusicFiP9BufMemoryiPcPv, __ct__9primMusicFv, __dt__9primMusicFv, initialize__9primMusicFi, DelayDeleteRequest__9primMusicFv, Po
+003a7380-003a7cf8   15 primModel                CBFunc__9primModelFPcPv, __ct__9primModelFv, __dt__9primModelFv, DelayDeleteRequest__9primModelFv, initialize__9primModelFPUci, addMotion__9
+003a7d00-003a7e98    2 install                  checkHDDInstall__7installFv, start__7installFv
+003a7ea0-003a7f04    1 <free>                   opening__Fv
+003a7f10-003a8290    4 CDMYStage                __ct__9CDMYStageFv, __dt__9CDMYStageFv, preLoad__9CDMYStageFv, Start__9CDMYStageFv
+003a8290-003a8334    1 <free>                   _dvd_callback__FiP9BufMemoryiPcPv
+003a8340-003a8354    1 openingMessage           LSD_CB__14openingMessageFv
+003a8360-003a83e4    2 CDMYStage                closeInquiry__9CDMYStageFv, Polling__9CDMYStageFv
+003a83f0-003ab4d8   17 openingMessage           __ct__14openingMessageFv, __dt__14openingMessageFv, initialize__14openingMessageFv, changeDispMode__14openingMessageFii, Polling__14openingM
+003ab4e0-003ab4f8    2 CDMYStage                @8@Polling__9CDMYStageFv, @8@__dt__9CDMYStageFv
+003ab500-003ab508    1 openingMessage           @24@__dt__14openingMessageFv
+003ab510-003abd40    7 openingBattleDemo        __ct__17openingBattleDemoFv, __dt__17openingBattleDemoFv, start__17openingBattleDemoFv, initialize__17openingBattleDemoFPUci, Polling__17ope
+003abd40-003abe04    1 newGameInit              initializeGameData__11newGameInitFv
+003abe10-003ac268    7 GameOver                 ReceiveEvent__8GameOverFiPv, __ct__8GameOverFv, __dt__8GameOverFv, Polling__8GameOverFv, DelayDelete__8GameOverFv, @24@DelayDelete__8GameOve
+003ac270-003ad0e8   10 GameOverScene            __ct__13GameOverSceneFv, __dt__13GameOverSceneFv, GetReady__13GameOverSceneFv, Run__13GameOverSceneFv, ShiftTitle__13GameOverSceneFv, ReadDa
+003ad0f0-003ad1cc    1 GameOverSelect           __dt__14GameOverSelectFv
+003ad1d0-003ad2a4    1 GameOverRealize          __dt__15GameOverRealizeFv
+003ad2b0-003ad2c0    1 GameOverScene            Release__13GameOverSceneFv
+003ad2c0-003ad834    1 BtlIn                    __ct__5BtlInFv
+003ad840-003ad86c    1 tagFase                  SetFase__7tagFaseFi
+003ad870-003af048   11 BtlIn                    __dt__5BtlInFv, CreatePolygon__5BtlInFv, AddGroup__5BtlInFP9BI_PolGrp, getPacket__5BtlInFv, GetDrawPacket__5BtlInFi, Polling__5BtlInFv
+003af050-003af934    8 BI_PolGrp                __ct__9BI_PolGrpFUi, Init__Q29BI_PolGrp20@class$1627BtlIn_cppFv, __dt__9BI_PolGrpFv, CalcMatrix__9BI_PolGrpFv, SetPacket__9BI_PolGrpFP4_QWD,
+003af940-003b11c0    7 BI_Pol                   __ct__6BI_PolFv, __dt__6BI_PolFv, Create__6BI_PolFi, CalcMatrix__6BI_PolFP6Matrix, GetPacket__6BI_PolFv, CalcCenter__6BI_PolFv
+003b11c0-003b2574    6 FrameTexture             __ct__12FrameTextureFv, __dt__12FrameTextureFv, Create__12FrameTextureF6GS_PSMUsUs, Capture__12FrameTextureFv, RenderOffscreen__12FrameTextu
+003b2580-003b25a8    3 BtlIn                    @20@__dt__5BtlInFv, @32@Polling__5BtlInFv, @32@__dt__5BtlInFv
+003b25b0-003b2764    2 <free>                   RleUnCompress__FPvii, GetRleLength__FPv
+003b2770-003b3b3c    1 BtlInBoss                __ct__9BtlInBossFv
+003b3b40-003b3b94    1 FirstLight               __dt__10FirstLightFv
+003b3ba0-003b3bf4    1 LightPol                 __dt__8LightPolFv
+003b3c00-003b3c60    1 FirstLight               __ct__10FirstLightFv
+003b3c60-003b3d20    2 LightBelt                __dt__9LightBeltFv, __ct__9LightBeltFv
+003b3d20-003b3d80    1 LightPol                 __ct__8LightPolFv
+003b3d80-003b4cac    4 BtlInBoss                __dt__9BtlInBossFv, getPacket__9BtlInBossFv, GetDrawPacket__9BtlInBossFi, Polling__9BtlInBossFv
+003b4cb0-003b4cec    1 FirstLight               SetTexPos__10FirstLightFii
+003b4cf0-003b4f08    4 BtlInBoss                OnlyDraw__9BtlInBossFv, CaptureBtlIn__9BtlInBossFv, StartBtlIn__9BtlInBossFv, StopBtlIn__9BtlInBossFv
+003b4f10-003b54b4    2 LightPol                 getPacket__8LightPolFv, Create__8LightPolFiiiifR7_rgba32
+003b54c0-003b5b18    2 LightBelt                Create__9LightBeltFiiiiifR7_rgba32, getPacket__9LightBeltFv
+003b5b20-003b5db4    2 FirstLight               getPacket__10FirstLightFv, Create__10FirstLightFiiiiR7_rgba32
+003b5dc0-003b5de8    3 BtlInBoss                @20@__dt__9BtlInBossFv, @32@Polling__9BtlInBossFv, @32@__dt__9BtlInBossFv
+003b5df0-003b5f54    5 SSHApi                   Pause__6SSHApiFb, Reset__6SSHApiFi, preLoad__6SSHApiFv, Start__6SSHApiFv, closeInquiry__6SSHApiFv
+003b5f60-003b6128    2 <free>                   GetLanguage, BlockRead__FPCc
+003b6130-003b7408   21 SSHSys                   SetAPI__6SSHSysFP6SSHApi, isPrevApiGone__6SSHSysFv, Polling__6SSHSysFv, __ct__6SSHSysFv, GetFullPathName__6SSHSysFPcPc, PathInit__6SSHSysFv
+003b7410-003b7494    1 <free>                   DoReset__Fv
+003b74a0-003b7544    1 SSHSys                   __dt__6SSHSysFv
+003b7550-003b7f38    5 ScrCapPrim               __ct__10ScrCapPrimFv, __dt__10ScrCapPrimFv, getPacket__10ScrCapPrimFv, CaptScreen__10ScrCapPrimFv, InitDrawPkt__10ScrCapPrimFv
+003b7f40-003b8620    5 CScreenCap               __ct__10CScreenCapFv, __dt__10CScreenCapFv, Capture__10CScreenCapFii, Clear__10CScreenCapFv, Polling__10CScreenCapFv
+003b8620-003b86d0    2 CFldCapObj               __dt__10CFldCapObjFv, Polling__10CFldCapObjFv
+003b86d0-003b86d8    1 ScrCapPrim               @20@__dt__10ScrCapPrimFv
+003b86e0-003b9afc   12 CVibe                    __ct__5CVibeFv, __dt__5CVibeFv, Volume__5CVibeFi, Start__5CVibeFP10_ActSeqHdrP8CVibeMani, Stop__5CVibeFv, Pause__5CVibeFi
+003b9b00-003b9b3c    1 <free>                   makeRnd__Fv
+003b9b40-003ba210    7 CVibe                    GetRand__5CVibeFi, SetTempo__5CVibeFi, AdjustWaitCount__5CVibeFv, KeyOn__5CVibeFi, AllKeyOff__5CVibeFv, UpdateEnvelope__5CVibeFi
+003ba210-003baf24   16 CVibeMan                 __ct__8CVibeManFv, Create__8CVibeManFUi, Release__8CVibeManFv, Entry__8CVibeManFP5CVibe, Dispose__8CVibeManFP5CVibe, GetSeqData__8CVibeManFP
+003baf30-003bb1b4    3 <free>                   passpc__FRPCc, GetNumber__FRPCcRi, GetParam__FRPCcRi
+003bb1c0-003bbc64    1 CVibe                    CnvSeqData__5CVibeFPCcRi
+003bbc70-003bbcec    1 CVibeMan                 __dt__8CVibeManFv
+003bbcf0-003bd588   25 <free>                   SetChrPosSaveState__Fi, InitChrPosSave__Fv, ClrChrPosSave__Fi, SaveChrPos__FiP7FVectori, RestoreChrPos__FiP7FVector, SetShortPos__FPsP7FVect
+003bd590-003bd72c    1 CFieldSocket             WakeMapJump__12CFieldSocketFPCc
+003bd730-003bd8d8    5 <free>                   LayerMan_Init__Fv, LayerMan_GetLayer__Fi, LayerMan_LoadLayer__FPCUc, olLoadCB__FibiPv, GetFieldScript__Fi
+003bd8e0-003bda48    3 CFieldSocket             __ct__12CFieldSocketFPCc, SetMPS__12CFieldSocketFPCc, Init__12CFieldSocketFv
+003bda50-003bda74    1 <free>                   InvokeGameOver__Fv
+003bda80-003bdb64    1 CFieldSocket             __dt__12CFieldSocketFv
+003bdb70-003bdbd0    1 <free>                   LoadFieldData__Fv
+003bdbd0-003beb04   15 CFieldSocket             preLoad__12CFieldSocketFv, PreloadOverlay__12CFieldSocketFv, fieldOverlay__12CFieldSocketFv, fieldLoadCB__12CFieldSocketFibi, SetSmoothFilte
+003beb10-003beb40    1 <free>                   GetTailorFlagAddr__Fv
+003beb40-003c0898   18 CFieldSocket             WorldMapJump__12CFieldSocketFiiUi, WorldMapJumpA__12CFieldSocketFiiUi, isFaderDsp__12CFieldSocketFi, GetFaderLevel__12CFieldSocketFi, SetFad
+003c08a0-003c113c   12 <free>                   InitFieldSaveData__Fv, ResetFieldSaveData__Fi, SceneInit__Fi, GetWorldMapInfo__Fv, GetSavedMpsName__Fi, GetSavedChrPos__FPf
+003c1140-003c1210    1 CFieldSocket             LoadScriptRegister__12CFieldSocketFv
+003c1210-003c1274    1 <free>                   FieldSaveCharPosition__FP7FVectori
+003c1280-003c1564    2 CFieldSocket             SaveScriptRegister__12CFieldSocketFv, SetGameOverType__12CFieldSocketFii
+003c1570-003c1ecc    8 CSndBufCache             Clear__12CSndBufCacheFv, ReadFileCB__12CSndBufCacheFiP9BufMemoryiPcPv, NextLoad__12CSndBufCacheFv, Load__12CSndBufCacheFPCciiPFiP9BufMemoryi
+003c1ed0-003c1ee8    2 CFieldSocket             @8@Polling__12CFieldSocketFv, @8@__dt__12CFieldSocketFv
+003c1ef0-003c1f58    1 <free>                   sdbReadCB__FiP9BufMemoryiPcPv
+003c1f60-003c27b8   12 CSTGDB                   __ct__6CSTGDBFv, __dt__6CSTGDBFv, SetData__6CSTGDBFPv, CheckVersion__6CSTGDBFUl, InitSDB__6CSTGDBFv, Load__6CSTGDBFPCc
+003c27c0-003c2804    1 <free>                   cmntexReadCB__FiP9BufMemoryiPcPv
+003c2810-003c2fcc   10 BgEffectMan              __ct__11BgEffectManFv, Init__11BgEffectManFv, GetEffect__11BgEffectManFii, InitCmnTex__11BgEffectManFv, DeleteAll__11BgEffectManFi, CreateEf
+003c2fd0-003c3bd0    8 CBgElement               __ct__10CBgElementFv, __dt__10CBgElementFv, Create__10CBgElementFPUcb, Clear__10CBgElementFv, Dsp__10CBgElementFv, Clr__10CBgElementFv
+003c3bd0-003c5620   25 CSe                      __ct__3CSeFv, __dt__3CSeFv, Create__3CSeFUiUiUi, Release__3CSeFv, LoadSDH__3CSeFPv, RemoveAllSDH__3CSeFv
+003c5620-003c698c   16 CMusic                   __ct__6CMusicFv, __dt__6CMusicFv, isRelease__6CMusicFv, Release__6CMusicFv, SetVolume__6CMusicFi, PlayBGM__6CMusicFUiUiPUc
+003c6990-003c6b10    2 <free>                   pix2tex, P2GetBPPtoPSM
+003c6b10-003c76fc   15 P2Pkt                    __ct__5P2PktFv, Create__5P2PktFii, Release__5P2PktFv, AddRefe__5P2PktFi, AddRet__5P2PktFi, AddCnt__5P2PktFi
+003c7700-003c7804    2 P2Font                   __ct__6P2FontFv, DrawFont__6P2FontFP6CImageiiPCci
+003c7810-003c804c    5 P2Sprite                 __ct__8P2SpriteFv, __dt__8P2SpriteFv, Create__8P2SpriteFii, GetPktSize__8P2SpriteFv, UpdateObj__8P2SpriteFi
+003c8050-003c8118    2 P2Clut                   Create__6P2ClutFv, Release__6P2ClutFv
+003c8120-003c87e0    4 P2GraTex                 SetLoadPacket__8P2GraTexFP4_QWDP13_TEXLOADPARAMUiPv, SetPacket__8P2GraTexFP4_QWDPvi, GetPktSize__8P2GraTexFPv, GetBpp__8P2GraTexFPv
+003c87e0-003c8aa8    2 P2TexTex                 SetPacket__8P2TexTexFP4_QWDPvi, GetPktSize__8P2TexTexFPv
+003c8ab0-003c8d98    2 P2Image                  SetPacket__7P2ImageFP4_QWDP6CImageiii, GetPktSize__7P2ImageFP6CImage
+003c8da0-003c9480    2 <free>                   P2MakeBitBltPkt, P2ChangeCamera
+003c9480-003c94fc    1 P2Pkt                    __dt__5P2PktFv
+003c9500-003c9a88    8 CFieldSaveData           __ct__14CFieldSaveDataFv, __dt__14CFieldSaveDataFv, Initialize__14CFieldSaveDataFv, InitializeData__14CFieldSaveDataFi, SetDefault__14CField
+003c9a90-003ca61c    7 CPauser                  __ct__7CPauserFv, __dt__7CPauserFv, Polling__7CPauserFv, Draw__7CPauserFUi, MakePacket__7CPauserFv, DrawA__7CPauserFv
+003ca620-003ca7b4    2 <free>                   GetStrLength__FPCc, ReplaceLF__FPc
+003ca7c0-003caf30    6 CLSDPauser               __ct__10CLSDPauserFv, __dt__10CLSDPauserFv, Polling__10CLSDPauserFv, DrawA__10CLSDPauserFv, MakePacket__10CLSDPauserFv, DelayDelete__10CLSDP
+003caf30-003caf48    2 CPauser                  @24@DelayDelete__7CPauserFv, @24@__dt__7CPauserFv
+003caf50-003caf68    2 CLSDPauser               @24@DelayDelete__10CLSDPauserFv, @24@__dt__10CLSDPauserFv
+003caf70-003cc00c   11 CScrCapture              __ct__11CScrCaptureFv, Create__11CScrCaptureFiiP9BufMemory, Delete__11CScrCaptureFv, Release__11CScrCaptureFv, Dsp__11CScrCaptureFv, Clr__11
+003cc010-003cc73c   12 GenericDataHandler       __ct__18GenericDataHandlerFv, __dt__18GenericDataHandlerFv, CheckData__18GenericDataHandlerFP12_LSDTrackHdr, Open__18GenericDataHandlerFP10R
+003cc740-003cca88    4 EventHandler             __ct__12EventHandlerFv, __dt__12EventHandlerFv, CheckData__12EventHandlerFP12_LSDTrackHdr, Open__12EventHandlerFP10RingBuffer
+003cca90-003ccbd0    1 <free>                   EventHandlerUpdate__FP10_EventWork
+003ccbd0-003ccd70    3 EventHandler             Read__12EventHandlerFP10_LSDHANDLEP10RingBuffer, Close__12EventHandlerFP10_LSDHANDLE, Event__12EventHandlerFP10_LSDHANDLEiff
+003ccd70-003cdfdc   19 LSDScrEx                 __ct__8LSDScrExFv, __dt__8LSDScrExFv, Delete__8LSDScrExFv, Init__8LSDScrExFv, LinkA__8LSDScrExFP10_EventWork, preLoad__8LSDScrExFv
+003cdfe0-003cf62c   15 StreamBGM                __ct__9StreamBGMFv, Create__9StreamBGMFPCc, Release__9StreamBGMFv, Delete__9StreamBGMFv, __dt__9StreamBGMFv, isPlay__9StreamBGMFv
+003cf630-003cfe74    7 CineMask                 __ct__8CineMaskFv, Delete__8CineMaskFv, __dt__8CineMaskFv, Dsp__8CineMaskFv, Clr__8CineMaskFv, Polling__8CineMaskFv
+003cfe80-003d15d8   16 FldSprite                __ct__9FldSpriteFv, __dt__9FldSpriteFv, Create__9FldSpriteFP9BufMemoryib, UpdateS__9FldSpriteFPv, Release__9FldSpriteFv, Delete__9FldSpriteF
+003d15e0-003d2b78   17 FldTimer                 __ct__8FldTimerFv, __dt__8FldTimerFv, Create__8FldTimerFi, UpdateS__8FldTimerFPv, Release__8FldTimerFv, Entry__8FldTimerFv
+003d2b80-003d3398    7 FldMemory                __ct__9FldMemoryFv, __dt__9FldMemoryFv, Reset__9FldMemoryFv, FldAlloc__9FldMemoryFiUiUi, Free__9FldMemoryFPUc, SplitBlock__9FldMemoryFP7_fld
+003d33a0-003d3f44    9 P2Filter                 __ct__8P2FilterFv, __dt__8P2FilterFv, Entry__8P2FilterFv, Release__8P2FilterFv, Create__8P2FilterFv, UpdateS__8P2FilterFPv
+003d3f50-003d519c   13 CGhostEfx                __ct__9CGhostEfxFv, __dt__9CGhostEfxFv, Initialization__9CGhostEfxFv, NewLifeMake__9CGhostEfxFi, AddTime__9CGhostEfxFf, Create__9CGhostEfxFv
+003d51a0-003d53b8    2 <free>                   SetFullSprite__FP5P2PktUiUiii, SetFullSprite2__FP5P2PktUiUiii
+003d53c0-003d53f0    1 CGhostEfx                dip__9CGhostEfxFi
+003d53f0-003d5a54   13 CThread                  InitialReset__7CThreadFv, __ct__7CThreadFv, __dt__7CThreadFv, CreateThread__7CThreadFUsUsUi, CreateThread__7CThreadFP7CThreadPFPv_vUsUsUi, D
+003d5a60-003d6454   14 CTimer                   InitialReset__6CTimerFs, SystemReset__6CTimerFv, TimerWatcher0__6CTimerFi, TimerWatcherV__6CTimerFi, __ct__6CTimerF11TIMER_CLOCK, __ct__6CTi
+003d6460-003d6468    1 <free>                   UpdatePolBreakState__Fv
+003d6470-003d6684    3 CPolObj                  __ct__7CPolObjFv, __dt__7CPolObjFv, Remove__7CPolObjFv
+003d6690-003d6d84    6 CPoller                  __ct__7CPollerFv, __dt__7CPollerFv, Entry__7CPollerFP7CPolObjib, Find__7CPollerCFPC7CPolObj, Dispose__7CPollerFP7CPolObj, Polling__7CPollerF
+003d6d90-003d7144    7 CList                    GetHead__5CListFv, GetTail__5CListFv, Remove__5CListFv, RemoveHead__5CListFv, InsertBefore__5CListFP5CList, InsertAfter__5CListFP5CList
+003d7150-003d7e8c   14 CApp                     SetRebootPath__4CAppFPc, Reboot__4CAppFv, CaptureFlush__4CAppFv, InitScreen__4CAppFii, SystemReset__4CAppFv, InitInstance__4CAppFv
+003d7e90-003d8678   12 CPause                   __ct__6CPauseFv, Pause__6CPauseFv, UnPause__6CPauseFv, SetCallBack__6CPauseFPFiPv_vPv, DisablePause__6CPauseFv, EnablePause__6CPauseFi
+003d8680-003d8768    1 CApp                     __dt__4CAppFv
+003d8770-003d8b28    5 ScreenBright             __ct__12ScreenBrightFv, __dt__12ScreenBrightFv, getPacket__12ScreenBrightFv, Draw__12ScreenBrightFv, @20@__dt__12ScreenBrightFv
+003d8b30-003d8b78    1 BBVers                   __ct__6BBVersFv
+003d8b80-003d8ba0    1 BBStq                    __ct__5BBStqFv
+003d8ba0-003d8bcc    1 BBRgba                   __ct__6BBRgbaFv
+003d8bd0-003d8d50    2 BBNPS                    __ct__5BBNPSFi, __dt__5BBNPSFv
+003d8d50-003d99c8    6 PolyBase                 __ct__8PolyBaseFiP7Texture, __ct__8PolyBaseFiPc, __dt__8PolyBaseFv, initPacket__8PolyBaseFv, getPacket__8PolyBaseFv, @20@__dt__8PolyBaseFv
+003d99d0-003d9c08    3 SequenceBase             __ct__12SequenceBaseFv, setKeyFrame__12SequenceBaseFf7FVector, getKeyFrame__12SequenceBaseFfR7FVectorf
+003d9c10-003d9c44    1 CBBPolygonBase           __ct__14CBBPolygonBaseFv
+003d9c50-003d9fb8    8 CBBPolygon               __ct__10CBBPolygonFiPc, __ct__10CBBPolygonFiP7Texture, __ct__10CBBPolygonFiPci, __dt__10CBBPolygonFv, dip__10CBBPolygonFi, Clr__10CBBPolygon
+003d9fc0-003da6d8    3 CBRingSoul               AddTime__10CBRingSoulFf, Initialization__10CBRingSoulFv, NewLifeMake__10CBRingSoulFi
+003da6e0-003dae78    7 CBRingSoulOT             AddTime__12CBRingSoulOTFf, Initialization__12CBRingSoulOTFv, NewLifeMake__12CBRingSoulOTFi, __dt__12CBRingSoulOTFv, dip__12CBRingSoulOTFi, C
+003dae80-003daee0    1 CBRingSoul               __dt__10CBRingSoulFv
+003daee0-003dbc64    8 ModelEffManager          createMF__15ModelEffManagerFQ215ModelEffManager4MENoiP5ModeliPc, Polling__15ModelEffManagerFv, changeAlpha__15ModelEffManagerFP5Modelf, Dip_
+003dbc70-003dc220    4 CBCatherine              AddTime__11CBCatherineFf, Initialization__11CBCatherineFv, NewLifeMake__11CBCatherineFi, __dt__11CBCatherineFv
+003dc220-003dca00    4 CBJack                   AddTime__6CBJackFf, __dt__6CBJackFv, Initialization__6CBJackFv, NewLifeMake__6CBJackFi
+003dca00-003dd0f4    4 CBJill                   AddTime__6CBJillFf, __dt__6CBJillFv, Initialization__6CBJillFv, NewLifeMake__6CBJillFi
+003dd100-003dd86c    4 CBM412                   AddTime__6CBM412Ff, __dt__6CBM412Fv, Initialization__6CBM412Fv, NewLifeMake__6CBM412Fi
+003dd870-003de068    7 CBM412OT                 AddTime__8CBM412OTFf, Initialization__8CBM412OTFv, NewLifeMake__8CBM412OTFi, __dt__8CBM412OTFv, dip__8CBM412OTFi, Clr__8CBM412OTFv
+003de070-003de7dc    4 CBM413                   AddTime__6CBM413Ff, __dt__6CBM413Fv, Initialization__6CBM413Fv, NewLifeMake__6CBM413Fi
+003de7e0-003defd8    7 CBM413OT                 AddTime__8CBM413OTFf, Initialization__8CBM413OTFv, NewLifeMake__8CBM413OTFi, __dt__8CBM413OTFv, dip__8CBM413OTFi, Clr__8CBM413OTFv
+003defe0-003df298    3 FrameChange              __ct__11FrameChangeFv, __dt__11FrameChangeFv, getPacket__11FrameChangeFv
+003df2a0-003dfff8    8 CBM524                   __dt__6CBM524Fv, dip__6CBM524Fi, Clr__6CBM524Fv, SetColor__6CBM524FUcUcUc, AddTime__6CBM524Ff, Reset__6CBM524Fv
+003e0000-003e0008    1 FrameChange              @20@__dt__11FrameChangeFv
+003e0010-003e09d8    4 CBM477                   AddTime__6CBM477Ff, __dt__6CBM477Fv, Initialization__6CBM477Fv, NewLifeMake__6CBM477Fi
+003e09e0-003e10c0    5 M524_2                   AddTime__6M524_2Ff, Initialization__6M524_2Fv, dip__6M524_2FP8VIF1Prim, NewLifeMake__6M524_2Fi, __dt__6M524_2Fv
+003e10c0-003e16e0    4 CBGBat                   AddTime__6CBGBatFf, Initialization__6CBGBatFv, NewLifeMake__6CBGBatFi, __dt__6CBGBatFv
+003e16e0-003e2064    4 Dbg                      Printf__3DbgFUiPCce, PutStr__3DbgFP8DBSTREAMRPc, ScrollUp__3DbgFP8DBSTREAM, FormatStream__3DbgFUiPCcPc
+00403e80-00404914   30 <free>                   __sinit_libgsx.cpp                                                                                                  , __sinit_LightControl.c
+##### FIELD.BIN (2081 funcs, 00430a80-0050d0d8)
+00430a80-00430b74    4 <free>                   cbSvpCallback__FiP9BufMemoryiPcPv, CbOn__FPcPv, CbOff_1__FPcPv, CbOff_2__FPcPv
+00430b80-00430c4c    2 SavePoint                __ct__9SavePointFv, Init__Q29SavePoint18@class$2151SVP_cppFv
+00430c50-00430c70    1 FVector                  __ct__7FVectorFv
+00430c70-004312c4    3 SavePoint                __dt__9SavePointFv, Create__9SavePointFv, CreateDirect__9SavePointFP9BufMemory
+004312d0-004312ec    1 BufMemory                getBuffer__9BufMemoryFv
+004312f0-00431438    6 FVector                  Origin__7FVectorFv, __ct__7FVectorFffff, vw__7FVectorFv, vz__7FVectorFv, vy__7FVectorFv, vx__7FVectorFv
+00431440-00431f90    6 SavePoint                Show__9SavePointFii, Hide__9SavePointFv, cbOff_1__9SavePointFv, cbOff_2__9SavePointFv, cbOn__9SavePointFv, Polling__9SavePointFv
+00431f90-00431fbc    1 CPause                   isPaused__6CPauseFv
+00431fc0-00431fd4    1 FVector                  __as__7FVectorFRC7FVector
+00431fe0-00431ffc    1 Matrix                   GetPos__6MatrixFv
+00432000-0043202c    1 CPolObj                  SetAutoDelete__7CPolObjFb
+00432030-00432160    1 SavePoint                CheckOnPoint__9SavePointFR7FVector
+00432160-004321cc    1 FVector                  __mi__7FVectorCFRC7FVector
+004321d0-00432204    1 SavePoint                SetPos__9SavePointFR7FVector
+00432210-004325ac    5 SvpLight                 __ct__8SvpLightFv, __dt__8SvpLightFv, OnCreate__8SvpLightFv, OnShow__8SvpLightFv, OnUpdate__8SvpLightFv
+004325b0-0043261c    1 FVector                  __pl__7FVectorCFRC7FVector
+00432620-004326b4    3 Matrix                   RotYMatrix__6MatrixFf, __ct__6MatrixFv, UnitMatrix__6MatrixFv
+004326c0-00432970    4 DelayLight               __ct__10DelayLightFR7FVectorR7FVector, __dt__10DelayLightFv, OnCreate__10DelayLightFv, OnUpdate__10DelayLightFv
+00432970-0043298c    1 FVector                  __ami__7FVectorFRC7FVector
+00432990-004329e4    2 DelayLight               Polling__10DelayLightFv, OnShow__10DelayLightFv
+004329f0-00432a30    1 <free>                   cbWpCallback__FiP9BufMemoryiPcPv
+00432a30-00434a1c    9 WarpPoint                __ct__9WarpPointFv, Init__Q29WarpPoint17@class$2141WP_cppFv, __ct__Q29WarpPoint17@class$2140WP_cppFv, __dt__9WarpPointFv, Create__9WarpPoint
+00434a20-00434a7c    1 Matrix                   __as__6MatrixFRC6Matrix
+00434a80-00434a9c    1 FVector                  __apl__7FVectorFRC7FVector
+00434aa0-00434ad4    1 Matrix                   RotMatrix__6MatrixFRC7FVector
+00434ae0-00434b44    2 ExModel                  SetScale__7ExModelFR7FVector, SetAlphaWeight__7ExModelFf
+00434b50-0043560c    8 WarpPoint                CheckOnPoint__9WarpPointFR7FVector, StartShowEffect__9WarpPointFv, StartHideEffect__9WarpPointFv, SetAlpha__9WarpPointFf, WarpIn__9WarpPoint
+00435610-00437738   20 CmdMenu                  DataEvent__7CmdMenuFiPv, SolomonEvent__7CmdMenuFiPv, SetParameter__7CmdMenuFP8MenuTextss, __ct__7CmdMenuFsPFiPvP7CmdMenu_iPv, __dt__7CmdMenu
+00437740-00437968    4 CmdCommon                __ct__9CmdCommonFv, __dt__9CmdCommonFv, GetReady__9CmdCommonFv, Release__9CmdCommonFv
+00437970-00437e4c    5 CmdNote                  __ct__7CmdNoteFv, __dt__7CmdNoteFv, GetReady__7CmdNoteFv, Release__7CmdNoteFv, SetExplanation__7CmdNoteFPCce
+00437e50-00438444    4 CmdBackGroundCapture     __ct__20CmdBackGroundCaptureFP11MenuCapture, __dt__20CmdBackGroundCaptureFv, GetReady__20CmdBackGroundCaptureFv, Release__20CmdBackGroundCap
+00438450-00438788    4 CmdBackGround            __ct__13CmdBackGroundFv, __dt__13CmdBackGroundFv, GetReady__13CmdBackGroundFv, Release__13CmdBackGroundFv
+00438790-0043ad18   15 CmdTop                   __ct__6CmdTopFv, __dt__6CmdTopFv, GetReady__6CmdTopFv, Run__6CmdTopFv, Shutdown__6CmdTopFv, Restore__6CmdTopFv
+0043ad20-0043cac8   21 CmdPC                    __ct__5CmdPCFv, __dt__5CmdPCFv, Create__5CmdPCFP14_PCParam_Ver00P10MenuDataPCP17_EQUIPParam_Ver00P13MenuDataTable, UpdateState__5CmdPCFv, Se
+0043cad0-0043de6c   13 CmdParty                 __ct__8CmdPartyFv, __dt__8CmdPartyFv, Create__8CmdPartyFP13MenuDataTable, FlushData__8CmdPartyFv, FindPC__8CmdPartyFUs, GetPCIndex__8CmdPart
+0043de70-0043df04    1 CmdButtonReport          __ct__15CmdButtonReportFv
+0043df10-0043dfec    2 CmdGoodsButton           __dt__14CmdGoodsButtonFv, __ct__14CmdGoodsButtonFv
+0043dff0-0043e9f4    7 CmdButtonReport          __dt__15CmdButtonReportFv, GetReady__15CmdButtonReportFv, Release__15CmdButtonReportFv, ClearReport__15CmdButtonReportFv, SetReport__15CmdBu
+0043ea00-004402ec   14 CmdExplain               __ct__10CmdExplainFv, __dt__10CmdExplainFv, GetReady__10CmdExplainFv, DelayDelete__10CmdExplainFv, SetInfo__10CmdExplainFP4MenusUcUc, SetIco
+004402f0-00442468   14 CmdItem                  __ct__7CmdItemFv, __dt__7CmdItemFv, GetReady__7CmdItemFv, Run__7CmdItemFv, Enter__7CmdItemFv, Exit__7CmdItemFv
+00442470-00442bc8    6 CmdTitleLog              __ct__11CmdTitleLogFv, __dt__11CmdTitleLogFv, GetReady__11CmdTitleLogFv, Release__11CmdTitleLogFv, SetTitle__11CmdTitleLogFPUci, Open__11Cmd
+00442bd0-004430a8    2 CmdSelectTarget          __ct__15CmdSelectTargetFv, __dt__15CmdSelectTargetFv
+004430b0-00443194    1 CmdSTAllParameter        __dt__17CmdSTAllParameterFv
+004431a0-00443968    1 CmdSelectTarget          GetReady__15CmdSelectTargetFv
+00443970-00443a08    1 CmdSTAllParameter        __ct__17CmdSTAllParameterFv
+00443a10-00444f74    3 CmdSelectTarget          Run__15CmdSelectTargetFv, SetParameter__15CmdSelectTargetFi, Use__15CmdSelectTargetFi
+00444f80-004462a4    9 MenuElement              __ct__11MenuElementFv, __dt__11MenuElementFv, Create__11MenuElementFPUcP9BufMemory, Polling__11MenuElementFv, Update__11MenuElementFiiUs, Co
+004462b0-00446bdc    9 CmdElement               __ct__10CmdElementFv, __dt__10CmdElementFv, GetReady__10CmdElementFv, Release__10CmdElementFv, Create__10CmdElementFUc, SetInfo__10CmdElemen
+00446be0-00446d94    1 CmdOption                __ct__9CmdOptionFv
+00446da0-00446e5c    2 CmdGoodsOption           __dt__14CmdGoodsOptionFv, __ct__14CmdGoodsOptionFv
+00446e60-00448b3c    7 CmdOption                __dt__9CmdOptionFv, GetReady__9CmdOptionFv, Run__9CmdOptionFv, Enter__9CmdOptionFv, Exit__9CmdOptionFv, Exec__9CmdOptionFv
+00448b40-0044aaac   17 CmdPrivate               __ct__10CmdPrivateFv, __dt__10CmdPrivateFv, GetReady__10CmdPrivateFv, Run__10CmdPrivateFv, Enter__10CmdPrivateFv, Exit__10CmdPrivateFv
+0044aab0-0044abbc    1 CmdStatus                __ct__9CmdStatusFv
+0044abc0-0044ac7c    2 CmdParameter             __dt__12CmdParameterFv, __ct__12CmdParameterFv
+0044ac80-0044b700    6 CmdStatus                __dt__9CmdStatusFv, GetReady__9CmdStatusFv, SafeDelayDelete__9CmdStatusFv, Close__9CmdStatusFv, Update__9CmdStatusFs, Release__9CmdStatusFv
+0044b700-0044b820    6 CmdPrivateScene          __ct__15CmdPrivateSceneFv, __dt__15CmdPrivateSceneFv, Update__15CmdPrivateSceneFs, ReadyScene__15CmdPrivateSceneFv, DisposeScene__15CmdPriva
+0044b820-0044ed20   21 CmdEquipment             __ct__12CmdEquipmentFv, __dt__12CmdEquipmentFv, GetReady__12CmdEquipmentFv, Run__12CmdEquipmentFv, Update__12CmdEquipmentFs, UpdateSlot__12C
+0044ed20-0044f2c8    6 CmdPrivateMenu           __ct__14CmdPrivateMenuFv, __dt__14CmdPrivateMenuFv, CreateScene__14CmdPrivateMenuFP10CmdPrivate, UpdateScene__14CmdPrivateMenuFP10CmdPrivate
+0044f2d0-0044f6c8    7 CmdWindow                __ct__9CmdWindowFv, __dt__9CmdWindowFv, DelayDelete__9CmdWindowFv, Select__9CmdWindowFP7CmdNoteP9MenuSceneP8MenuTextP8MenuText, SetClutGoods
+0044f6d0-0044f7dc    1 CmdEquipmentSlot         __ct__16CmdEquipmentSlotFv
+0044f7e0-0044f8bc    2 CmdPropertySlot          __dt__15CmdPropertySlotFv, __ct__15CmdPropertySlotFv
+0044f8c0-00450168    6 CmdEquipmentSlot         __dt__16CmdEquipmentSlotFv, CreateScene__16CmdEquipmentSlotFP12CmdEquipment, UpdateScene__16CmdEquipmentSlotFP12CmdEquipment, Select__16CmdE
+00450170-004502ec    2 CmdEquipmentGoods        __ct__17CmdEquipmentGoodsFv, __dt__17CmdEquipmentGoodsFv
+004502f0-0045039c    1 CmdGoodsIcon             __dt__12CmdGoodsIconFv
+004503a0-00450610    1 CmdEquipmentGoods        CreateScene__17CmdEquipmentGoodsFP12CmdEquipmentUs
+00450610-00450670    1 CmdGoodsIcon             __ct__12CmdGoodsIconFv
+00450670-004506fc    1 CmdGoods                 __dt__8CmdGoodsFv
+00450700-00450e08    4 CmdEquipmentGoods        UpdateScene__17CmdEquipmentGoodsFP12CmdEquipments, Select__17CmdEquipmentGoodsFP12CmdEquipmentP9MenuGroupP9MenuGroup, @24@__dt__17CmdEquipme
+00450e10-00451458    6 CmdTopMenu               __ct__10CmdTopMenuFv, __dt__10CmdTopMenuFv, CreateScene__10CmdTopMenuFP6CmdTop, UpdateScene__10CmdTopMenuFP6CmdTops, @24@__dt__10CmdTopMenuF
+00451460-00451bb8    6 CmdTopPlayInfo           __ct__14CmdTopPlayInfoFv, __dt__14CmdTopPlayInfoFv, CreateScene__14CmdTopPlayInfoFP6CmdTop, UpdateScene__14CmdTopPlayInfoFP6CmdTop, @24@__dt
+00451bc0-00451d2c    1 CmdTopPC                 __ct__8CmdTopPCFv
+00451d30-00452144    2 CmdTopPCParameter        __dt__17CmdTopPCParameterFv, __ct__17CmdTopPCParameterFv
+00452150-00453538    8 CmdTopPC                 __dt__8CmdTopPCFv, CreateScene__8CmdTopPCFP6CmdTop, Select__8CmdTopPCFP6CmdTopP9MenuGroupP9MenuGroup, BlinkSelect__8CmdTopPCFv, SetTarget__8
+00453540-004540d0   10 CmdTechnique             __ct__12CmdTechniqueFv, __dt__12CmdTechniqueFv, GetReady__12CmdTechniqueFv, Run__12CmdTechniqueFv, SafeDelayDelete__12CmdTechniqueFv, Close_
+004540d0-00454640    3 CmdTechniqueGoods        __ct__17CmdTechniqueGoodsFv, __dt__17CmdTechniqueGoodsFv, CreateScene__17CmdTechniqueGoodsFP9MenuScenesP5CmdPCP12PCSKILLParam
+00454640-0045468c    1 CmdGoods                 __ct__8CmdGoodsFv
+00454690-004549c8    4 CmdTechniqueGoods        UpdateScene__17CmdTechniqueGoodsFP12PCSKILLParamss, Select__17CmdTechniqueGoodsFP7CmdNoteP10CmdElementP12PCSKILLParamP9MenuGroupP9MenuGroup,
+004549d0-00455310    7 CmdFriendship            __ct__13CmdFriendshipFv, __dt__13CmdFriendshipFv, GetReady__13CmdFriendshipFv, SafeDelayDelete__13CmdFriendshipFv, Close__13CmdFriendshipFv,
+00455310-00455720    8 CmdProfile               __ct__10CmdProfileFv, __dt__10CmdProfileFv, GetReady__10CmdProfileFv, SafeDelayDelete__10CmdProfileFv, Close__10CmdProfileFv, Update__10CmdP
+00455720-00455ce0    8 CmdTarot                 __ct__8CmdTarotFv, __dt__8CmdTarotFv, GetReady__8CmdTarotFv, Run__8CmdTarotFv, SafeDelayDelete__8CmdTarotFv, Close__8CmdTarotFv
+00455ce0-00455e5c    2 CmdTarotGoods            __ct__13CmdTarotGoodsFv, __dt__13CmdTarotGoodsFv
+00455e60-00455eec    1 CmdGoodsTarot            __dt__13CmdGoodsTarotFv
+00455ef0-00456208    1 CmdTarotGoods            CreateScene__13CmdTarotGoodsFP8CmdTarot
+00456210-0045625c    1 CmdGoodsTarot            __ct__13CmdGoodsTarotFv
+00456260-00456388    3 CmdTarotGoods            Select__13CmdTarotGoodsFP8CmdTarotP9MenuGroupP9MenuGroup, @24@__dt__13CmdTarotGoodsFv, @36@__dt__13CmdTarotGoodsFv
+00456390-00456728    6 CmdTarotImage            __ct__13CmdTarotImageFv, __dt__13CmdTarotImageFv, CreateScene__13CmdTarotImageFP8CmdTarot, UpdateScene__13CmdTarotImageFP8CmdTarot, @24@__dt
+00456730-00456ad8    5 CmdPhotograph            __ct__13CmdPhotographFv, __dt__13CmdPhotographFv, GetReady__13CmdPhotographFv, SafeDelayDelete__13CmdPhotographFv, Close__13CmdPhotographFv
+00456ae0-00456f28    5 CmdPhotographGoods       __ct__18CmdPhotographGoodsFv, __dt__18CmdPhotographGoodsFv, CreateScene__18CmdPhotographGoodsFP13CmdPhotograph, @24@__dt__18CmdPhotographGoo
+00456f30-00457784    8 CmdSword                 __ct__8CmdSwordFv, __dt__8CmdSwordFv, GetReady__8CmdSwordFv, Run__8CmdSwordFv, SafeDelayDelete__8CmdSwordFv, Close__8CmdSwordFv
+00457790-004578ec    2 CmdSwordGoods            __ct__13CmdSwordGoodsFv, __dt__13CmdSwordGoodsFv
+004578f0-0045798c    1 CmdGoodsSword            __dt__13CmdGoodsSwordFv
+00457990-00457dc8    1 CmdSwordGoods            CreateScene__13CmdSwordGoodsFP8CmdSword
+00457dd0-00457e2c    1 CmdGoodsSword            __ct__13CmdGoodsSwordFv
+00457e30-00458018    3 CmdSwordGoods            Select__13CmdSwordGoodsFP8CmdSwordP9MenuGroupP9MenuGroup, @24@__dt__13CmdSwordGoodsFv, @36@__dt__13CmdSwordGoodsFv
+00458020-00458be8   13 CmdClothes               TailorEvent__10CmdClothesFiPv, __ct__10CmdClothesFv, __dt__10CmdClothesFv, GetReady__10CmdClothesFv, Run__10CmdClothesFv, DelayDelete__10Cmd
+00458bf0-004590c8    6 CmdClothesSlot           __ct__14CmdClothesSlotFv, __dt__14CmdClothesSlotFv, CreateScene__14CmdClothesSlotFP10CmdClothes, UpdateScene__14CmdClothesSlotFP10CmdClothes
+004590d0-0045a740   15 CmdHelp                  __ct__7CmdHelpFv, __dt__7CmdHelpFv, GetReady__7CmdHelpFv, Run__7CmdHelpFv, UpdateClause__7CmdHelpFs, LinkJump__7CmdHelpFs
+0045a740-0045a8b4    2 CmdHelpMenu              __ct__11CmdHelpMenuFv, __dt__11CmdHelpMenuFv
+0045a8c0-0045a934    1 CmdHelpMenuData          __dt__15CmdHelpMenuDataFv
+0045a940-0045ae4c    1 CmdHelpMenu              CreateScene__11CmdHelpMenuFP7CmdHelp
+0045ae50-0045ae8c    1 CmdHelpMenuData          __ct__15CmdHelpMenuDataFv
+0045ae90-0045b2d8    5 CmdHelpMenu              SetNewIcon__11CmdHelpMenuFP7CmdHelp, GetMenu__11CmdHelpMenuFP7CmdHelp, Select__11CmdHelpMenuFP7CmdHelpP8MenuTextP8MenuText, @24@__dt__11CmdH
+0045b2e0-0045b434    2 CmdHelpClause            __ct__13CmdHelpClauseFv, __dt__13CmdHelpClauseFv
+0045b440-0045b4b4    1 CmdGoodsList             __dt__12CmdGoodsListFv
+0045b4c0-0045b690    1 CmdHelpClause            CreateScene__13CmdHelpClauseFP7CmdHelp
+0045b690-0045b6cc    1 CmdGoodsList             __ct__12CmdGoodsListFv
+0045b6d0-0045bb58    4 CmdHelpClause            UpdateScene__13CmdHelpClauseFP7CmdHelps, Select__13CmdHelpClauseFP7CmdHelpP9MenuGroupP9MenuGroup, @24@__dt__13CmdHelpClauseFv, @36@__dt__13C
+0045bb60-0045d538    8 CmdHelpExplain           __ct__14CmdHelpExplainFv, __dt__14CmdHelpExplainFv, CreateScene__14CmdHelpExplainFP7CmdHelp, UpdateScene__14CmdHelpExplainFP7CmdHelps, SetEx
+0045d540-0045e1d8    8 CmdItemGoods             __ct__12CmdItemGoodsFv, __dt__12CmdItemGoodsFv, CreateScene__12CmdItemGoodsFP7CmdItem, UpdateCount__12CmdItemGoodsFP7CmdItemss, Order__12Cmd
+0045e1e0-0045e678    6 CmdItemMessage           __ct__14CmdItemMessageFv, __dt__14CmdItemMessageFv, CreateScene__14CmdItemMessageFP7CmdItem, Run__14CmdItemMessageFUs, @24@__dt__14CmdItemMe
+0045e680-0045f058    8 CmdGraveyard             __ct__12CmdGraveyardFv, __dt__12CmdGraveyardFv, GetReady__12CmdGraveyardFv, Run__12CmdGraveyardFv, Enter__12CmdGraveyardFv, Exit__12CmdGrave
+0045f060-0045f4d8    5 CmdGraveyardMenu         __ct__16CmdGraveyardMenuFv, __dt__16CmdGraveyardMenuFv, CreateScene__16CmdGraveyardMenuFP12CmdGraveyard, @24@__dt__16CmdGraveyardMenuFv, @36
+0045f4e0-00460580   13 CmdAroma                 __ct__8CmdAromaFv, __dt__8CmdAromaFv, GetReady__8CmdAromaFv, Run__8CmdAromaFv, SafeDelayDelete__8CmdAromaFv, Close__8CmdAromaFv
+00460580-00460f48    6 CmdAromaBaseOil          __ct__15CmdAromaBaseOilFv, __dt__15CmdAromaBaseOilFv, CreateScene__15CmdAromaBaseOilFP8CmdAroma, Select__15CmdAromaBaseOilFP8CmdAromaP9MenuG
+00460f50-004619b8    7 CmdAromaBlend            __ct__13CmdAromaBlendFv, __dt__13CmdAromaBlendFv, CreateScene__13CmdAromaBlendFP8CmdAroma, UpdateScene__13CmdAromaBlendFP8CmdAromas, Select_
+004619c0-00464994   20 CmdLibrary               __ct__10CmdLibraryFv, __dt__10CmdLibraryFv, GetReady__10CmdLibraryFv, Run__10CmdLibraryFv, Create__10CmdLibraryFs, Update__10CmdLibraryFs
+004649a0-00465c58    6 CmdLibraryDetail         __ct__16CmdLibraryDetailFv, __dt__16CmdLibraryDetailFv, CreateScene__16CmdLibraryDetailFP10CmdLibrary, UpdateScene__16CmdLibraryDetailFP10Cm
+00465c60-00466488    6 CmdLibraryList           __ct__14CmdLibraryListFv, __dt__14CmdLibraryListFv, CreateScene__14CmdLibraryListFP10CmdLibrarys, Select__14CmdLibraryListFP10CmdLibraryP9Me
+00466490-00466e24    5 CmdSort                  __ct__7CmdSortFv, __dt__7CmdSortFv, GetReady__7CmdSortFv, Run__7CmdSortFv, Select__7CmdSortFss
+00466e30-0046744c    3 CmdRingCustom            __ct__13CmdRingCustomFv, __dt__13CmdRingCustomFv, GetReady__13CmdRingCustomFv
+00467450-0046746c    1 JRing                    SetPad__5JRingFP4CPad
+00467470-0046b878   30 CmdRingCustom            Run__13CmdRingCustomFv, Update__13CmdRingCustomFs, DelayDelete__13CmdRingCustomFv, UpdateMenu__13CmdRingCustomFv, UpdateTitle__13CmdRingCust
+0046b880-0046caa8    8 CmdRingCustomHitArea     __ct__20CmdRingCustomHitAreaFv, __dt__20CmdRingCustomHitAreaFv, CreateScene__20CmdRingCustomHitAreaFP13CmdRingCustom, UpdateScene__20CmdRing
+0046cab0-0046d518    6 CmdRingCustomInfo        __ct__17CmdRingCustomInfoFv, __dt__17CmdRingCustomInfoFv, CreateScene__17CmdRingCustomInfoFP13CmdRingCustom, UpdateScene__17CmdRingCustomInf
+0046d520-0046e088    8 CmdRingCustomFinalGoods  __ct__23CmdRingCustomFinalGoodsFv, __dt__23CmdRingCustomFinalGoodsFv, CreateScene__23CmdRingCustomFinalGoodsFP13CmdRingCustom, UpdateScene__
+0046e090-0046e708    7 CmdRingCustomFinalSlot   __ct__22CmdRingCustomFinalSlotFv, __dt__22CmdRingCustomFinalSlotFv, CreateScene__22CmdRingCustomFinalSlotFP13CmdRingCustom, UpdateScene__22C
+0046e710-0046ee38    5 CmdRingMessage           __ct__14CmdRingMessageFv, __dt__14CmdRingMessageFv, GetReady__14CmdRingMessageFv, Run__14CmdRingMessageFv, StartMessage__14CmdRingMessageFsP
+0046ee40-004735b0   31 CmdFusion                __ct__9CmdFusionFv, __dt__9CmdFusionFv, GetReady__9CmdFusionFv, Run__9CmdFusionFv, SafeDelayDelete__9CmdFusionFv, Close__9CmdFusionFv
+004735b0-00473724    2 CmdFusionList            __ct__13CmdFusionListFv, __dt__13CmdFusionListFv
+00473730-004737cc    1 CmdGoodsFusion           __dt__14CmdGoodsFusionFv
+004737d0-004739ec    1 CmdFusionList            CreateScene__13CmdFusionListFP9CmdFusion
+004739f0-00473a4c    1 CmdGoodsFusion           __ct__14CmdGoodsFusionFv
+00473a50-00473fb8    5 CmdFusionList            UpdateScene__13CmdFusionListFP9CmdFusion, Select__13CmdFusionListFP9CmdFusionP9MenuGroupP9MenuGroupi, MoveCursor__13CmdFusionListFis, @24@__
+00473fc0-00474210    3 CmdMenuTutorial          __ct__15CmdMenuTutorialFv, __dt__15CmdMenuTutorialFv, StartTutorial__15CmdMenuTutorialFsPFiPvP7CmdMenu_iPv
+00474210-00474248    1 Menu                     ReadData__4MenuFiP9BufMemoryiPcPv
+00474250-00474c08    4 CmdMenuTutorial          Create__15CmdMenuTutorialFP9BufMemory, Polling__15CmdMenuTutorialFv, GetKey__15CmdMenuTutorialFv, @24@__dt__15CmdMenuTutorialFv
+00474c10-00475f4c   13 CmdScore                 __ct__8CmdScoreFv, __dt__8CmdScoreFv, GetReady__8CmdScoreFv, Run__8CmdScoreFv, Update__8CmdScoreFv, UpdateData__8CmdScoreFs
+00475f50-0047600c    1 CmdScoreData             __ct__12CmdScoreDataFv
+00476010-0047610c    2 CmdGoodsScore            __dt__13CmdGoodsScoreFv, __ct__13CmdGoodsScoreFv
+00476110-00476878    5 CmdScoreData             __dt__12CmdScoreDataFv, CreateScene__12CmdScoreDataFP8CmdScore, UpdateScene__12CmdScoreDataFP8CmdScoress, @24@__dt__12CmdScoreDataFv, @36@__
+00476880-004769c4    2 CmdScoreRank             __ct__12CmdScoreRankFv, __dt__12CmdScoreRankFv
+004769d0-00476a5c    1 CmdGoodsScoreRank        __dt__17CmdGoodsScoreRankFv
+00476a60-00476f28    1 CmdScoreRank             CreateScene__12CmdScoreRankFP8CmdScore
+00476f30-00476f7c    1 CmdGoodsScoreRank        __ct__17CmdGoodsScoreRankFv
+00476f80-00477968    3 CmdScoreRank             GetRank__12CmdScoreRankFP8CmdScore, @24@__dt__12CmdScoreRankFv, @36@__dt__12CmdScoreRankFv
+00477970-00477d48    5 CmdScoreRankFrame        __ct__17CmdScoreRankFrameFv, __dt__17CmdScoreRankFrameFv, CreateScene__17CmdScoreRankFrameFP8CmdScore, @24@__dt__17CmdScoreRankFrameFv, @36@
+00477d50-00478048    6 CmdScoreTitle            __ct__13CmdScoreTitleFv, __dt__13CmdScoreTitleFv, CreateScene__13CmdScoreTitleFP8CmdScore, UpdateScene__13CmdScoreTitleFP8CmdScorePc, @24@__
+00478050-004781cc    2 CmdSubTitle              __ct__11CmdSubTitleFv, __dt__11CmdSubTitleFv
+004781d0-00478264    1 CmdGoodsSubTitle         __dt__16CmdGoodsSubTitleFv
+00478270-00478510    2 CmdSubTitle              DelayDelete__11CmdSubTitleFv, Create__11CmdSubTitleFi
+00478510-00478574    1 CmdGoodsSubTitle         __ct__16CmdGoodsSubTitleFv
+00478580-0047883c    2 CmdSubTitle              Reset__11CmdSubTitleFv, SetTitle__11CmdSubTitleFii
+00478840-0047892c    1 CmdKeyCustom             __ct__12CmdKeyCustomFv
+00478930-004789ec    2 CmdGoodsKeyCustom        __dt__17CmdGoodsKeyCustomFv, __ct__17CmdGoodsKeyCustomFv
+004789f0-00479e50   10 CmdKeyCustom             __dt__12CmdKeyCustomFv, GetReady__12CmdKeyCustomFv, Run__12CmdKeyCustomFv, SetButton__12CmdKeyCustomFi, SetAssign__12CmdKeyCustomFi, Select_
+00479e50-00479f5c    1 CmdKeyCustomPad          __ct__15CmdKeyCustomPadFv
+00479f60-0047a084    2 CmdGoodsPad              __dt__11CmdGoodsPadFv, __ct__11CmdGoodsPadFv
+0047a090-0047a718    5 CmdKeyCustomPad          __dt__15CmdKeyCustomPadFv, CreateScene__15CmdKeyCustomPadFP12CmdKeyCustom, SetLineColor__15CmdKeyCustomPadFii, @24@__dt__15CmdKeyCustomPadFv
+0047a720-0047a7ec    1 CmdKeyCustomMenu         __ct__16CmdKeyCustomMenuFv
+0047a7f0-0047a8cc    2 CmdGoodsPadMenu          __dt__15CmdGoodsPadMenuFv, __ct__15CmdGoodsPadMenuFv
+0047a8d0-0047acf8    4 CmdKeyCustomMenu         __dt__16CmdKeyCustomMenuFv, CreateScene__16CmdKeyCustomMenuFP12CmdKeyCustom, @24@__dt__16CmdKeyCustomMenuFv, @36@__dt__16CmdKeyCustomMenuFv
+0047ad00-0047b2d4    6 CmdSubMenu               __ct__10CmdSubMenuFv, __dt__10CmdSubMenuFv, DelayDelete__10CmdSubMenuFv, CreateScene__10CmdSubMenuFsP9MSDSystem, UpdateScene__10CmdSubMenuFs
+0047b2e0-0047b7b8    6 CmdLibraryInfo           __ct__14CmdLibraryInfoFv, __dt__14CmdLibraryInfoFv, CreateScene__14CmdLibraryInfoFP10CmdLibrarys, UpdateScene__14CmdLibraryInfoFP10CmdLibrar
+0047b7c0-0047b980    4 CmdLibraryTitle          __ct__15CmdLibraryTitleFv, __dt__15CmdLibraryTitleFv, CreateNumber__15CmdLibraryTitleFv, SetNumber__15CmdLibraryTitleFv
+0047b980-0047c368    6 CmdFusionParameter       __ct__18CmdFusionParameterFv, __dt__18CmdFusionParameterFv, CreateScene__18CmdFusionParameterFP9CmdFusion, UpdateScene__18CmdFusionParameter
+0047c370-0047caf8    6 CmdFusionStatus          __ct__15CmdFusionStatusFv, __dt__15CmdFusionStatusFv, CreateScene__15CmdFusionStatusFP9CmdFusion, UpdateScene__15CmdFusionStatusFP9CmdFusion
+0047cb00-0047d2c8    7 CmdFusionSkillList       __ct__18CmdFusionSkillListFv, __dt__18CmdFusionSkillListFv, CreateScene__18CmdFusionSkillListFP9CmdFusion, UpdateScene__18CmdFusionSkillList
+0047d2d0-0047dad8    6 CmdFusionCharge          __ct__15CmdFusionChargeFv, __dt__15CmdFusionChargeFv, CreateScene__15CmdFusionChargeFP9CmdFusion, UpdateScene__15CmdFusionChargeFP9CmdFusion
+0047dae0-0047dd68    5 CmdFusionLevelup         __ct__16CmdFusionLevelupFv, __dt__16CmdFusionLevelupFv, CreateScene__16CmdFusionLevelupFP9CmdFusion, @24@__dt__16CmdFusionLevelupFv, @36@__d
+0047dd70-0047f438   12 CmdFormation             __ct__12CmdFormationFv, __dt__12CmdFormationFv, GetReady__12CmdFormationFv, Run__12CmdFormationFv, CreateMessage__12CmdFormationFi, SetButto
+0047f440-0047f6a4    2 CmdFormationMember       __ct__18CmdFormationMemberFv, __dt__18CmdFormationMemberFv
+0047f6b0-0047f814    1 CmdFormationParameter    __dt__21CmdFormationParameterFv
+0047f820-004802f0    1 CmdFormationMember       CreateScene__18CmdFormationMemberFP12CmdFormation
+004802f0-00480434    1 CmdFormationParameter    __ct__21CmdFormationParameterFv
+00480440-00480cd8    5 CmdFormationMember       UpdateScene__18CmdFormationMemberFP12CmdFormations, Select__18CmdFormationMemberFP9MenuPlaceP9MenuPlace, Blackout__18CmdFormationMemberFP12C
+00480ce0-00480ffc    2 CmdFormationTeam         __ct__16CmdFormationTeamFv, __dt__16CmdFormationTeamFv
+00481000-004810f4    1 CmdFormationTeamData     __dt__20CmdFormationTeamDataFv
+00481100-00481b18    1 CmdFormationTeam         CreateScene__16CmdFormationTeamFP12CmdFormation
+00481b20-00481bfc    1 CmdFormationTeamData     __ct__20CmdFormationTeamDataFv
+00481c00-00483148   12 CmdFormationTeam         UpdateName__16CmdFormationTeamFP12CmdFormation, UpdateSlot__16CmdFormationTeamFP12CmdFormations, ChoiceMember__16CmdFormationTeamFP12CmdForm
+00483150-00483618    7 CmdNoteMessage           __ct__14CmdNoteMessageFv, __dt__14CmdNoteMessageFv, CreateScene__14CmdNoteMessageFP9MenuScenePci, Run__14CmdNoteMessageFUs, DelayDelete__14C
+00483620-00485244   18 CmdWolfBout              __ct__11CmdWolfBoutFv, __dt__11CmdWolfBoutFv, GetReady__11CmdWolfBoutFv, Run__11CmdWolfBoutFv, SafeDelayDelete__11CmdWolfBoutFv, Close__11Cm
+00485250-00485b18    6 CmdWolfBoutStamp         __ct__16CmdWolfBoutStampFv, __dt__16CmdWolfBoutStampFv, CreateScene__16CmdWolfBoutStampFP11CmdWolfBouts, Select__16CmdWolfBoutStampFP11CmdWo
+00485b20-00485ee8    6 CmdWolfBoutProfile       __ct__18CmdWolfBoutProfileFv, __dt__18CmdWolfBoutProfileFv, CreateScene__18CmdWolfBoutProfileFP11CmdWolfBout, UpdateScene__18CmdWolfBoutProf
+00485ef0-00488610   21 CmdComboKey              __ct__11CmdComboKeyFv, __dt__11CmdComboKeyFv, GetReady__11CmdComboKeyFv, Run__11CmdComboKeyFv, Update__11CmdComboKeyFs, UpdateCommand__11Cmd
+00488610-004886fc    1 CmdComboKeySlot          __ct__15CmdComboKeySlotFv
+00488700-004887fc    2 CmdGoodsComboKey         __dt__16CmdGoodsComboKeyFv, __ct__16CmdGoodsComboKeyFv
+00488800-00489208    6 CmdComboKeySlot          __dt__15CmdComboKeySlotFv, CreateScene__15CmdComboKeySlotFP11CmdComboKey, UpdateScene__15CmdComboKeySlotFP11CmdComboKeyss, Select__15CmdComb
+00489210-004898a8    7 CmdComboKeyCommand       __ct__18CmdComboKeyCommandFv, __dt__18CmdComboKeyCommandFv, CreateScene__18CmdComboKeyCommandFP11CmdComboKey, UpdateScene__18CmdComboKeyComm
+004898b0-00489f88    7 CmdComboKeyCharacter     __ct__20CmdComboKeyCharacterFv, __dt__20CmdComboKeyCharacterFv, CreateScene__20CmdComboKeyCharacterFP11CmdComboKey, UpdateScene__20CmdComboK
+00489f90-0048a928    7 CmdComboKeyGoods         __ct__16CmdComboKeyGoodsFv, __dt__16CmdComboKeyGoodsFv, CreateScene__16CmdComboKeyGoodsFP11CmdComboKey, UpdateScene__16CmdComboKeyGoodsFP11C
+0048a930-0048b53c    5 CmdPCInfo                __ct__9CmdPCInfoFv, __dt__9CmdPCInfoFv, GetReady__9CmdPCInfoFv, DelayDelete__9CmdPCInfoFv, UpdateScene__9CmdPCInfoFP5CmdPCP11CmdPCStatus
+0048b540-0048bd70    8 CmdPCScene               __ct__10CmdPCSceneFv, __dt__10CmdPCSceneFv, Update__10CmdPCSceneFs, CreatePCInfo__10CmdPCSceneFPUc, UpdatePCInfo__10CmdPCSceneFsP11CmdPCStat
+0048bd70-0048c128    5 CmdTopMenuData           __ct__14CmdTopMenuDataFv, __dt__14CmdTopMenuDataFv, CreateScene__14CmdTopMenuDataFP6CmdTop, @24@__dt__14CmdTopMenuDataFv, @36@__dt__14CmdTop
+0048c130-0048d2a8    8 CmdComboMagic            __ct__13CmdComboMagicFv, __dt__13CmdComboMagicFv, GetReady__13CmdComboMagicFv, Run__13CmdComboMagicFv, Enter__13CmdComboMagicFv, Exit__13Cmd
+0048d2b0-0048e9d8   10 CmdMagic                 __ct__8CmdMagicFv, __dt__8CmdMagicFv, GetReady__8CmdMagicFv, Run__8CmdMagicFv, Update__8CmdMagicFs, Enter__8CmdMagicFv
+0048e9e0-0048f348    7 CmdMagicGoods            __ct__13CmdMagicGoodsFv, __dt__13CmdMagicGoodsFv, CreateScene__13CmdMagicGoodsFP8CmdMagic, UpdateScene__13CmdMagicGoodsFP8CmdMagicPc, Select
+0048f350-0048fae8    6 CmdEquipmentStatus       __ct__18CmdEquipmentStatusFv, __dt__18CmdEquipmentStatusFv, CreateScene__18CmdEquipmentStatusFP12CmdEquipment, UpdateScene__18CmdEquipmentSt
+0048faf0-004900d8    7 CmdRingCustomGoods       __ct__18CmdRingCustomGoodsFv, __dt__18CmdRingCustomGoodsFv, CreateScene__18CmdRingCustomGoodsFP13CmdRingCustom, UpdateScene__18CmdRingCustom
+004900e0-00490c98    6 CmdCrestPCInfo           __ct__14CmdCrestPCInfoFv, __dt__14CmdCrestPCInfoFv, CreateScene__14CmdCrestPCInfoFP8CmdCrest, UpdateScene__14CmdCrestPCInfoFP8CmdCrests, @24
+00490ca0-004950a8   26 CmdCrest                 __ct__8CmdCrestFv, __dt__8CmdCrestFv, GetReady__8CmdCrestFv, Run__8CmdCrestFv, Update__8CmdCrestFs, UpdateSlot__8CmdCrestFs
+004950b0-004952f8    2 CmdGoodsCrest            __ct__13CmdGoodsCrestFv, __dt__13CmdGoodsCrestFv
+00495300-0049542c    1 CmdGoodsCrestData        __dt__17CmdGoodsCrestDataFv
+00495430-004958b4    1 CmdGoodsCrest            CreateScene__13CmdGoodsCrestFP9MenuScenesss
+004958c0-004959ac    1 CmdGoodsCrestData        __ct__17CmdGoodsCrestDataFv
+004959b0-00496328    8 CmdGoodsCrest            CreateImage__13CmdGoodsCrestFP11MenuTexture, Select__13CmdGoodsCrestFP9MenuSceneP7CmdNoteP9MenuGroupP9MenuGroup, SetClut__13CmdGoodsCrestFP9
+00496330-00497490    8 CmdWhiteMagic            __ct__13CmdWhiteMagicFv, __dt__13CmdWhiteMagicFv, GetReady__13CmdWhiteMagicFv, Run__13CmdWhiteMagicFv, Enter__13CmdWhiteMagicFv, Exit__13Cmd
+00497490-00498168    6 CmdCrestMagic            __ct__13CmdCrestMagicFv, __dt__13CmdCrestMagicFv, CreateScene__13CmdCrestMagicFP8CmdCrestP11MenuTexture, UpdateScene__13CmdCrestMagicFP8CmdC
+00498170-004982b8    1 CmdCrestDetail           __ct__14CmdCrestDetailFv
+004982c0-00498434    2 CmdCrestDetailData       __dt__18CmdCrestDetailDataFv, __ct__18CmdCrestDetailDataFv
+00498440-00498fd8    5 CmdCrestDetail           __dt__14CmdCrestDetailFv, CreateScene__14CmdCrestDetailFP9MenuSceneP11MenuTexture, UpdateScene__14CmdCrestDetailFP9MenuSceneP8CmdPartyP13Men
+00498fe0-0049923c    3 MenuModelAuraRegister    __ct__21MenuModelAuraRegisterFv, __dt__21MenuModelAuraRegisterFv, getPacket__21MenuModelAuraRegisterFv
+00499240-004999e8    6 MenuModelAuraPacket      __ct__19MenuModelAuraPacketFv, __dt__19MenuModelAuraPacketFv, Create__19MenuModelAuraPacketFsUc, SetAura__19MenuModelAuraPacketFP4_QWDii, Ru
+004999f0-0049a2fc    3 MenuModelAura            __ct__13MenuModelAuraFv, __dt__13MenuModelAuraFv, CreateAura__13MenuModelAuraFP16MenuModelManegerP12MenuAuraData
+0049a300-0049a3b8    2 _rgba32                  __as__7_rgba32FRC7_rgba32, __ct__7_rgba32FUcUcUcUc
+0049a3c0-0049af74    6 MenuModelAura            Boot__13MenuModelAuraFv, Standby__13MenuModelAuraFUc, Close__13MenuModelAuraFv, CloseEffect__13MenuModelAuraFv, Polling__13MenuModelAuraFv, 
+0049af80-0049b888    6 CmdFence                 __ct__8CmdFenceFv, __dt__8CmdFenceFv, CreateFence__8CmdFenceFP9MenuScenePUc, SetTitle__8CmdFenceFP9MenuScenes, @24@__dt__8CmdFenceFv, @36@__
+0049b890-0049e200   16 CmdPropertyList          __ct__15CmdPropertyListFv, __dt__15CmdPropertyListFv, GetReady__15CmdPropertyListFv, Run__15CmdPropertyListFv, UpdateGoods__15CmdPropertyLis
+0049e200-0049f208    7 CmdPropertyGoods         __ct__16CmdPropertyGoodsFv, __dt__16CmdPropertyGoodsFv, CreateScene__16CmdPropertyGoodsFP15CmdPropertyLists, UpdateScene__16CmdPropertyGoods
+0049f210-0049fc28    8 CmdRingCustomCount       __ct__18CmdRingCustomCountFv, __dt__18CmdRingCustomCountFv, CreateScene__18CmdRingCustomCountFP13CmdRingCustom, UpdateScene__18CmdRingCustom
+0049fc30-004a0248    7 CmdRingCustomAutoRing    __ct__21CmdRingCustomAutoRingFv, __dt__21CmdRingCustomAutoRingFv, CreateScene__21CmdRingCustomAutoRingFP13CmdRingCustom, UpdateScene__21CmdR
+004a0250-004a02d0    1 FaceImageData            __ct__13FaceImageDataFv
+004a02d0-004a0334    1 DelayDeleteObject        __dt__17DelayDeleteObjectFv
+004a0340-004a0440    1 FaceImageData            __dt__13FaceImageDataFv
+004a0440-004a0bac    9 FaceImage                __ct__9FaceImageFv, __dt__9FaceImageFv, Create__9FaceImageFi, Release__9FaceImageFv, Open__9FaceImageFUci, Close__9FaceImageFUci
+004a0bb0-004a0d80    2 FieldMessageData         __ct__16FieldMessageDataFv, __dt__16FieldMessageDataFv
+004a0d80-004a2a28   17 FieldMessage             __ct__12FieldMessageFv, __dt__12FieldMessageFv, CreateWindow__12FieldMessageFsUcUcUcs, DestroyWindow__12FieldMessageFv, ChengeLayer__12Field
+004a2a30-004a2af4    2 <free>                   GetDTCExSize__FP8_DTCINFO, clipRadian__FRf
+004a2b00-004a2cec    1 CField                   __ct__6CFieldFv
+004a2cf0-004a2d64    1 CScriptEx                __dt__9CScriptExFv
+004a2d70-004a2da4    1 CMusic                   SetCallback__6CMusicFPFUcUiUi_vUi
+004a2db0-004a2e9c    1 CField                   __dt__6CFieldFv
+004a2ea0-004a2ebc    1 CFieldSocket             GetCurMPSname__12CFieldSocketFv
+004a2ec0-004a2ef0    1 FileManeger              ReleaseHandle__11FileManegerFv
+004a2ef0-004a31b0    5 CField                   CheckResetPause__6CFieldFv, Delete__6CFieldFv, Init__6CFieldFPCc, LinkA__6CFieldFv, SetTeamChgData__6CFieldFP9BufMemory
+004a31b0-004a31d4    1 FldTeamChange            SetData__13FldTeamChangeFP9BufMemory
+004a31e0-004a3360    2 CField                   preLoad__6CFieldFv, Start__6CFieldFv
+004a3360-004a3388    1 CPad                     SetPriority__4CPadFRCQ24CPad8Priority
+004a3390-004a3494    2 CField                   closeInquiry__6CFieldFv, Restart__6CFieldFv
+004a34a0-004a34c4    1 CFieldCamera             SetViewDelay__12CFieldCameraFf
+004a34d0-004a3630    2 CField                   PurgeModel__6CFieldFv, SaveModel__6CFieldFv
+004a3630-004a3694    2 CFieldModel              GetPos__11CFieldModelFv, isDsp__11CFieldModelFv
+004a36a0-004a38fc    1 CField                   ClearSDB__6CFieldFi
+004a3900-004a395c    1 CFieldBG                 __dt__8CFieldBGFv
+004a3960-004a3980    1 CFieldCamera             CompClear__12CFieldCameraFv
+004a3980-004a3b80    4 CField                   GetBGModel__6CFieldFi, GetCtrlModel__6CFieldFv, CheckEventBox__6CFieldFR7FVector, Pause__6CFieldFi
+004a3b80-004a3bc0    1 CScript                  Pause__7CScriptFi
+004a3bc0-004a3d78    1 CField                   Dsp__6CFieldFv
+004a3d80-004a3dc0    1 FldTimer                 Mask__8FldTimerFi
+004a3dc0-004a3e00    1 CField                   SetHalfVol__6CFieldFi
+004a3e00-004a3e14    1 P2Clut                   isCreate__6P2ClutFv
+004a3e20-004a3f90    1 CField                   Clr__6CFieldFv
+004a3f90-004a40d4    1 <free>                   FldInitLSDPlayer__Fv
+004a40e0-004a41d4    1 _FieldSaveInfo           FindFileTbl__14_FieldSaveInfoFPc
+004a41e0-004a4468    1 CField                   SaveModelS__6CFieldFi
+004a4470-004a44b0    1 _FieldDataCache          GetName__15_FieldDataCacheFPc
+004a44b0-004a4b5c    4 CField                   GetModel__6CFieldFi, RestoreModel__6CFieldFii, SaveField__6CFieldFv, RestoreField__6CFieldFv
+004a4b60-004a4b80    1 CFieldSocket             isLoading__12CFieldSocketFv
+004a4b80-004a4cf4    1 CField                   PlayMCES__6CFieldFPCcii
+004a4d00-004a4d40    1 SSHSys                   SetPauserType__6SSHSysFi
+004a4d40-004a4fd8    3 CField                   cbMCES__6CFieldFv, StartMCES__6CFieldFv, SetMCESMode__6CFieldFPCcii
+004a4fe0-004a50c0    2 <free>                   FieldBreakMCES__Fv, FieldExitPauseMCES__Fv
+004a50c0-004a5210    1 CField                   BreakMCES__6CFieldFi
+004a5210-004a5250    1 CScrCapture              SetLayer__11CScrCaptureFi
+004a5250-004a533c    1 <free>                   MCESInvokeBattle__Fv
+004a5340-004a5464    1 CField                   ResetMCES__6CFieldFi
+004a5470-004a549c    1 Sdrv                     Unpause__4SdrvFv
+004a54a0-004a58b0    1 CField                   UpdateMCES__6CFieldFv
+004a58b0-004a5918    1 CFieldSocket             isFaderBusy__12CFieldSocketFi
+004a5920-004a5944    1 LSDPlayer                setStartCallBack__9LSDPlayerFPFv_b
+004a5950-004a5984    1 CPad                     GetReal__4CPadCFv
+004a5990-004a59e8    1 CField                   FileReadOrder__6CFieldFiPCcPv
+004a59f0-004a5ad8    2 <free>                   _toUpper__Fi, _stricmp__FPCcPCc
+004a5ae0-004a5f1c    2 CField                   cbDataRead__6CFieldFiP9BufMemoryiPcPv, ReleaseWindow__6CFieldFv
+004a5f20-004a610c    1 <free>                   MakeMoveControl__FRfRfP4CPad
+004a6110-004a61dc    3 CAnalogStick             GetDegree__12CAnalogStickCFv, GetGauge__12CAnalogStickCFv, __ct__12CAnalogStickFRC12CAnalogStick
+004a61e0-004a6254    2 CPad                     GetAnalogStickL__4CPadCFv, GetPress__4CPadCFv
+004a6260-004a8094    1 CField                   Polling__6CFieldFv
+004a80a0-004a80bc    1 Matrix                   GetAt__6MatrixFv
+004a80c0-004a80ec    2 GsxCamera                GetFrame__9GsxCameraFv, GetActiveCamera__9GsxCameraFv
+004a80f0-004a8154    2 FldTimer                 ClrAlerm__8FldTimerFv, isAlerm__8FldTimerFv
+004a8160-004a8204    2 FVector                  __ml__7FVectorCFf, InnerProduct__7FVectorCFRC7FVector
+004a8210-004a8224    1 SaveMenuSection          GetOption__15SaveMenuSectionFv
+004a8230-004a8294    2 CFieldModel              isAutoCtrl__11CFieldModelFv, GetRot__11CFieldModelFv
+004a82a0-004a82d4    1 CFieldCamera             GetCameraAngle__12CFieldCameraFv
+004a82e0-004a839c    3 CFieldModel              isManual__11CFieldModelFv, isLoading__11CFieldModelFv, GetRotY__11CFieldModelFv
+004a83a0-004a83bc    1 SSHSys                   GetFrameDelta__6SSHSysFv
+004a83c0-004a83e8    1 CFieldSocket             isStable__12CFieldSocketFv
+004a83f0-004a89a8    2 CField                   UpdateNavi__6CFieldFUii, CameraUpdate__6CFieldFf
+004a89b0-004a89e4    1 CFieldCamera             GetCameraPos__12CFieldCameraFv
+004a89f0-004aa5dc    3 CField                   CheckMirror__6CFieldFv, ReverseVector__6CFieldFR7FVector, UpdateFieldCamera__6CFieldFv
+004aa5e0-004aa654    2 CFieldCamera             SetCameraPos__12CFieldCameraF7FVector, GetTargetPos__12CFieldCameraFv
+004aa660-004aa694    1 Matrix                   RotXMatrix__6MatrixFf
+004aa6a0-004aa6d4    1 CFieldModel              GetMdlRot__11CFieldModelFv
+004aa6e0-004aa710    1 CField                   WaitCamera__6CFieldFv
+004aa710-004aa748    1 CFieldCamera             bComp__12CFieldCameraFv
+004aa750-004ab7fc    1 CField                   UpdateScrCamera__6CFieldFf
+004ab800-004ab81c    1 CFieldModel              GetModel__11CFieldModelFv
+004ab820-004ab860    1 CFieldCamera             SetCmpMode__12CFieldCameraFi
+004ab860-004ac834    4 CField                   InitSDB__6CFieldFP6CSTGDB, GetEntryPoint__6CFieldFiRi, AddLight__6CFieldFP5FrameUi, UpdateLight__6CFieldFv
+004ac840-004ac86c    1 CFieldModel              isLoaded__11CFieldModelFv
+004ac870-004b0434    2 CField                   AutoDelLight__6CFieldFv, CallFunc__6CFieldFiiP9_ParStack
+004b0440-004b04a4    2 FldTimer                 GetCount__8FldTimerFv, SetPos__8FldTimerFii
+004b04b0-004b0538    3 CField                   SetActiveFace__6CFieldFi, SetActiveName__6CFieldFi, SetActiveWindow__6CFieldFi
+004b0540-004b0654    6 CFieldModel              isEmpty__11CFieldModelFv, ClrViewPoint__11CFieldModelFv, SetManual__11CFieldModelFi, SetCmd__11CFieldModelFi, SetMotionSpeed__11CFieldModelF
+004b0660-004b06a4    1 CNaviMap                 AttachFrame__8CNaviMapFiP5Frame
+004b06b0-004b0944    1 CField                   SpecialMenu__6CFieldFii
+004b0950-004b0a14    2 SaveMenuSection          SetMenuFlag__15SaveMenuSectionFcc, SetHelp__15SaveMenuSectionFs
+004b0a20-004b0c4c    2 CField                   cbShop__6CFieldFiPv, cbTailor__6CFieldFiPv
+004b0c50-004b0cd8    1 <free>                   GetNumber__FRPCc
+004b0ce0-004b1590    5 CField                   SetRing__6CFieldFiiiiiPCc, RingControl__6CFieldFiiii, cbRing__6CFieldFiPvPv, UpdateRing__6CFieldFv, RingResult__6CFieldFv
+004b1590-004b1b4c    1 <free>                   VectorOperation__FiP9_ParStack
+004b1b50-004b1b6c    1 FVector                  __amu__7FVectorFRC7FVector
+004b1b70-004b23c4    1 CField                   SetFieldData__6CFieldFiii
+004b23d0-004b23f4    1 SaveMenuSection          SetSaveID__15SaveMenuSectionFUi
+004b2400-004b2478    2 BtlSaveSec               SetGranHatenaMode__10BtlSaveSecFb, SetYoahismMode__10BtlSaveSecFb
+004b2480-004b24d4    2 SaveMenuSection          SetCurrentPartySet__15SaveMenuSectionFc, SetLockParty__15SaveMenuSectionFUc
+004b24e0-004b284c    1 CField                   GetFieldData__6CFieldFiii
+004b2850-004b28a4    2 SaveMenuSection          GetPartySet__15SaveMenuSectionFc, GetSaveID__15SaveMenuSectionFv
+004b28b0-004b2b04    2 CField                   MapJump__6CFieldFPCc, MapJumpA__6CFieldFPCci
+004b2b10-004b2b48    1 <free>                   cbLoadMotion__FUiUiPv
+004b2b50-004b3d08   14 CField                   LoadMotionCB__6CFieldFUiUi, CharPathEvent__6CFieldFP11CFieldModelUii, SetFieldEvent__6CFieldFiUiiii, AddDelayEvent__6CFieldFiUiiii, UpdateDe
+004b3d10-004b3d34    1 CFieldModel              isMove__11CFieldModelFv
+004b3d40-004b3dd0    1 <free>                   FindFrame__FP11CFieldModelPCc
+004b3dd0-004b3ff0    1 CField                   DetachModel__6CFieldFii
+004b3ff0-004b4020    1 CFieldModel              isFloorChk__11CFieldModelFv
+004b4020-004b4128    1 <free>                   CalcStandParent__FR7FVectorP11CFieldModelf
+004b4130-004b4de4    6 CField                   CharAddItem__6CFieldFiiPCci, CharRemoveItem__6CFieldFiPCc, SetMotion__6CFieldFiii, SetBGMotion__6CFieldFiPCcPCc, SetCharacterDir__6CFieldFii
+004b4df0-004b4e14    1 CFieldModel              isHitChk__11CFieldModelFv
+004b4e20-004b4fbc    1 CField                   SetCharacterInfo__6CFieldFiii
+004b4fc0-004b5040    2 CFieldModel              SetHitCheck__11CFieldModelFi, SetFloorChk__11CFieldModelFi
+004b5040-004b5220    2 CField                   CreateWindow__6CFieldFiiii, RecreateWindow__6CFieldFPQ26CField8_WndInfo
+004b5220-004b5258    1 FieldMessage             SetVariable__12FieldMessageFUc
+004b5260-004b529c    1 FontItem                 SetVariable__8FontItemFUc
+004b52a0-004b55d4    5 CField                   SetWindowPos__6CFieldFii, SetWindowSize__6CFieldFii, OpenWindow__6CFieldFii, CloseWindow__6CFieldFii, UpdateMsgState__6CFieldFv
+004b55e0-004b5600    1 FieldMessage             GetState__12FieldMessageCFv
+004b5600-004b5a4c    5 CField                   OpenMessage__6CFieldFPcii, ClearMessage__6CFieldFv, KeyWait__6CFieldFv, KeyWaitStat__6CFieldFv, LoadFace__6CFieldFii
+004b5a50-004b5ab4    1 FaceImage                SetSize__9FaceImageFff
+004b5ac0-004b5bbc    2 CField                   ReleaseFace__6CFieldFi, SetFacePos__6CFieldFii
+004b5bc0-004b5c00    1 FaceImage                SetPosition__9FaceImageFff
+004b5c00-004b616c   10 CField                   SetFaceSize__6CFieldFii, OpenFace__6CFieldFii, CloseFace__6CFieldFii, CreateName__6CFieldFiiii, SetNamePos__6CFieldFii, OpenName__6CFieldFPc
+004b6170-004b61a8    1 FieldMessage             SetCancel__12FieldMessageFUc
+004b61b0-004b61ec    1 Cursor                   SetCancel__6CursorFUc
+004b61f0-004b6230    1 FieldMessage             SetSelectMode__12FieldMessageFUc
+004b6230-004b6498    1 CField                   Select__6CFieldFRi
+004b64a0-004b64c0    1 FieldMessage             GetResult__12FieldMessageCFv
+004b64c0-004b64fc    1 <free>                   GetImgName__FPcPCc
+004b6500-004b710c   12 CField                   LoadImage__6CFieldFPCci, DspImage__6CFieldFiiiii, ClrImage__6CFieldFiiib, SetEncountRate__6CFieldFi, UpdateMoveDistance__6CFieldFfi, Treasur
+004b7110-004b71c0    1 <free>                   CreateSavePoint__FP9_SavPointP5Model
+004b71c0-004b71e4    1 SavePoint                SetCheckModel__9SavePointFP5Model
+004b71f0-004b785c    4 CField                   SetSavePoint__6CFieldFiPfi, UpdateSavePoint__6CFieldFv, ClrSavePoint__6CFieldFi, ChkSavePoint__6CFieldFv
+004b7860-004b78a4    1 SavePoint                IsOn__9SavePointFv
+004b78b0-004b79b8    1 CField                   ShowSavePoint__6CFieldFi
+004b79c0-004b7a7c    1 <free>                   CreateWarpPoint__FP9_WapPointi
+004b7a80-004b7ab4    1 WarpPoint                SetPos__9WarpPointFR7FVector
+004b7ac0-004b7e5c    2 CField                   SetWarpPoint__6CFieldFiPfii, UpdateWarpPoint__6CFieldFv
+004b7e60-004b7e84    1 WarpPoint                SetCheckModel__9WarpPointFP5Model
+004b7e90-004b860c    5 CField                   ClrWarpPoint__6CFieldFi, WarpFade__6CFieldFii, ShowWarpPoint__6CFieldFi, DoWarp__6CFieldFiiUiUi, IsWarp__6CFieldFi
+004b8610-004b8664    1 WarpPoint                IsWarpEnded__9WarpPointFv
+004b8670-004b8ba4    4 CField                   VibRelease__6CFieldFv, StartVib__6CFieldFiii, StartVib__6CFieldFiPCci, VibControl__6CFieldFiiii
+004b8bb0-004b8bd4    1 CVibe                    isPlay__5CVibeFv
+004b8be0-004b8ca0    1 CField                   isLoadBusy__6CFieldFv
+004b8ca0-004b8cb4    1 CSndBufCache             GetOrder__12CSndBufCacheFv
+004b8cc0-004b9530    3 CField                   CheckEncount__6CFieldFv, ScriptSuspend__6CFieldFv, InvokeBattle__6CFieldFiiiiii
+004b9530-004b9544    1 SaveMenuSection          GetParty__15SaveMenuSectionFv
+004b9550-004b9f44    5 CField                   SetCamera__6CFieldFPfifi, SetCamera__6CFieldFPfiif, SetCamera__6CFieldFiPfPff, RestoreCamera__6CFieldFf, GetCamPath__6CFieldFiP7FVectorf
+004b9f50-004bb1c0    1 <free>                   GetNearestPath__FPQ23SDB10tagFCAMERA7FVectorRi
+004bb1c0-004bc040    4 CField                   GetCamPathA__6CFieldFiP7FVectorf, GetCamPath2__6CFieldFP7FVectori7FVector, ChkPathPoint__6CFieldF7FVectorP7FVectorPf, GetPathPoint__6CFieldF
+004bc040-004bc848    8 FldSpline                __ct__9FldSplineFv, Clear__Q29FldSpline6_flagsFv, __dt__9FldSplineFv, Release__9FldSplineFv, SetPoint__9FldSplineFUiP7FVector, Create__9FldS
+004bc850-004be18c    9 CFloorMan                __ct__9CFloorManFv, __dt__9CFloorManFv, SetData__9CFloorManFP6CSTGDB, SetRotY__9CFloorManFf, SetObstacle__9CFloorManFii, OnFloorChk__9CFloor
+004be190-004beeb8    7 CFieldCamera             __ct__12CFieldCameraFv, __dt__12CFieldCameraFv, Init__12CFieldCameraFv, clear__Q212CFieldCamera6_flagsFv, SetTargetPos__12CFieldCameraF7FVec
+004beec0-004bef14    2 Matrix                   TransMatrix__6MatrixFRC7FVector, RotZMatrix__6MatrixFf
+004bef20-004bef94    1 CFieldCamera             CompFrame__12CFieldCameraFf
+004befa0-004bf770    8 CFieldEvent              __ct__11CFieldEventFv, __dt__11CFieldEventFv, Init__11CFieldEventFPQ23SDB11tagEVENTBOXii, HitCheck__11CFieldEventF7FVectorii, GetEventNum__1
+004bf770-004bf920    2 _FieldDataCache          Release__15_FieldDataCacheFv, FindKey__15_FieldDataCacheFPCc
+004bf920-004bf9c4    1 <free>                   EncodeChar__Fi
+004bf9d0-004bff50    4 _FieldDataCache          EncodeKey__15_FieldDataCacheFPCcRUi, DecodeKey__15_FieldDataCacheFPcUiUi, Find__15_FieldDataCacheFiPCc, GetNewData__15_FieldDataCacheFiPCc
+004bff50-004c03dc    7 <free>                   EncodeMotionName__FPCc, DecodeMotionName__FPcUi, GetMotionName__FUi, InitFieldModel__Fv, GetModelReadCt__Fv, mdlReadCB__FiP9BufMemoryiPcPv
+004c03e0-004c07a0    6 CFieldModel              ReadMotionCB__11CFieldModelFiP9BufMemory, GetNewLoadQ__11CFieldModelFRi, GetLoadQ__11CFieldModelFi, PurgeLoadQ__11CFieldModelFi, __ct__11CFi
+004c07a0-004c07d0    1 _AutoMoveInfo            __ct__13_AutoMoveInfoFv
+004c07d0-004c080c    1 DelayDeleteObject        __ct__17DelayDeleteObjectFv
+004c0810-004c0838    1 CList                    __ct__5CListFv
+004c0840-004c2950   30 CFieldModel              InitWork__11CFieldModelFv, __dt__11CFieldModelFv, Delete__11CFieldModelFv, FindData__11CFieldModelFPCc, ReadFile__11CFieldModelFPCc, LoadMot
+004c2950-004c2974    1 CGhostEfx                AttachModel__9CGhostEfxFP5Model
+004c2980-004c2f18    4 CFieldModel              ClrModelEff__11CFieldModelFv, SetGhost__11CFieldModelFv, SetMirror__11CFieldModelFi, DspMirror__11CFieldModelFv
+004c2f20-004c2fb4    2 MirrorModel              setMirror__11MirrorModelFbbb, setOffset__11MirrorModelFfff
+004c2fc0-004c401c   11 CFieldModel              ClrMirror__11CFieldModelFi, UpdateMirrorOfs__11CFieldModelFiR7FVector, DispModel__11CFieldModelFiii, Clear__11CFieldModelFi, Dsp__11CFieldMo
+004c4020-004c4140    1 <free>                   InterPolPitch__Ffff
+004c4140-004c4e04    1 CFieldModel              UpdateViewPoint__11CFieldModelFf
+004c4e10-004c4fac    1 <free>                   GetSmoothVelocity__Ffffff
+004c4fb0-004c6a34    1 CFieldModel              Update__11CFieldModelFf
+004c6a40-004c6a5c    1 GsxCamera                GetMatrix__9GsxCameraFv
+004c6a60-004c6bec    2 CFieldModel              GetFramePos__11CFieldModelFPc, SetPos__11CFieldModelF7FVectorb
+004c6bf0-004c6d70    1 <free>                   ClipRadian__Ff
+004c6d70-004c6e68    1 CFieldModel              GetWorldPos__11CFieldModelFv
+004c6e70-004c6ef0    2 Matrix                   SetPos__6MatrixFRC7FVector, SetVector__6MatrixFiRC7FVector
+004c6ef0-004c6f94    1 CFieldModel              GetDir__11CFieldModelFv
+004c6fa0-004c7058    1 <free>                   GetRotAngle__Fi
+004c7060-004c7e3c    9 CFieldModel              SetDir__11CFieldModelFiii, SetDir__11CFieldModelFR7FVectorii, ResetMotion__11CFieldModelFv, HitChkM2M__11CFieldModelFf, HitChkM2E__11CFieldM
+004c7e40-004c7f0c    1 <free>                   checkKind__FPCc
+004c7f10-004c836c    3 CFieldModel              SearchFrame__11CFieldModelFPCc, AutoMove__11CFieldModelFP7FVectoriii, PathMove__11CFieldModelFiPC9_PATHLISTUi
+004c8370-004c8484    2 _AutoMoveInfo            clear__13_AutoMoveInfoFv, FixNode__13_AutoMoveInfoFv
+004c8490-004c84c0    1 _PathMoveInfo            clear__13_PathMoveInfoFv
+004c84c0-004ca4e8   10 CFieldModel              MakeMoveNode__11CFieldModelFP7FVector7FVector, UpdateNodeLen__11CFieldModelFv, PauseAutoMove__11CFieldModelFi, ArriveDistination__11CFieldMo
+004ca4f0-004ca7d8    2 <free>                   GetRand__Fi, CalcModelBBox__FP5ModelPf
+004ca7e0-004cacf0    3 CFieldModel              AutoAvoid__11CFieldModelFv, GetBaseModel__11CFieldModelFv, CreateModel__11CFieldModelFv
+004cacf0-004cad14    1 CFModel                  SetOwner__7CFModelFP11CFieldModel
+004cad20-004cad44    1 CXFModel                 SetOwner__8CXFModelFP11CFieldModel
+004cad50-004cc280    7 CFieldModel              GetFrame__11CFieldModelFv, AddTime__11CFieldModelFf, CalcMatrix__11CFieldModelFv, EventCallBack__11CFieldModelFPCcPCciiUi, MotionEndCallBack
+004cc280-004cc3dc    3 CFModel                  __ct__7CFModelFv, __dt__7CFModelFv, getPacket__7CFModelFv
+004cc3e0-004cc404    1 CField                   isPaused__6CFieldFv
+004cc410-004cc528    3 CFModel                  EventCallBack__7CFModelFPCcPCciiUi, MotionEndCallBack__7CFModelFPCc, TranseCallBack__7CFModelFRC7FVector7FVector
+004cc530-004cc7b8    6 CXFModel                 __ct__8CXFModelFv, __dt__8CXFModelFv, getPacket__8CXFModelFv, EventCallBack__8CXFModelFPCcPCciiUi, MotionEndCallBack__8CXFModelFPCc, TranseC
+004cc7c0-004ccc18    6 CBalIcon                 __ct__8CBalIconFv, clear__Q28CBalIcon6_flagsFv, __dt__8CBalIconFv, Delete__8CBalIconFv, Release__8CBalIconFv, SetPat__8CBalIconFii
+004ccc20-004ccc54    1 P2Sprite                 SetHotSpot__8P2SpriteFff
+004ccc60-004ccca0    1 FldSprite                Set3D__9FldSpriteFi
+004ccca0-004ccdc8    4 P2Sprite                 SetSize__8P2SpriteFff, SetDirty__8P2SpriteFv, SetTexSize__8P2SpriteFff, SetTexPos__8P2SpriteFff
+004ccdd0-004cce04    1 FldSprite                SetFilter__9FldSpriteFi
+004cce10-004cce50    1 P2Sprite                 SetFilter__8P2SpriteFi
+004cce50-004cdb34    4 CBalIcon                 Dsp__8CBalIconFv, Clr__8CBalIconFv, SetCenter__8CBalIconFP7FVector, AddTime__8CBalIconFf
+004cdb40-004cdba4    2 FldSprite                isDsp__9FldSpriteFv, SetOffset__9FldSpriteFff
+004cdbb0-004cdbf8    1 P2Sprite                 SetScale__8P2SpriteFff
+004cdc00-004cdcbc    1 CFieldModel              DspIcon__11CFieldModelFi
+004cdcc0-004cdf7c    2 <free>                   CnvY__FUi, CnvModelGray__FP5Model
+004cdf80-004ce014    2 Model                    GetTexture__5ModelFi, GetTextureCount__5ModelFv
+004ce020-004ce028    1 CFModel                  @20@__dt__7CFModelFv
+004ce030-004ce038    1 CXFModel                 @20@__dt__8CXFModelFv
+004ce040-004ce234    3 BgeffLightPrim           __ct__14BgeffLightPrimFPv, __dt__14BgeffLightPrimFv, OnDelete__14BgeffLightPrimFv
+004ce240-004cef7c    5 BgeffLight               __ct__10BgeffLightFiPv, __dt__10BgeffLightFv, DeleteLight__10BgeffLightFv, Calculate__10BgeffLightFv, SetPacket__10BgeffLightFv
+004cef80-004cefdc    2 _QWD                     __as__4_QWDFRC4_QWD, __ct__4_QWDFv
+004cefe0-004cf02c    2 PutiObject               AddAddress__10PutiObjectFv, GetAddress__10PutiObjectFv
+004cf030-004cf08c    1 tagPutiVertex4           __ct__14tagPutiVertex4Fv
+004cf090-004cf0c4    2 PutiObject               CalcColor__10PutiObjectFv, OnChangeState__10PutiObjectFi
+004cf0d0-004cf0e0    1 PutiPrim                 TimeCall__8PutiPrimFv
+004cf0e0-004cf0e8    1 BgeffLightPrim           @20@__dt__14BgeffLightPrimFv
+004cf0f0-004cf198    1 <free>                   CreateFldBGEffect__FiPv
+004cf1a0-004cf2e0    1 CNaviMap                 __ct__8CNaviMapFv
+004cf2e0-004cf33c    1 _NaviWork                __ct__9_NaviWorkFv
+004cf340-004d03d4    9 CNaviMap                 Release__8CNaviMapFv, Delete__8CNaviMapFv, SetData__8CNaviMapFP15_NaviMapDataHdr, DspMesh__8CNaviMapFii, isDsp__8CNaviMapFv, DspClr__8CNaviM
+004d03e0-004d0400    1 GsxFrameBuf              GetBufEntry__11GsxFrameBufFv
+004d0400-004d0434    1 P2Pkt                    SetOwner__5P2PktFPFPv_vPv
+004d0440-004d04cc    1 FVector                  __as__7FVectorFRC7IVector
+004d04d0-004d0528    1 IVector                  __ct__7IVectorFiiii
+004d0530-004d0558    1 CNaviMap                 MakePacketS__8CNaviMapFPv
+004d0560-004d06a4    1 <free>                   GetColVector__FP7FVectorUi
+004d06b0-004d1554    2 CNaviMap                 GetPolyColor__8CNaviMapFP7FVector, MakePacket__8CNaviMapFv
+004d1560-004d15cc    2 P2Clut                   GetEntry__6P2ClutFi, GetPSM__6P2ClutFv
+004d15d0-004d1664    2 P2Pkt                    Init__5P2PktFv, GetFace__5P2PktFv
+004d1670-004d36a8    6 CNaviMap                 MakeMapPacket__8CNaviMapFv, MakeMaskPacket__8CNaviMapFv, Set4Sprite__8CNaviMapFRP4_QWDiiiiiii, SetCursor__8CNaviMapFv, GetNavVector__8CNaviM
+004d36b0-004d36f0    1 <free>                   HalfCol__FUi
+004d36f0-004d412c    1 CNaviMap                 MakeItemPacket__8CNaviMapFv
+004d4130-004d41b4    1 <free>                   GetRotMatrix__FR6Matrixi
+004d41c0-004d55f4   11 CNaviMap                 GetCenterPos__8CNaviMapFR7FVector, GetRectVertex__8CNaviMapFP4_DWDP7FVectoriff, GetArrowVertex__8CNaviMapFP4_DWDP7FVectori, GetSprVertex__8C
+004d5600-004d56a8    3 <free>                   GetBgmFileName__FPcPCc, GetSeFileName__FPcPCc, cbReadBGM__FiP9BufMemoryiPcPv
+004d56b0-004d572c    1 CField                   OnLoadBGM__6CFieldFv
+004d5730-004d57b8    1 <free>                   GetObjSeSize__FPQ23SDB9tagFOBJSE
+004d57c0-004d60e0    3 CField                   SetObjSE__6CFieldFiUiUiiP7FVector, SetObjSE__6CFieldFiPUli, AutoLoadSE__6CFieldFv
+004d60e0-004d7380    3 <free>                   Exp3DVolume__F7FVector7FVector7FVectorRiRii, Calc3DPosition__FP7FVectorP7FVectorP6_ObjSE, Exp3DVolumeC__FR7FVectorR7FVectorR7FVectorf
+004d7380-004da254   39 CField                   UpdateObjSE__6CFieldFv, CallSe__6CFieldFiiUi, LoadBgm__6CFieldFPCc, LoadOrder__6CFieldFPCc, CancelPlayOrder__6CFieldFv, PlayBgm__6CFieldFiUi
+004da260-004da28c    1 <free>                   cbReplace__FP6EffectPvi
+004da290-004da618    4 CField                   OnLoadEffect__6CFieldFP9BufMemoryiPv, OnEffectEnd__6CFieldFPvi, EffectControl__6CFieldFiiii, RemoveEffect__6CFieldFPv
+004da620-004dadf4    3 CFieldBG                 __ct__8CFieldBGFv, Create__8CFieldBGFP9BufMemoryi, Create__8CFieldBGFP6CSTGDBi
+004dae00-004dae7c    2 CFieldModel              SetRot__11CFieldModelF7FVector, SetExModel__11CFieldModelFi
+004dae80-004daec0    1 CFieldBG                 GetMirrorInfo__8CFieldBGFRi
+004daec0-004dafac    1 <free>                   CheckMirrorNormal__FR7FVector
+004dafb0-004dbfc8    3 CFieldBG                 CheckMirror__8CFieldBGFP9GsxCameraR7FVector, Release__8CFieldBGFv, Dsp__8CFieldBGFv
+004dbfd0-004dc114    3 GsxCamera                SetFogColor__9GsxCameraFRC7_rgba32, SetFogParam__9GsxCameraFff, SetBgColor__9GsxCameraFRC7_rgba32
+004dc120-004dc168    2 _rgba32                  GetVal__7_rgba32CFv, __ct__7_rgba32FUi
+004dc170-004dc498    2 CFieldBG                 Clr__8CFieldBGFv, SaveRestoreMotion__8CFieldBGFiPc
+004dc4a0-004dc4bc    1 CFieldModel              GetLastMotion__11CFieldModelCFv
+004dc4c0-004dd108   14 CFieldBG                 Update__8CFieldBGFf, LgtAttachFrame__8CFieldBGFiP5Frame, FindFrame__8CFieldBGFiPCc, GetModel__8CFieldBGFi, GetModelCount__8CFieldBGFv, GetSh
+004dd110-004dd164    1 P2Font                   __dt__6P2FontFv
+004dd170-004dd1b4    1 P2Image                  GetPktSize__7P2ImageFi
+004dd1c0-004ded24   15 FldTeamChange            Delete__13FldTeamChangeFv, Dsp__13FldTeamChangeFv, Clr__13FldTeamChangeFv, CreateData__13FldTeamChangeFv, Entry__13FldTeamChangeFv, Dispose_
+004ded30-004e8488   39 shop                     CMN__4shopFiPvP7CmdMenu, DVD_CBFunc__4shopFiP9BufMemoryiPcPv, __ct__4shopFv, __dt__4shopFv, initialize__4shopFiPFiPv_vPv, start__4shopFv
+004e8490-004e899c    8 shopCash                 __ct__8shopCashFv, __dt__8shopCashFv, initialize__8shopCashFP7primTex, setCash__8shopCashFi, fadein__8shopCashFv, fadeout__8shopCashFv
+004e89a0-004e8fc0    6 shopScrollMark           __ct__14shopScrollMarkFv, __dt__14shopScrollMarkFv, initialize__14shopScrollMarkFP7primTexiii, Polling__14shopScrollMarkFv, select__14shopSc
+004e8fc0-004eafd8   11 shopCapture              __ct__11shopCaptureFi, __dt__11shopCaptureFv, DelayDeleteRequest__11shopCaptureFv, startCapture__11shopCaptureFv, changeLayer__11shopCapture
+004eafe0-004f1238   26 tailor                   DVD_CBFunc__6tailorFiP9BufMemoryiPcPv, __ct__6tailorFv, __dt__6tailorFv, initialize__6tailorFPFiPv_vPvi, start__6tailorFv, Polling__6tailorF
+004f1240-004f18b8    7 bookScrollMark           __ct__14bookScrollMarkFv, __dt__14bookScrollMarkFv, initialize__14bookScrollMarkFP7primTexii, setDisp__14bookScrollMarkFb, Polling__14bookSc
+004f18c0-004f20a0    5 dRoll                    __ct__5dRollFv, __dt__5dRollFv, start__5dRollFv, stop__5dRollFv, Polling__5dRollFv
+004f20a0-004f20a8    1 tailor                   @24@__dt__6tailorFv
+004f20b0-004f20b8    1 dRoll                    @24@__dt__5dRollFv
+004f20c0-004fe988   43 solomon                  DVD_CBFunc__7solomonFiP9BufMemoryiPcPv, __ct__7solomonFv, __dt__7solomonFv, initialize__7solomonFPFiPv_vPv, start__7solomonFv, Polling__7sol
+004fe990-004ff9fc   11 solomonEffect            DVD_CBFunc__13solomonEffectFiP9BufMemoryiPcPv, __ct__13solomonEffectFv, __dt__13solomonEffectFv, DelayDeleteRequest__13solomonEffectFv, fade
+004ffa00-005005dc    5 solomonTutorial          __ct__15solomonTutorialFv, __dt__15solomonTutorialFv, initialize__15solomonTutorialFP7primTex, Polling__15solomonTutorialFv, isFinish__15sol
+005005e0-00500f18   10 floatDemon               __ct__10floatDemonFv, __dt__10floatDemonFv, initialize__10floatDemonFP6MatrixffP9primLayer, setRGBA__10floatDemonFiiii, setCurrentDemon__10f
+00500f20-00501720    7 pageScrollMark           __ct__14pageScrollMarkFv, __dt__14pageScrollMarkFv, initialize__14pageScrollMarkFP7primTexiii, setDisp__14pageScrollMarkFb, Polling__14pageS
+00501720-00502218   10 solomonCursor            __ct__13solomonCursorFv, __dt__13solomonCursorFv, initialize__13solomonCursorFP6MatrixffP9primLayer, fadeout__13solomonCursorFv, setRGBA__13
+00502220-0050310c   11 solomonSlot              __ct__11solomonSlotFP9primLayer, __dt__11solomonSlotFv, initialize__11solomonSlotFP6Matrixffb, setRGBA__11solomonSlotFiiii, setAlpha__11solo
+00503110-00503da0    5 solomonArea              __ct__11solomonAreaFv, __dt__11solomonAreaFv, initialize__11solomonAreaFP6MatrixP9primLayerib, setArea__11solomonAreaFibb, Polling__11solomo
+00503da0-00506bc8   22 solomonThm               __ct__10solomonThmFv, __dt__10solomonThmFv, initialize__10solomonThmFP7primTexbii, fadein__10solomonThmFi, setDemon__10solomonThmFi, setArea
+00506bd0-00506bd8    1 solomonEffect            @24@__dt__13solomonEffectFv
+00506be0-0050b0b8   35 worldMap                 DVD_CBFunc__8worldMapFiP9BufMemoryiPcPv, CMN__8worldMapFiPvP7CmdMenu, __ct__8worldMapFv, __dt__8worldMapFv, initialize__8worldMapFiii, start
+0050b0c0-0050b808    7 worldMapFade             __ct__12worldMapFadeFv, __dt__12worldMapFadeFv, initialize__12worldMapFadeFv, fadeIn__12worldMapFadeFi, fadeOut__12worldMapFadeFi, Polling__
+0050b810-0050be50    8 worldMapThm              __ct__11worldMapThmFv, __dt__11worldMapThmFv, initialize__11worldMapThmFP7primTex, dispThm__11worldMapThmFiPUcPUc, fadeout__11worldMapThmFv,
+0050be50-0050cc90    9 worldMapLight            __ct__13worldMapLightFv, __dt__13worldMapLightFv, initialize__13worldMapLightFP9primLayerii, setDest__13worldMapLightFff, setPos__13worldMap
+0050cc90-0050d0d8    4 worldMapPoint            __ct__13worldMapPointFv, __dt__13worldMapPointFv, initialize__13worldMapPointFP9primLayeriPQ28worldMap11SUBMAP_DATAi, setPos__13worldMapPoin
+##### BATTLE.BIN (789 funcs, 00430a80-00656fa0)
+00430a80-0044b1bc    4 CBattle                  __ct__7CBattleFv, BtlMenuCallBack__7CBattleFiiiiiPvPv, __dt__7CBattleFv, Polling__7CBattleFv
+0044b1c0-0044b264    2 FVector                  __ct__7FVectorFffff, __as__7FVectorFRC7FVector
+0044b270-0044b2a8    1 CBattle                  RingCallBack__7CBattleFiPvPv
+0044b2b0-0044b2cc    1 JRing                    SetPad__5JRingFP4CPad
+0044b2d0-0044b30c    1 FVector                  __mi__7FVectorCFRC7FVector
+0044b310-0044b3a4    2 CBattle                  EffectReplaceCallBack__7CBattleFP6EffectPvi, EffectCallBack__7CBattleFPvi
+0044b3b0-0044b468    5 FVector                  __pl__7FVectorCFRC7FVector, vw__7FVectorFv, vz__7FVectorFv, vy__7FVectorFv, vx__7FVectorFv
+0044b470-0044b494    1 Matrix                   UnitMatrix__6MatrixFv
+0044b4a0-00480e90   19 CBattle                  Initialize__7CBattleFv, Destruct__7CBattleFb, Start__7CBattleFv, End__7CBattleFv, TurnBeforeFunc__7CBattleFv, BtlMenuFunc__7CBattleFv
+00480e90-00480ec0    1 BtlEff                   ForceEndSet__6BtlEffFv
+00480ec0-00480edc    1 BtlModel                 GetPos__8BtlModelFv
+00480ee0-004dca18   49 CBattle                  DeathInit__7CBattleFi, CalcPushRange__7CBattleFi, PushCheck__7CBattleFv, AttackParam__7CBattleFi, AttackHitCheck__7CBattleFv, SearchFront__7
+004dca20-004ea27c    8 ParamDisp                __ct__9ParamDispFv, __dt__9ParamDispFv, Destruct__9ParamDispFv, Polling__9ParamDispFv, MakePacket__9ParamDispFv, ParamOpen__9ParamDispFv
+004ea280-004f0bfc    8 TurnOrderDisp            __ct__13TurnOrderDispFv, __dt__13TurnOrderDispFv, Destruct__13TurnOrderDispFv, Polling__13TurnOrderDispFv, MakePacket__13TurnOrderDispFv, Tu
+004f0c00-004f57cc    6 ComboForm                __ct__9ComboFormFv, __dt__9ComboFormFv, Destruct__9ComboFormFv, Polling__9ComboFormFv, MakePacket__9ComboFormFv, getPacket__9ComboFormFv
+004f57d0-004f581c    1 BtlEff                   getPacket__6BtlEffFv
+004f5820-004f5df0    1 ComboForm                ComboAreaReset__9ComboFormFv
+004f5df0-004f5ebc    1 BtlEff                   __ct__6BtlEffFii
+004f5ec0-004f6040    1 TotalHitInfo             __ct__12TotalHitInfoFii7FVector
+004f6040-004f6114    1 BtlEff                   __dt__6BtlEffFv
+004f6120-004fb024    6 TotalHitInfo             __dt__12TotalHitInfoFv, Destruct__12TotalHitInfoFv, Polling__12TotalHitInfoFv, MakePacket__12TotalHitInfoFv, Reset__12TotalHitInfoFv, SetDis
+004fb030-004fbee4    6 HitCntEff                __ct__9HitCntEffFiii, __dt__9HitCntEffFv, Destruct__9HitCntEffFv, Polling__9HitCntEffFv, MakePacket__9HitCntEffFv, Reset__9HitCntEffFi
+004fbef0-00500964    5 HitInfo                  __ct__7HitInfoFii7FVectoriPciiff, __dt__7HitInfoFv, Destruct__7HitInfoFv, Polling__7HitInfoFv, MakePacket__7HitInfoFv
+00500970-00501fd0    5 AbnIcon                  __ct__7AbnIconFii, __dt__7AbnIconFv, Destruct__7AbnIconFv, Polling__7AbnIconFv, MakePacket__7AbnIconFv
+00501fd0-00506f04    5 TargetInfo               __ct__10TargetInfoFiiiss, __dt__10TargetInfoFv, Destruct__10TargetInfoFv, Polling__10TargetInfoFv, MakePacket__10TargetInfoFv
+00506f10-00507ebc    5 CmbBreak                 __ct__8CmbBreakFi, __dt__8CmbBreakFv, Destruct__8CmbBreakFf, Polling__8CmbBreakFv, MakePacket__8CmbBreakFv
+00507ec0-005091d8    6 HitMark                  __ct__7HitMarkFii7FVectorif, __dt__7HitMarkFv, Destruct__7HitMarkFv, Polling__7HitMarkFv, MakePacket__7HitMarkFv, getPacket__7HitMarkFv
+005091e0-0050a214    3 DownHitSmokeCall         __ct__16DownHitSmokeCallFiii, Destruct__16DownHitSmokeCallFv, Polling__16DownHitSmokeCallFv
+0050a220-0050a8a0    3 FrictionSmokeCall        __ct__17FrictionSmokeCallFii, Destruct__17FrictionSmokeCallFv, Polling__17FrictionSmokeCallFv
+0050a8a0-0050c2c0    6 DownSmoke                __ct__9DownSmokeFiiii, __dt__9DownSmokeFv, Destruct__9DownSmokeFv, Polling__9DownSmokeFv, MakePacket__9DownSmokeFv, getPacket__9DownSmokeFv
+0050c2c0-0050ed14    7 SwordLocusEffect1        __ct__17SwordLocusEffect1Fiiib, __dt__17SwordLocusEffect1Fv, Destruct__17SwordLocusEffect1Fv, Polling__17SwordLocusEffect1Fv, MakePacket__17
+0050ed20-005117e4    7 SwordLocusEffect2        __ct__17SwordLocusEffect2Fiiiii, __dt__17SwordLocusEffect2Fv, Destruct__17SwordLocusEffect2Fv, Polling__17SwordLocusEffect2Fv, MakePacket__1
+005117f0-00513f14    7 SwordLocusEffect3        __ct__17SwordLocusEffect3Fiiiiii, __dt__17SwordLocusEffect3Fv, Destruct__17SwordLocusEffect3Fv, Polling__17SwordLocusEffect3Fv, MakePacket__
+00513f20-00515ed4    7 FanLocusEffect1          __ct__15FanLocusEffect1Fiiii, __dt__15FanLocusEffect1Fv, Destruct__15FanLocusEffect1Fv, Polling__15FanLocusEffect1Fv, MakePacket__15FanLocus
+00515ee0-00518754    6 WhipLocusEffect          __ct__15WhipLocusEffectFiii, __dt__15WhipLocusEffectFv, Destruct__15WhipLocusEffectFv, Polling__15WhipLocusEffectFv, MakePacket__15WhipLocus
+00518760-00519f4c    6 BlowLocusEffect1         __ct__16BlowLocusEffect1Fiii, __dt__16BlowLocusEffect1Fv, Destruct__16BlowLocusEffect1Fv, Polling__16BlowLocusEffect1Fv, MakePacket__16BlowL
+00519f50-0051c124    4 EffMdl                   __ct__6EffMdlFPUcPUcfii, __dt__6EffMdlFv, DeleteSetUp__6EffMdlFv, Polling__6EffMdlFv
+0051c130-0051c170    1 BMCLUT                   __ct__6BMCLUTFv
+0051c170-0051c958   13 EffMdl                   TranseCallBack__6EffMdlFRC7FVector7FVector, MotionEndCallBack__6EffMdlFPCc, OTEntry__6EffMdlFii, OTRelease__6EffMdlFv, SetPos__6EffMdlFP7FVe
+0051c960-0051dc9c    6 NormalDeathEfct          __ct__15NormalDeathEfctFii, __dt__15NormalDeathEfctFv, Destruct__15NormalDeathEfctFv, Polling__15NormalDeathEfctFv, MakePacket__15NormalDeat
+0051dca0-0051f2d4    6 HitImpact                __ct__9HitImpactFii7FVectorf, __dt__9HitImpactFv, Destruct__9HitImpactFv, Polling__9HitImpactFv, MakePacket__9HitImpactFv, Reset__9HitImpact
+0051f2e0-0051fbe4    6 BtlBlear                 __ct__8BtlBlearFiifff, __dt__8BtlBlearFv, Destruct__8BtlBlearFv, Polling__8BtlBlearFv, MakePacket__8BtlBlearFv, Reset__8BtlBlearFfff
+0051fbf0-00521984    5 MgcInvkParticle          __ct__15MgcInvkParticleFii7FVectorf, __dt__15MgcInvkParticleFv, Destruct__15MgcInvkParticleFv, Polling__15MgcInvkParticleFv, MakePacket__15M
+00521990-00523b70    5 BBoxAddAttribute1        __ct__17BBoxAddAttribute1Fiiii, __dt__17BBoxAddAttribute1Fv, Destruct__17BBoxAddAttribute1Fv, Polling__17BBoxAddAttribute1Fv, MakePacket__17
+00523b70-00527600    6 SwordAddAttribute1       __ct__18SwordAddAttribute1Fiii, __dt__18SwordAddAttribute1Fv, Destruct__18SwordAddAttribute1Fv, Polling__18SwordAddAttribute1Fv, MakePacket_
+00527600-00529920    5 WpnBBoxAddAttribute1     __ct__20WpnBBoxAddAttribute1Fiiiii, __dt__20WpnBBoxAddAttribute1Fv, Destruct__20WpnBBoxAddAttribute1Fv, Polling__20WpnBBoxAddAttribute1Fv, M
+00529920-0052ce28    5 FanAddAttribute1         __ct__16FanAddAttribute1Fiii, __dt__16FanAddAttribute1Fv, Destruct__16FanAddAttribute1Fv, Polling__16FanAddAttribute1Fv, MakePacket__16FanAd
+0052ce30-0052e7cc    5 WpnBoxAddAttribute1      __ct__19WpnBoxAddAttribute1Fiii, __dt__19WpnBoxAddAttribute1Fv, Destruct__19WpnBoxAddAttribute1Fv, Polling__19WpnBoxAddAttribute1Fv, MakePac
+0052e7d0-00531a10    5 BoxAddAttribute1         __ct__16BoxAddAttribute1Fiiii, __dt__16BoxAddAttribute1Fv, Destruct__16BoxAddAttribute1Fv, Polling__16BoxAddAttribute1Fv, MakePacket__16BoxA
+00531a10-00534698    5 ScytheAddAttribute1      __ct__19ScytheAddAttribute1Fiiii, __dt__19ScytheAddAttribute1Fv, Destruct__19ScytheAddAttribute1Fv, Polling__19ScytheAddAttribute1Fv, MakePa
+005346a0-00537214    5 RaidenAddAttribute1      __ct__19RaidenAddAttribute1Fiiiii, __dt__19RaidenAddAttribute1Fv, Destruct__19RaidenAddAttribute1Fv, Polling__19RaidenAddAttribute1Fv, MakeP
+00537220-00537fcc    6 CircleArea               __ct__10CircleAreaFiif, __dt__10CircleAreaFv, Destruct__10CircleAreaFv, Polling__10CircleAreaFv, MakePacket__10CircleAreaFv, ChangeTarget__1
+00537fd0-00539780    5 StraightArea             __ct__12StraightAreaFiiif, __dt__12StraightAreaFv, Destruct__12StraightAreaFv, Polling__12StraightAreaFv, MakePacket__12StraightAreaFv
+00539780-0053ba84    5 StraightCircleArea       __ct__18StraightCircleAreaFiiiff, __dt__18StraightCircleAreaFv, Destruct__18StraightCircleAreaFv, Polling__18StraightCircleAreaFv, MakePacke
+0053ba90-0053d5d4    5 Bullet1                  __ct__7Bullet1FiiissfiiiiUsUsii, __dt__7Bullet1Fv, Destruct__7Bullet1Fv, Polling__7Bullet1Fv, MakePacket__7Bullet1Fv
+0053d5e0-00540f1c    5 Bullet2                  __ct__7Bullet2FiiissfiiiiUsUsii, __dt__7Bullet2Fv, Destruct__7Bullet2Fv, Polling__7Bullet2Fv, MakePacket__7Bullet2Fv
+00540f20-00541404    4 Bullet3                  __ct__7Bullet3FiiissfiiiiUsUsii, __dt__7Bullet3Fv, Destruct__7Bullet3Fv, Polling__7Bullet3Fv
+00541410-00543d1c    5 Bullet3Child             __ct__12Bullet3ChildFiiP7Bullet3issfiiiiUsUsii, __dt__12Bullet3ChildFv, Destruct__12Bullet3ChildFv, Polling__12Bullet3ChildFv, MakePacket__1
+00543d20-005483c4    5 Bullet4                  __ct__7Bullet4FiiissfiiiiUsUsii, __dt__7Bullet4Fv, Destruct__7Bullet4Fv, Polling__7Bullet4Fv, MakePacket__7Bullet4Fv
+005483d0-00548b54    1 BreakBBox                __ct__9BreakBBoxFiii
+00548b60-00548b78    1 _rgba32                  __ct__7_rgba32Fv
+00548b80-00548ba0    1 FVector                  __ct__7FVectorFv
+00548ba0-0054ad80    6 BreakBBox                __dt__9BreakBBoxFv, Destruct__9BreakBBoxFv, Polling__9BreakBBoxFv, MakePacket__9BreakBBoxFv, InitParam__9BreakBBoxFiiP14_ModelBBoxDataP5Fram
+0054ad80-0054ad90    1 Bullet4                  EndSet__7Bullet4Fv
+0054ad90-0054ada0    1 Bullet3Child             EndSet__12Bullet3ChildFv
+0054ada0-0054adc0    2 Bullet3                  MakePacket__7Bullet3Fv, EndSet__7Bullet3Fv
+0054adc0-0054add0    1 Bullet2                  EndSet__7Bullet2Fv
+0054add0-0054ade0    1 Bullet1                  EndSet__7Bullet1Fv
+0054ade0-0054adf0    1 StraightCircleArea       EndSet__18StraightCircleAreaFv
+0054adf0-0054ae00    1 StraightArea             EndSet__12StraightAreaFv
+0054ae00-0054ae10    1 CircleArea               EndSet__10CircleAreaFv
+0054ae10-0054ae20    1 RaidenAddAttribute1      EndSet__19RaidenAddAttribute1Fv
+0054ae20-0054ae30    1 ScytheAddAttribute1      EndSet__19ScytheAddAttribute1Fv
+0054ae30-0054ae40    1 BoxAddAttribute1         EndSet__16BoxAddAttribute1Fv
+0054ae40-0054ae50    1 WpnBoxAddAttribute1      EndSet__19WpnBoxAddAttribute1Fv
+0054ae50-0054ae60    1 FanAddAttribute1         EndSet__16FanAddAttribute1Fv
+0054ae60-0054ae70    1 WpnBBoxAddAttribute1     EndSet__20WpnBBoxAddAttribute1Fv
+0054ae70-0054ae80    1 SwordAddAttribute1       EndSet__18SwordAddAttribute1Fv
+0054ae80-0054ae90    1 BBoxAddAttribute1        EndSet__17BBoxAddAttribute1Fv
+0054ae90-0054aeb0    1 MgcInvkParticle          EndSet__15MgcInvkParticleFv
+0054aeb0-0054aee0    1 BtlBlear                 EndSet__8BtlBlearFv
+0054aee0-0054af10    1 HitImpact                EndSet__9HitImpactFv
+0054af10-0054af40    1 NormalDeathEfct          EndSet__15NormalDeathEfctFv
+0054af40-0054af50    1 WhipLocusEffect          EndSet__15WhipLocusEffectFv
+0054af50-0054af60    1 DownSmoke                EndSet__9DownSmokeFv
+0054af60-0054b0ac    3 FrictionSmokeCall        MakePacket__17FrictionSmokeCallFv, EndSet__17FrictionSmokeCallFv, __dt__17FrictionSmokeCallFv
+0054b0b0-0054b1fc    3 DownHitSmokeCall         MakePacket__16DownHitSmokeCallFv, EndSet__16DownHitSmokeCallFv, __dt__16DownHitSmokeCallFv
+0054b200-0054b230    1 HitMark                  EndSet__7HitMarkFv
+0054b230-0054b274    1 CmbBreak                 getPacket__8CmbBreakFv
+0054b280-0054b2b0    1 TargetInfo               EndSet__10TargetInfoFv
+0054b2b0-0054b2c0    1 AbnIcon                  EndSet__7AbnIconFv
+0054b2c0-0054b2f0    1 HitInfo                  EndSet__7HitInfoFv
+0054b2f0-0054b320    1 HitCntEff                EndSet__9HitCntEffFv
+0054b320-0054b350    1 TotalHitInfo             EndSet__12TotalHitInfoFv
+0054b350-0054b378    1 TurnOrderDisp            getPacket__13TurnOrderDispFv
+0054b380-0054b3d8    4 ParamDisp                getPacket__9ParamDispFv, @24@getPacket__9ParamDispFv, @24@__dt__9ParamDispFv, @44@__dt__9ParamDispFv
+0054b3e0-0054b408    3 TurnOrderDisp            @24@getPacket__13TurnOrderDispFv, @24@__dt__13TurnOrderDispFv, @44@__dt__13TurnOrderDispFv
+0054b410-0054b438    3 ComboForm                @24@getPacket__9ComboFormFv, @24@__dt__9ComboFormFv, @44@__dt__9ComboFormFv
+0054b440-0054b458    2 BtlEff                   @24@__dt__6BtlEffFv, @44@__dt__6BtlEffFv
+0054b460-0054b478    2 TotalHitInfo             @24@__dt__12TotalHitInfoFv, @44@__dt__12TotalHitInfoFv
+0054b480-0054b498    2 HitCntEff                @24@__dt__9HitCntEffFv, @44@__dt__9HitCntEffFv
+0054b4a0-0054b4b8    2 HitInfo                  @24@__dt__7HitInfoFv, @44@__dt__7HitInfoFv
+0054b4c0-0054b4d8    2 AbnIcon                  @24@__dt__7AbnIconFv, @44@__dt__7AbnIconFv
+0054b4e0-0054b4f8    2 TargetInfo               @24@__dt__10TargetInfoFv, @44@__dt__10TargetInfoFv
+0054b500-0054b528    3 CmbBreak                 @24@getPacket__8CmbBreakFv, @24@__dt__8CmbBreakFv, @44@__dt__8CmbBreakFv
+0054b530-0054b558    3 HitMark                  @24@getPacket__7HitMarkFv, @24@__dt__7HitMarkFv, @44@__dt__7HitMarkFv
+0054b560-0054b578    2 DownHitSmokeCall         @24@__dt__16DownHitSmokeCallFv, @44@__dt__16DownHitSmokeCallFv
+0054b580-0054b598    2 FrictionSmokeCall        @24@__dt__17FrictionSmokeCallFv, @44@__dt__17FrictionSmokeCallFv
+0054b5a0-0054b5c8    3 DownSmoke                @24@getPacket__9DownSmokeFv, @24@__dt__9DownSmokeFv, @44@__dt__9DownSmokeFv
+0054b5d0-0054b5e8    2 SwordLocusEffect1        @24@__dt__17SwordLocusEffect1Fv, @44@__dt__17SwordLocusEffect1Fv
+0054b5f0-0054b608    2 SwordLocusEffect2        @24@__dt__17SwordLocusEffect2Fv, @44@__dt__17SwordLocusEffect2Fv
+0054b610-0054b628    2 SwordLocusEffect3        @24@__dt__17SwordLocusEffect3Fv, @44@__dt__17SwordLocusEffect3Fv
+0054b630-0054b648    2 FanLocusEffect1          @24@__dt__15FanLocusEffect1Fv, @44@__dt__15FanLocusEffect1Fv
+0054b650-0054b668    2 WhipLocusEffect          @24@__dt__15WhipLocusEffectFv, @44@__dt__15WhipLocusEffectFv
+0054b670-0054b688    2 BlowLocusEffect1         @24@__dt__16BlowLocusEffect1Fv, @44@__dt__16BlowLocusEffect1Fv
+0054b690-0054b6e8    6 EffMdl                   @52@__dt__6EffMdlFv, @32@DeleteSetUp__6EffMdlFv, @32@MotionEndCallBack__6EffMdlFPCc, @32@getPacket__6EffMdlFv, @32@TranseCallBack__6EffMdlFR
+0054b6f0-0054b718    3 NormalDeathEfct          @24@getPacket__15NormalDeathEfctFv, @24@__dt__15NormalDeathEfctFv, @44@__dt__15NormalDeathEfctFv
+0054b720-0054b738    2 HitImpact                @24@__dt__9HitImpactFv, @44@__dt__9HitImpactFv
+0054b740-0054b758    2 BtlBlear                 @24@__dt__8BtlBlearFv, @44@__dt__8BtlBlearFv
+0054b760-0054b778    2 MgcInvkParticle          @24@__dt__15MgcInvkParticleFv, @44@__dt__15MgcInvkParticleFv
+0054b780-0054b798    2 BBoxAddAttribute1        @24@__dt__17BBoxAddAttribute1Fv, @44@__dt__17BBoxAddAttribute1Fv
+0054b7a0-0054b7c8    3 SwordAddAttribute1       @24@getPacket__18SwordAddAttribute1Fv, @24@__dt__18SwordAddAttribute1Fv, @44@__dt__18SwordAddAttribute1Fv
+0054b7d0-0054b7e8    2 WpnBBoxAddAttribute1     @24@__dt__20WpnBBoxAddAttribute1Fv, @44@__dt__20WpnBBoxAddAttribute1Fv
+0054b7f0-0054b808    2 FanAddAttribute1         @24@__dt__16FanAddAttribute1Fv, @44@__dt__16FanAddAttribute1Fv
+0054b810-0054b828    2 WpnBoxAddAttribute1      @24@__dt__19WpnBoxAddAttribute1Fv, @44@__dt__19WpnBoxAddAttribute1Fv
+0054b830-0054b848    2 BoxAddAttribute1         @24@__dt__16BoxAddAttribute1Fv, @44@__dt__16BoxAddAttribute1Fv
+0054b850-0054b868    2 ScytheAddAttribute1      @24@__dt__19ScytheAddAttribute1Fv, @44@__dt__19ScytheAddAttribute1Fv
+0054b870-0054b888    2 RaidenAddAttribute1      @24@__dt__19RaidenAddAttribute1Fv, @44@__dt__19RaidenAddAttribute1Fv
+0054b890-0054b8a8    2 CircleArea               @24@__dt__10CircleAreaFv, @44@__dt__10CircleAreaFv
+0054b8b0-0054b8c8    2 StraightArea             @24@__dt__12StraightAreaFv, @44@__dt__12StraightAreaFv
+0054b8d0-0054b8e8    2 StraightCircleArea       @24@__dt__18StraightCircleAreaFv, @44@__dt__18StraightCircleAreaFv
+0054b8f0-0054b908    2 Bullet1                  @24@__dt__7Bullet1Fv, @44@__dt__7Bullet1Fv
+0054b910-0054b928    2 Bullet2                  @24@__dt__7Bullet2Fv, @44@__dt__7Bullet2Fv
+0054b930-0054b948    2 Bullet3                  @24@__dt__7Bullet3Fv, @44@__dt__7Bullet3Fv
+0054b950-0054b968    2 Bullet3Child             @24@__dt__12Bullet3ChildFv, @44@__dt__12Bullet3ChildFv
+0054b970-0054b988    2 Bullet4                  @24@__dt__7Bullet4Fv, @44@__dt__7Bullet4Fv
+0054b990-0054b998    1 BtlEff                   @24@getPacket__6BtlEffFv
+0054b9a0-0054b9b8    2 BreakBBox                @24@__dt__9BreakBBoxFv, @44@__dt__9BreakBBoxFv
+0054b9c0-0055b3a8   43 BtlModel                 __ct__8BtlModelFs, __dt__8BtlModelFv, DeleteSetUp__8BtlModelFv, Create__8BtlModelFPUc, CreateShadow__8BtlModelFPUc, TranseCallBack__8BtlMode
+0055b3b0-0055dbd8   12 BtlBG                    __ct__5BtlBGFii, __dt__5BtlBGFv, DeleteSetUp__5BtlBGFv, TranseCallBack__5BtlBGFRC7FVector7FVector, EventCallBack__5BtlBGFPCcPCciiUi, MotionE
+0055dbe0-0057bf68    3 BtlCamera                __ct__9BtlCameraFv, __dt__9BtlCameraFv, Polling__9BtlCameraFv
+0057bf70-0057bf98    1 BtlModel                 ModelEffectReset__8BtlModelFv
+0057bfa0-0057bfe4    1 FVector                  __ml__7FVectorCFf
+0057bff0-0057c064    2 CPad                     GetAnalogStickR__4CPadCFv, GetAnalogStickL__4CPadCFv
+0057c070-00587380   28 BtlCamera                UpdateCamera__9BtlCameraFv, CameraYPosCheck__9BtlCameraFv, SetFieldCamera__9BtlCameraF7FVectorb, SetNextComboCharacterCamera1__9BtlCameraFii
+00587380-00587800    4 BtlScrnCapture           __ct__14BtlScrnCaptureFv, __dt__14BtlScrnCaptureFv, Init__14BtlScrnCaptureFii, getPacket__14BtlScrnCaptureFv
+00587800-00589b3c    5 CBtlPAfter               __ct__10CBtlPAfterFv, __dt__10CBtlPAfterFv, Polling__10CBtlPAfterFv, Destruct__10CBtlPAfterFv, MakePacket__10CBtlPAfterFv
+00589b40-0058bad0   13 CBtlPAfter2              __ct__11CBtlPAfter2Fv, __dt__11CBtlPAfter2Fv, Polling__11CBtlPAfter2Fv, Destruct__11CBtlPAfter2Fv, MakePacket__11CBtlPAfter2Fv, SetFadeOut__
+0058bad0-0058bb10    1 CBtlPAfter               getPacket__10CBtlPAfterFv
+0058bb10-0058bb38    3 BtlScrnCapture           @128@getPacket__14BtlScrnCaptureFv, @128@__dt__14BtlScrnCaptureFv, @148@__dt__14BtlScrnCaptureFv
+0058bb40-0058bb68    3 CBtlPAfter               @24@getPacket__10CBtlPAfterFv, @24@__dt__10CBtlPAfterFv, @44@__dt__10CBtlPAfterFv
+0058bb70-0058bb98    3 CBtlPAfter2              @24@getPacket__11CBtlPAfter2Fv, @24@__dt__11CBtlPAfter2Fv, @44@__dt__11CBtlPAfter2Fv
+0058bba0-0058c718   13 BtlMenu                  SetCallBack__7BtlMenuFPFiiiiiPvPv_vPv, MakeMesWin__7BtlMenuFiiPci, BMesWinEntry__7BtlMenuFP7BMesWin, BMesWinRelease__7BtlMenuFP7BMesWin, All
+0058c720-0058c7e0    2 BtlWin                   __dt__6BtlWinFv, __ct__6BtlWinFv
+0058c7e0-005bb0d4   21 BtlMenu                  __dt__7BtlMenuFv, Destruct__7BtlMenuFv, Polling__7BtlMenuFv, MainMenuFunc__7BtlMenuFv, DelaySelectFunc__7BtlMenuFiiiP12EFCTCOMParam, SelectF
+005bb0e0-005bb180    2 MenuObj                  SetRendering__7MenuObjFUc, UpdateEnv__7MenuObjFv
+005bb180-005d6a0c   15 BtlMenu                  SetMagicMenu__7BtlMenuFiii, SetItemMenu__7BtlMenuFiii, SetGuardMenu__7BtlMenuFii, SetMoveMenu__7BtlMenuFiii, SetMoveAfterMenu__7BtlMenuFii, 
+005d6a10-005d7ad0    6 BMesWin                  __ct__7BMesWinFiiiPci, __dt__7BMesWinFv, Destruct__7BMesWinFv, Polling__7BMesWinFv, Create__7BMesWinFiiPci, SetClose__7BMesWinFv
+005d7ad0-005d8be4    4 BCursole                 __ct__8BCursoleFiiUcUcUcUcUcP7FVector, __dt__8BCursoleFv, Destruct__8BCursoleFv, Polling__8BCursoleFv
+005d8bf0-005d8bf8    1 BtlMenu                  @24@__dt__7BtlMenuFv
+005d8c00-005d8c08    1 BMesWin                  @24@__dt__7BMesWinFv
+005d8c10-005d8c58    5 BCursole                 @32@Polling__8BCursoleFv, @32@__dt__8BCursoleFv, @56@__dt__8BCursoleFv, @12@Polling__8BCursoleFv, @12@__dt__8BCursoleFv
+005d8c60-005db814    6 <free>                   Get3DAngle__F7FVector, Get3DAngleRad__F7FVector, Get3DAngle2__F7FVector, GetPointToLineLength__F7FVector7FVector7FVectorP7FVector, IdelMotio
+005db820-005dba14    1 CBattle                  StepEffectFunc__7CBattleFiPiP6EFFTBL
+005dba20-005e79f4   24 <free>                   CameraControlStatus__Fb, BeginMagicEffectClear__Fi, BeginMagicEffectClear2__Fi, MagicMotionEndSet__Fi, EffectDamageSet__Fisss7FVectorbiiiii,
+005e7a00-00650d4c   91 CBattle                  DataReadEntry__7CBattleFiii, DataRelease__7CBattleFiib, DataPolling__7CBattleFv, AllCSERelease__7CBattleFv, AllCSEEndCheck__7CBattleFv, Init
+00656800-00656fa0    5 <free>                   __sinit_battle.cpp                                                                                        , __sinit_btlsub.cpp              

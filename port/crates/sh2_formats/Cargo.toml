@@ -1,0 +1,11 @@
+[package]
+name = "sh2_formats"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+glam.workspace = true
+bytemuck.workspace = true
+thiserror.workspace = true
+log.workspace = true

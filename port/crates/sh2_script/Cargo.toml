@@ -1,0 +1,13 @@
+[package]
+name = "sh2_script"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+glam.workspace = true
+bytemuck.workspace = true
+thiserror.workspace = true
+log.workspace = true
+sh2_core.workspace = true
+sh2_formats.workspace = true

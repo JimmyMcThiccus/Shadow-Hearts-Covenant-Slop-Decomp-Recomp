@@ -1,0 +1,6 @@
+!SH2US_FIELD.BIN 004880f0 __ct__13CmdFriendshipFv FIX | pair 0x4880f0/0x488160 builds a CmdPrivateScene-derived class followed by SafeDelayDelete__13CmdFriendship (was __ct__8CmdMagic)
+!SH2US_FIELD.BIN 00488160 __dt__13CmdFriendshipFv FIX | was __dt__10CmdSubMenu
+!SH2US_FIELD.BIN 004b3de0 __dt__10CmdSubMenuFv FIX | restored: adjacent to __ct__10CmdSubMenu at 0x4b3d70
+!SH2US_FIELD.BIN 004831c0 __dt__16CmdGoodsEquipmentFv FIX | was __dt__12CmdGoodsIcon; secondary goods class dtor between __dt__17CmdEquipmentGoods and its CreateScene
+!SH2US_FIELD.BIN 00493770 Retail_CmdGraveyard_SmoothFilterHolder_Dt DUP | earlier __dt__12CmdGraveyard is at 0x493800
+!SH2US_FIELD.BIN 0047d140 __dt__12CmdParameterFv FIX | was __dt__17CmdGoodsKeyCustom; between __ct__9CmdStatus and __ct__12CmdParameter

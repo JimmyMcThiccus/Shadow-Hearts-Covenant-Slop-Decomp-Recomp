@@ -1,0 +1,669 @@
+# program addr size cause | name (pass N6)  -- name of each of the 667 functions listed in us_unnamed_N5.txt, read back from Ghidra at end of N6
+# class: K=JP name carried over/verified (JP-style mangled), R=Retail_*/behaviour name, S=Sub<addr>/stub_ placeholder-by-caller
+SLUS_210.41 00203ee8 fd0 SDK | K _doMC
+SLUS_210.41 0020aec8 10 SDK | K close
+SLUS_210.41 0020aed8 8 SDK | K lseek
+SLUS_210.41 0020c910 48 SDK | K sceSifGetSreg
+SLUS_210.41 0020cc10 30 SDK | K sceSifSetCmdBuffer
+SLUS_210.41 00212d80 48 SDK | K Copy_syscall5A
+SLUS_210.41 002135c8 88 SDK | K Copy_syscall5A
+SLUS_210.41 00213968 40 SDK | K Copy_syscall5A
+SLUS_210.41 00215eb0 220 SDK | K _sceCd_scmd_prechk
+SLUS_210.41 00216990 98 SDK | K sceCdScmd1_Rpc3
+SLUS_210.41 0021fa50 10 SDK | S stub___nw__FUi_2
+SLUS_210.41 0021fa60 10 SDK | S stub___nw__FUi_1
+SLUS_210.41 00222d30 30 SDK | K __ct__6MatrixFRC6Matrix
+SLUS_210.41 00222d60 30 SDK | K __ct__6MatrixFPC6Matrix
+SLUS_210.41 00222d90 60 SDK | K RotMatrixXYZ__6MatrixFRC7FVector
+SLUS_210.41 00222f10 10 SDK | K __ct__7FVectorFRC7FVector
+SLUS_210.41 00225a00 70 SDK | K changeActive__9LightDataFb
+SLUS_210.41 00225cf0 80 SDK | K changeCol__9LightDataF7FVector
+SLUS_210.41 0022b580 10 SDK | K clear__11OrderPacketFv
+SLUS_210.41 00233ed8 1b0 SDK | K strncat
+SLUS_210.41 00239770 68 SDK | K converttobcd
+SLUS_210.41 00239cf0 20 SDK | K getBuffer__9BufMemoryFv
+SLUS_210.41 0023bce0 80 SDK | K createMotion__5ModelFP9BufMemory
+SLUS_210.41 0023c9a0 30 SDK | K DynaResetLink__5ModelFv
+SLUS_210.41 0023cd40 a0 SDK | R Retail_Model_ScaleTextureClutHSV
+SLUS_210.41 0023cec0 a0 SDK | R Retail_Model_ClearAtomicTexMode
+SLUS_210.41 0023cf60 a0 SDK | R Retail_Model_ApplyAtomicTexMode
+SLUS_210.41 0023d000 b0 SDK | R Retail_Model_SetTextureBlendFlags
+SLUS_210.41 0023f6a0 1c0 SDK | K setAtomicAlpha__6AtomicFUc
+SLUS_210.41 002425c0 170 rewritten (JP candidates, no confident pair) | K addTime__15SequenceControlFfP5Model
+SLUS_210.41 00245380 150 retail-new (no JP candidate in bracket) | R Retail_Texture_ScaleClutHSV
+SLUS_210.41 00248500 40 tiny stub / inline accessor | K setAirResistance__12BRN_LinkListFf
+SLUS_210.41 00248f00 90 rewritten (JP candidates, no confident pair) | K asmBlendNormal__10BlendShapeFP7FVectorP7_NORMALfi
+SLUS_210.41 0024f2b0 e0 retail-new (no JP candidate in bracket) | R Retail_MaxRGB
+SLUS_210.41 0024f390 e0 retail-new (no JP candidate in bracket) | R Retail_MinRGB
+SLUS_210.41 0024f470 220 retail-new (no JP candidate in bracket) | R Retail_RGBToHSV
+SLUS_210.41 0024f690 250 retail-new (no JP candidate in bracket) | R Retail_HSVToRGB
+SLUS_210.41 002520b0 120 retail-new (no JP candidate in bracket) | R Retail_BoundingArea_Scale
+SLUS_210.41 0025fc70 60 retail-new (no JP candidate in bracket) | R Retail_Model_FindAtomic
+SLUS_210.41 00261540 200 rewritten (JP candidates, no confident pair) | K strncmp_261540
+SLUS_210.41 00261a70 90 retail-new (no JP candidate in bracket) | R Retail_OrderPacket_AnyUsed
+SLUS_210.41 00264420 40 tiny stub / inline accessor | R Retail_MenuTexture_ReadBufferThunk
+SLUS_210.41 00264a10 90 retail-new (no JP candidate in bracket) | R Retail_MenuTexture_ToggleFlag8
+SLUS_210.41 0026fb90 260 rewritten (JP candidates, no confident pair) | K CreateFont__4FontFiPUc
+SLUS_210.41 0026fe90 40 tiny stub / inline accessor | R Retail_Font_SetWorkTable
+SLUS_210.41 00271220 60 retail-new (no JP candidate in bracket) | R Retail_Font_GetHdrParam3
+SLUS_210.41 00271280 80 retail-new (no JP candidate in bracket) | R Retail_Font_GetHdrParam2x16
+SLUS_210.41 00271300 60 retail-new (no JP candidate in bracket) | R Retail_Font_GetHdrParam0
+SLUS_210.41 00271360 60 retail-new (no JP candidate in bracket) | R Retail_Font_GetHdrParam1
+SLUS_210.41 002713c0 40 tiny stub / inline accessor | R Retail_Font_DestroyWorkTable
+SLUS_210.41 00271470 30 tiny stub / inline accessor | R Retail_ClutHolder_Ct
+SLUS_210.41 00272360 40 tiny stub / inline accessor | R Retail_MenuObj_GetFieldDataFlag1C
+SLUS_210.41 00272770 40 tiny stub / inline accessor | R Retail_MenuObj_ForwardToMenuCommon
+SLUS_210.41 00272a30 120 retail-new (no JP candidate in bracket) | R Retail_ConvertDigitsToWide
+SLUS_210.41 002737d0 70 retail-new (no JP candidate in bracket) | K SetChildFlag0__9MenuGroupFb
+SLUS_210.41 00277300 120 retail-new extras (JP candidates below floor) | K FindAttachFile__9MenuSceneCFs
+SLUS_210.41 00277420 c0 retail-new extras (JP candidates below floor) | R Retail_MenuScene_AttachFileIndex
+SLUS_210.41 0027ebb0 50 retail-new (no JP candidate in bracket) | R Retail_MenuModel_Create
+SLUS_210.41 0027ecf0 80 retail-new (no JP candidate in bracket) | R Retail_MenuModel_ReleaseOT
+SLUS_210.41 0027eee0 a0 retail-new (no JP candidate in bracket) | R Retail_MenuModel_SetAtomicFlags3
+SLUS_210.41 00280180 70 retail-new (no JP candidate in bracket) | R Retail_MenuModelManeger_ResetSlots
+SLUS_210.41 002801f0 90 retail-new (no JP candidate in bracket) | R Retail_MenuModelManeger_Resume
+SLUS_210.41 00280280 a0 retail-new (no JP candidate in bracket) | R Retail_MenuModelManeger_Pause
+SLUS_210.41 002810e0 c0 retail-new (no JP candidate in bracket) | R Retail_MenuModelManeger_FindEvent
+SLUS_210.41 002811a0 70 retail-new (no JP candidate in bracket) | R Retail_MenuModelManeger_SetFlag4
+SLUS_210.41 00281210 40 tiny stub / inline accessor | R Retail_MenuModelManeger_SetTable
+SLUS_210.41 00286eb0 90 retail-new (no JP candidate in bracket) | R Retail_SaveMenuSection_UpdateHDDInstall
+SLUS_210.41 00286f90 b0 retail-new (no JP candidate in bracket) | R Retail_SaveMenuSection_ResetPadAssign
+SLUS_210.41 002870c0 70 retail-new (no JP candidate in bracket) | R Retail_SaveMenuSection_RaiseCash
+SLUS_210.41 00287130 180 retail-new (no JP candidate in bracket) | R Retail_SaveMenuSection_InitPartySets
+SLUS_210.41 00287990 80 retail-new (no JP candidate in bracket) | R Retail_SaveMenuSection_ClearBattleTeam
+SLUS_210.41 00287a10 a0 retail-new (no JP candidate in bracket) | R Retail_SaveMenuSection_CommitBattleTeam
+SLUS_210.41 00287ab0 80 retail-new (no JP candidate in bracket) | R Retail_SaveMenuSection_EnterSoloPartySet
+SLUS_210.41 00287b30 30 tiny stub / inline accessor | R Retail_SaveMenuSection_LeaveSoloPartySet
+SLUS_210.41 00287d00 1e0 retail-new (no JP candidate in bracket) | R Retail_SaveMenuSection_BuildSaveInfo
+SLUS_210.41 002880e0 90 retail-new (no JP candidate in bracket) | R Retail_SaveMenuSection_ClearWorldMapFlags
+SLUS_210.41 00288540 d0 retail-new (no JP candidate in bracket) | R Retail_SaveMenuSection_StoreClearInfo
+SLUS_210.41 00288610 220 retail-new (no JP candidate in bracket) | R Retail_SaveMenuSection_StartNewGamePlus
+SLUS_210.41 00288830 80 retail-new (no JP candidate in bracket) | R Retail_SaveMenuSection_PreserveBlock26c
+SLUS_210.41 0028c120 270 retail-new (no JP candidate in bracket) | R Retail_MenuCommon_ReadKeyTable
+SLUS_210.41 0028ee50 100 retail-new extras (JP candidates below floor) | K Standby__13MenuModelPackFv
+SLUS_210.41 0028ef50 80 retail-new extras (JP candidates below floor) | R Retail_MenuModelPack_SetAtomicFlags
+SLUS_210.41 0028fe90 50 retail-new (no JP candidate in bracket) | R Retail_MenuModelPack_GetField53C
+SLUS_210.41 00295ae0 70 retail-new (no JP candidate in bracket) | R Retail_CScript_ClearBuffer200
+SLUS_210.41 0029a8d0 120 retail-new (no JP candidate in bracket) | R Retail_ConvertDigitsToWide2
+SLUS_210.41 0029af60 b0 retail-new (no JP candidate in bracket) | R Retail_CScript_FindJobByEvent
+SLUS_210.41 002a3330 1c0 retail-new (no JP candidate in bracket) | R Retail_FpPrim_SubtractCenter3
+SLUS_210.41 002a6fa0 260 retail-new (no JP candidate in bracket) | R Retail_FpFlare_UpdateFade
+SLUS_210.41 002add50 a0 retail-new (no JP candidate in bracket) | K SetVisible__7FpSmokeFb
+SLUS_210.41 002addf0 220 retail-new (no JP candidate in bracket) | K SetMode__7FpSmokeFi
+SLUS_210.41 002af1e0 b70 rewritten (JP candidates, no confident pair) | K Create__5FpSunF7FVectorP11FpLenzFlare
+SLUS_210.41 002b2c60 80 retail-new (no JP candidate in bracket) | K ClearData__17FpObjectLenzFlareFv
+SLUS_210.41 002b8ae0 410 retail-new (no JP candidate in bracket) | K CreateData__15FpObjectThunderFiPUcii
+SLUS_210.41 002b8ef0 1a0 retail-new (no JP candidate in bracket) | K SetEndPoints__15FpObjectThunderFv
+SLUS_210.41 002bc420 e50 retail-new (no JP candidate in bracket) | K AllocLayers__12FpRetailBoltFv
+SLUS_210.41 002bd270 420 retail-new (no JP candidate in bracket) | S Sub2bd270__12FpRetailBoltFv
+SLUS_210.41 002bd870 b0 retail-new (no JP candidate in bracket) | K SetBandAll__12FpRetailBoltFff
+SLUS_210.41 002bdfe0 390 retail-new extras (JP candidates below floor) | S Sub2bdfe0__11FpBlackHoleFv
+SLUS_210.41 002be370 a0 retail-new extras (JP candidates below floor) | K LinkEffectType3__11FpBlackHoleFv
+SLUS_210.41 002be410 c0 retail-new extras (JP candidates below floor) | K LinkEffectType2__11FpBlackHoleFv
+SLUS_210.41 002be4d0 c0 retail-new extras (JP candidates below floor) | K LinkEffectType4__11FpBlackHoleFv
+SLUS_210.41 002c0700 580 retail-new extras (JP candidates below floor) | K __ct__15FpObjectTnderBHFiPv
+SLUS_210.41 002c0d20 250 retail-new extras (JP candidates below floor) | S Sub2c0d20__16FpObjectTnderBH2Fv
+SLUS_210.41 002c1dd0 a0 retail-new extras (JP candidates below floor) | K __ct__16FpObjectTnderBH2FiPv
+SLUS_210.41 002c1ef0 480 rewritten (JP candidates, no confident pair) | K InitData__15FpObjectTnderBHF7FVector7FVectorfffff
+SLUS_210.41 002c54a0 80 retail-new (no JP candidate in bracket) | K ClearData__12FpObjectTakiFv
+SLUS_210.41 002c5d70 510 retail-new (no JP candidate in bracket) | K ProjectPoints__12FpObjectTakiFv
+SLUS_210.41 002fc9d0 90 retail-new (no JP candidate in bracket) | K IsRingClosing__5JRingFv
+SLUS_210.41 003351c0 130 retail-new (no JP candidate in bracket) | K ShowOT__6EffectFv
+SLUS_210.41 003352f0 e0 retail-new (no JP candidate in bracket) | K HideOT__6EffectFv
+SLUS_210.41 003358d0 50 retail-new (no JP candidate in bracket) | K IsPaused__6EffectFv
+SLUS_210.41 00335a50 40 tiny stub / inline accessor | K SetEndCallbackGen__6EffectFiPFPvi_vPvi
+SLUS_210.41 00335a90 40 tiny stub / inline accessor | K SetEndCallbackTar__6EffectFiPFPvi_vPvi
+SLUS_210.41 00336040 50 retail-new extras (JP candidates below floor) | K ClearBoth__12tagEffSeCtrlFv
+SLUS_210.41 00336090 20 tiny stub / inline accessor | K ClearHead__12tagEffSeCtrlFv
+SLUS_210.41 00336dd0 20 tiny stub / inline accessor | K isCreate__11LevelsModelFv
+SLUS_210.41 00336df0 60 retail-new (no JP candidate in bracket) | K ApplyFogParams__10EffectCoreFv
+SLUS_210.41 003385c0 50 retail-new (no JP candidate in bracket) | K SetOTPair__10EffectCoreFiii
+SLUS_210.41 0033b110 160 retail-new (no JP candidate in bracket) | R Retail_EffectCore_DetachModelRefs
+SLUS_210.41 0033dec0 110 retail-new (no JP candidate in bracket) | R Retail_Matrix_ToEulerFVector
+SLUS_210.41 0033ee60 40 tiny stub / inline accessor | R Retail_EffectCamera_RotMatrixY
+SLUS_210.41 00344940 40 tiny stub / inline accessor | S stub_mdlRetail929__FiiPPcPv_1
+SLUS_210.41 003535b0 70 retail-new (no JP candidate in bracket) | R Retail_StreamBGM_PollFinish
+SLUS_210.41 0035df30 f0 retail-new (no JP candidate in bracket) | R Retail_fefRetail3010_InitParam
+SLUS_210.41 0035e020 60 retail-new (no JP candidate in bracket) | R Retail_fefRetail3010_ParamCt
+SLUS_210.41 0035e460 40 tiny stub / inline accessor | S stub_fefRetail3008__FiiPPcPv_1
+SLUS_210.41 0035fc10 b0 rewritten (JP candidates, no confident pair) | R Retail_SaveData_CalcChecksum
+SLUS_210.41 0035fcc0 30 tiny stub / inline accessor | R Retail_SaveData_SetChecksum
+SLUS_210.41 0035fcf0 40 tiny stub / inline accessor | R Retail_SaveData_VerifyChecksum
+SLUS_210.41 003600d0 70 retail-new extras (JP candidates below floor) | R Retail_SaveData_CopySectionBuffer
+SLUS_210.41 00360140 30 tiny stub / inline accessor | R Retail_SaveData_GetBlockCountKB
+SLUS_210.41 00360170 90 retail-new extras (JP candidates below floor) | R Retail_SaveData_GetIconData
+SLUS_210.41 00360200 b0 retail-new extras (JP candidates below floor) | R Retail_SaveIconLoader_Start
+SLUS_210.41 003602b0 40 tiny stub / inline accessor | R Retail_SaveIconLoader_IsReady
+SLUS_210.41 003602f0 60 retail-new extras (JP candidates below floor) | R Retail_SaveIconLoader_Release
+SLUS_210.41 00360350 60 retail-new extras (JP candidates below floor) | R Retail_SaveDevice_CheckSlotCash
+SLUS_210.41 003603b0 90 retail-new extras (JP candidates below floor) | R Retail_SaveData_NotifySectionsSave
+SLUS_210.41 00360440 50 retail-new extras (JP candidates below floor) | R Retail_SaveData_NotifySectionsLoaded
+SLUS_210.41 00361b20 90 rewritten (JP candidates, no confident pair) | K GetInfo__12SaveDeviceMCFPiPiPi
+SLUS_210.41 00361bb0 90 rewritten (JP candidates, no confident pair) | K __ct__10SaveDeviceFv
+SLUS_210.41 00361e90 60 retail-new extras (JP candidates below floor) | K Save__10SaveDeviceFUc
+SLUS_210.41 00361ef0 80 retail-new extras (JP candidates below floor) | K Load__10SaveDeviceFUc
+SLUS_210.41 00361f70 120 retail-new extras (JP candidates below floor) | R Retail_SaveDevice_ApplyLoadedData
+SLUS_210.41 00362090 30 tiny stub / inline accessor | R Retail_SaveDevice_GetSlotCount
+SLUS_210.41 003620c0 60 retail-new extras (JP candidates below floor) | R Retail_SaveDevice_GetCurrentSlot
+SLUS_210.41 00362120 a0 retail-new extras (JP candidates below floor) | R Retail_SaveDevice_GetSlotRecord
+SLUS_210.41 00362c60 10 tiny stub / inline accessor | K ClearPath__5CPathFv
+SLUS_210.41 003649c0 4d0 rewritten (JP candidates, no confident pair) | K ClearPath__12CPathControlFv
+SLUS_210.41 003686b0 50 retail-new extras (JP candidates below floor) | K SetMonsterSet__9BtlSocketFiP9MONSETTbl
+SLUS_210.41 00368700 d0 retail-new extras (JP candidates below floor) | K AddMonsterSet__9BtlSocketFiP9MONSETTbl
+SLUS_210.41 003687d0 2d0 retail-new extras (JP candidates below floor) | K SetRandomMonsterSet__9BtlSocketFi
+SLUS_210.41 00368aa0 70 retail-new extras (JP candidates below floor) | K SetBtlBGMNumber__9BtlSocketFi
+SLUS_210.41 00368b10 50 retail-new extras (JP candidates below floor) | K SetBtlBGMSituation__9BtlSocketFii
+SLUS_210.41 00368da0 1b0 retail-new (no JP candidate in bracket) | R Retail_FormatWideNumber
+SLUS_210.41 00369260 d0 retail-new extras (JP candidates below floor) | K DataGetCall__6HNMApiFi
+SLUS_210.41 00369330 20e0 retail-new extras (JP candidates below floor) | K SpecialEffectCode__FiiiP7ECParamP6EFFTBLP11BtlChrParam
+SLUS_210.41 00386130 260 retail-new (no JP candidate in bracket) | R Retail_GetItemKindTable
+SLUS_210.41 00386390 a0 retail-new (no JP candidate in bracket) | R Retail_HNMSnd_NewInstance
+SLUS_210.41 0038a900 650 retail-new extras (JP candidates below floor) | K PlaySE__6HNMSndFUibP7FVector
+SLUS_210.41 0038af50 650 retail-new extras (JP candidates below floor) | K PlaySEHold__6HNMSndFUibP7FVector
+SLUS_210.41 0038d020 1b0 rewritten (JP candidates, no confident pair) | K SetBGMParam__6HNMSndFiii
+SLUS_210.41 0038d2f0 310 retail-new (no JP candidate in bracket) | K SetBtlBGMSituation__6HNMSndFii
+SLUS_210.41 0038d7a0 50 retail-new (no JP candidate in bracket) | K SetBtlResultBGMIOPEntry__6HNMSndFv
+SLUS_210.41 0038d840 cc0 rewritten (JP candidates, no confident pair) | K __ct__8BtlBonusFv
+SLUS_210.41 003aeb30 40 tiny stub / inline accessor | S stub_WinCreate__9BtlResultFi_1
+SLUS_210.41 003b2360 210 retail-new (no JP candidate in bracket) | K SetHoldFade__8BtlFaderFfs
+SLUS_210.41 003bba80 940 retail-new (no JP candidate in bracket) | R Retail_BtlSaveSec_ResetCollectionFlags
+SLUS_210.41 003bc3c0 30 tiny stub / inline accessor | K SetYoahismMode__10BtlSaveSecFb
+SLUS_210.41 003bc3f0 30 tiny stub / inline accessor | K SetSoulSystemMode__10BtlSaveSecFb
+SLUS_210.41 003bc420 30 tiny stub / inline accessor | K SetRetailModeBit1__10BtlSaveSecFb
+SLUS_210.41 003bc470 10 tiny stub / inline accessor | R Retail_BtlSaveSec_ClearWord
+SLUS_210.41 003bc710 2150 retail-new extras (JP candidates below floor) | K SetSceneInit__10BtlSaveSecFib
+SLUS_210.41 003be860 10 tiny stub / inline accessor | R Retail_GetSaveMenuSectionPtr
+SLUS_210.41 003be870 370 retail-new extras (JP candidates below floor) | K AddEquip__10BtlSaveSecFi
+SLUS_210.41 003bebe0 6f0 retail-new extras (JP candidates below floor) | R Retail_BtlSaveSec_MergeItemCounts
+SLUS_210.41 003bf2d0 2f0 retail-new extras (JP candidates below floor) | R Retail_BtlSaveSec_ClearCarryList
+SLUS_210.41 003bf5c0 320 retail-new extras (JP candidates below floor) | R Retail_BtlSaveSec_ApplyCarryList
+SLUS_210.41 003bf8e0 300 retail-new extras (JP candidates below floor) | R Retail_BtlSaveSec_MergeItemFlags
+SLUS_210.41 003bfbe0 710 retail-new extras (JP candidates below floor) | K InitPCParam__10BtlSaveSecFii
+SLUS_210.41 003c02f0 890 retail-new extras (JP candidates below floor) | K DemoInitPCParam__10BtlSaveSecFii
+SLUS_210.41 003c4e40 480 retail-new (no JP candidate in bracket) | K SetYoahism__10BtlSaveSecFi
+SLUS_210.41 003c6050 190 rewritten (JP candidates, no confident pair) | K Read__17AnimServerHandlerFP10_LSDHANDLEP10RingBuffer
+SLUS_210.41 003c82c0 160 rewritten (JP candidates, no confident pair) | K StreamPolling__9LSDPlayerFPv
+SLUS_210.41 003c93d0 10 tiny stub / inline accessor | R Retail_SetLSDGlobals3
+SLUS_210.41 003ccda0 30 tiny stub / inline accessor | K EndProcess__18MovieServerHandlerFv
+SLUS_210.41 003d6d90 1a0 retail-new extras (JP candidates below floor) | K mSetupWarning__10dataAccessFPc
+SLUS_210.41 003d6f30 1b0 retail-new extras (JP candidates below floor) | R Retail_dataAccess_SetupWarningTall
+SLUS_210.41 003d70e0 60 retail-new extras (JP candidates below floor) | K mReleaseWarning__10dataAccessFv
+SLUS_210.41 003d7410 50 retail-new (no JP candidate in bracket) | R Retail_dataAccess_CalcFreeKB
+SLUS_210.41 003d7460 d0 retail-new (no JP candidate in bracket) | R Retail_dataAccess_SetupFreeSpaceText
+SLUS_210.41 003d8fb0 b0 retail-new extras (JP candidates below floor) | K mCheckWarning__10dataAccessFi
+SLUS_210.41 003d9060 1f0 retail-new extras (JP candidates below floor) | K mSetupInitialWarning__10dataAccessFv
+SLUS_210.41 003d9250 80 retail-new extras (JP candidates below floor) | R Retail_dataAccess_CursorHolder_Dt
+SLUS_210.41 003d9a00 50 retail-new (no JP candidate in bracket) | R Retail_primPacket_GetCenterOffsetByMode
+SLUS_210.41 003da990 730 rewritten (JP candidates, no confident pair) | K calcPos__6prim2DFv
+SLUS_210.41 003db270 c0 retail-new extras (JP candidates below floor) | K __ct__12primSpriteExFb
+SLUS_210.41 003db330 690 retail-new extras (JP candidates below floor) | K mSetStaticPacket__12primSpriteExFv
+SLUS_210.41 003db9c0 530 retail-new extras (JP candidates below floor) | K getPacket__12primSpriteExFv
+SLUS_210.41 003dbef0 6f0 retail-new extras (JP candidates below floor) | K calcPos__12primSpriteExFv
+SLUS_210.41 003dc5e0 50 retail-new extras (JP candidates below floor) | R Retail_primSpriteEx_SetPosW
+SLUS_210.41 003dc630 80 retail-new extras (JP candidates below floor) | K __ct__10primSpriteFb
+SLUS_210.41 003de640 60 retail-new (no JP candidate in bracket) | K __dt__12primSpriteExFv
+SLUS_210.41 003e22a0 b0 rewritten (JP candidates, no confident pair) | K __dt__8dispCashFv
+SLUS_210.41 003e2350 20 tiny stub / inline accessor | K initialize__8dispCashFP7primTexiii
+SLUS_210.41 003e2a20 50 retail-new (no JP candidate in bracket) | R Retail_primSound_IsDeleted
+SLUS_210.41 003e36e0 10 tiny stub / inline accessor | R Retail_install_SetFlag83f4
+SLUS_210.41 003e36f0 a0 retail-new (no JP candidate in bracket) | R Retail_install_CheckHDDPartition
+SLUS_210.41 003e38e0 150 rewritten (JP candidates, no confident pair) | R Retail_BuildHDDPartitionKey
+SLUS_210.41 003e3ad0 50 rewritten (JP candidates, no confident pair) | R Retail_MsgTable_Format1
+SLUS_210.41 003e3b20 50 rewritten (JP candidates, no confident pair) | R Retail_MsgTable_Format2
+SLUS_210.41 003eab90 1210 rewritten (JP candidates, no confident pair) | K __ct__9BtlInBossFv
+SLUS_210.41 003ebda0 50 rewritten (JP candidates, no confident pair) | R Retail_BtlInBossExModel_Ct
+SLUS_210.41 003ebfd0 390 retail-new extras (JP candidates below floor) | K GetDrawPacket__9BtlInBossFi
+SLUS_210.41 003ec360 30 tiny stub / inline accessor | K GetPower__8LineBlurFv
+SLUS_210.41 003eccd0 90 retail-new (no JP candidate in bracket) | R Retail_BtlInBoss_CalcScreenPos
+SLUS_210.41 003ecf10 d0 rewritten (JP candidates, no confident pair) | R Retail_LightBuf_Ct
+SLUS_210.41 003ecfe0 f0 rewritten (JP candidates, no confident pair) | R Retail_LightBuf_Dt
+SLUS_210.41 003ed0d0 30 tiny stub / inline accessor | R Retail_LightBuf_GetFrontBuffer
+SLUS_210.41 003ed100 120 rewritten (JP candidates, no confident pair) | R Retail_BtlInBoss_GetPacketWithMatrices
+SLUS_210.41 003ed220 90 rewritten (JP candidates, no confident pair) | R Retail_BtlInBossExModel_Dt
+SLUS_210.41 003f3ce0 110 retail-new (no JP candidate in bracket) | R Retail_GetTreasureCounts
+SLUS_210.41 003f3f30 380 retail-new (no JP candidate in bracket) | R Retail_SumPCStatTotals
+SLUS_210.41 003f42b0 110 retail-new (no JP candidate in bracket) | R Retail_BuildClearStatsRecord
+SLUS_210.41 003f4e30 40 tiny stub / inline accessor | R Retail_dataAccess_ReleaseFieldSe
+SLUS_210.41 003f4e70 30 tiny stub / inline accessor | R Retail_dataAccess_UnloadFieldSe
+SLUS_210.41 003f5dc0 90 retail-new (no JP candidate in bracket) | R Retail_CFieldSocket_CreateScreenBright
+SLUS_210.41 003f6fd0 30 tiny stub / inline accessor | R Retail_CFieldSocket_IsMovePhase
+SLUS_210.41 003f7780 10 tiny stub / inline accessor | R Retail_StrCpyAt100
+SLUS_210.41 003f80b0 80 retail-new (no JP candidate in bracket) | R Retail_CFieldSocket_StartFieldObj1ae0
+SLUS_210.41 003f8380 f0 retail-new (no JP candidate in bracket) | R Retail_CFieldSaveData_ReadValue
+SLUS_210.41 003fef60 180 retail-new (no JP candidate in bracket) | R Retail_OpenFieldMessageWindow
+SLUS_210.41 004000c0 30 tiny stub / inline accessor | R Retail_RunHook_43fe6c
+SLUS_210.41 004000f0 50 retail-new (no JP candidate in bracket) | R Retail_RunHook_43fe70
+SLUS_210.41 00400dc0 10 tiny stub / inline accessor | K LinkA__8LSDScrExFP10_EventWork
+SLUS_210.41 00401780 80 rewritten (JP candidates, no confident pair) | K SetBGMotion__8LSDScrExFiPCc
+SLUS_210.41 004019d0 10 tiny stub / inline accessor | K Create__9StreamBGMFPCc
+SLUS_210.41 00401d60 90 retail-new (no JP candidate in bracket) | R Retail_StreamBGM_FadeTo
+SLUS_210.41 004044b0 50 retail-new (no JP candidate in bracket) | R Retail_FldTimer_Restart
+SLUS_210.41 00405850 50 retail-new (no JP candidate in bracket) | K Dispose__8P2FilterFv
+SLUS_210.41 004058a0 50 retail-new (no JP candidate in bracket) | R Retail_P2Filter_Start
+SLUS_210.41 00406190 80 retail-new (no JP candidate in bracket) | R Retail_CGhostEfxLink_Dt
+SLUS_210.41 00406520 b0 rewritten (JP candidates, no confident pair) | R Retail_CGhostEfx_ReleaseLink
+SLUS_210.41 00407380 50 retail-new extras (JP candidates below floor) | K __ct__10CDiscCheckFv
+SLUS_210.41 004073d0 60 retail-new extras (JP candidates below floor) | K __dt__10CDiscCheckFv
+SLUS_210.41 00407430 40 tiny stub / inline accessor | K Entry__10CDiscCheckFv
+SLUS_210.41 00407470 40 tiny stub / inline accessor | K Dispose__10CDiscCheckFv
+SLUS_210.41 004074b0 70 retail-new extras (JP candidates below floor) | K Delete__10CDiscCheckFv
+SLUS_210.41 00407520 10 tiny stub / inline accessor | K Start__10CDiscCheckFUc
+SLUS_210.41 00407530 10 tiny stub / inline accessor | K isReady__10CDiscCheckFv
+SLUS_210.41 00407540 60 retail-new extras (JP candidates below floor) | K ReadCB__10CDiscCheckFiP9BufMemoryiPcPv
+SLUS_210.41 004075a0 3c0 retail-new extras (JP candidates below floor) | K Polling__10CDiscCheckFv
+SLUS_210.41 0040d700 40 tiny stub / inline accessor | R Retail_P2ClutHolder_Ct
+SLUS_210.41 00411b70 250 rewritten (JP candidates, no confident pair) | K __dt__11FrameChangeFv
+SLUS_210.41 00414410 d0 retail-new (no JP candidate in bracket) | R Retail_CBGSwarm_Dt
+SLUS_210.41 004144e0 90 retail-new (no JP candidate in bracket) | R Retail_CBGSwarm_AddOT
+SLUS_210.41 00414570 90 retail-new (no JP candidate in bracket) | R Retail_CBGSwarm_ReleaseOT
+SLUS_210.41 00414600 6e0 retail-new (no JP candidate in bracket) | R Retail_CBGSwarm_Update
+SLUS_210.41 00414ce0 1e0 retail-new (no JP candidate in bracket) | R Retail_CBGSwarm_CreateModels
+SLUS_210.41 00414ec0 210 retail-new (no JP candidate in bracket) | R Retail_CBGSwarm_InitModel
+SLUS_210.41 004373b0 d0 rewritten (JP candidates, no confident pair) | K __sinit_SSHmain.cpp
+SLUS_210.41 00437530 70 retail-new (no JP candidate in bracket) | K __sinit_CFontDraw_clut.cpp
+SLUS_210.41 00437a40 80 retail-new (no JP candidate in bracket) | K __sinit_LsdHandler459840.cpp
+SLUS_210.41 00437e10 0 tiny stub / inline accessor | K __sinit_libgsx.cpp
+SH2US_FIELD.BIN 0045efc0 90 retail-new (no JP candidate in bracket) | K CreateComplete__9SavePointFP9BufMemory
+SH2US_FIELD.BIN 00460380 70 retail-new (no JP candidate in bracket) | K SetOn__9SavePointFb
+SH2US_FIELD.BIN 00460cc0 50 retail-new (no JP candidate in bracket) | K cbCreateDirect__9WarpPointFiP9BufMemoryiPcPv
+SH2US_FIELD.BIN 004613b0 d0 retail-new (no JP candidate in bracket) | K CreateComplete__9WarpPointFP9BufMemory
+SH2US_FIELD.BIN 00463770 90 retail-new (no JP candidate in bracket) | K IsWarpEnded__9WarpPointFv
+SH2US_FIELD.BIN 00463e20 b0 retail-new (no JP candidate in bracket) | R Retail_CmdMenu_LookupPair
+SH2US_FIELD.BIN 00463ed0 d0 retail-new (no JP candidate in bracket) | R Retail_CmdMenu_LookupMsdColumn
+SH2US_FIELD.BIN 00463fa0 b0 retail-new (no JP candidate in bracket) | R Retail_CmdMenu_CreateRing
+SH2US_FIELD.BIN 00464050 60 retail-new (no JP candidate in bracket) | R Retail_CmdMenu_SetRingStrike
+SH2US_FIELD.BIN 004640b0 e0 retail-new (no JP candidate in bracket) | R Retail_CmdMenu_SetRingAreas
+SH2US_FIELD.BIN 00464190 c0 retail-new (no JP candidate in bracket) | R Retail_CmdMenu_ResetRing
+SH2US_FIELD.BIN 00467bb0 a0 retail-new (no JP candidate in bracket) | K __ct__6CmdTopFv
+SH2US_FIELD.BIN 00468570 150 retail-new (no JP candidate in bracket) | R Retail_CmdTop_ChangeState
+SH2US_FIELD.BIN 00469880 370 retail-new (no JP candidate in bracket) | R Retail_CmdTop_SelectMenuEntry
+SH2US_FIELD.BIN 0046ad60 70 rewritten (JP candidates, no confident pair) | K __ct__6P2FontFv
+SH2US_FIELD.BIN 0046c0c0 e0 retail-new (no JP candidate in bracket) | R Retail_CmdPC_SkipDisabledSlots
+SH2US_FIELD.BIN 0046c9a0 80 retail-new (no JP candidate in bracket) | R Retail_CmdPC_ApplyRingAreas
+SH2US_FIELD.BIN 0046cb00 90 retail-new (no JP candidate in bracket) | R Retail_CmdPC_IsInParty
+SH2US_FIELD.BIN 0046d0c0 140 retail-new (no JP candidate in bracket) | R Retail_CmdPC_CalcMagicCost
+SH2US_FIELD.BIN 0046d200 f0 retail-new (no JP candidate in bracket) | R Retail_CmdPC_CalcMagicCostScaled
+SH2US_FIELD.BIN 0046d2f0 1d0 retail-new (no JP candidate in bracket) | R Retail_CmdPC_ApplyCostModifiers
+SH2US_FIELD.BIN 0046d4c0 1e0 retail-new (no JP candidate in bracket) | R Retail_CmdPC_ApplyMPModifiers
+SH2US_FIELD.BIN 0046d6a0 1a0 retail-new (no JP candidate in bracket) | R Retail_CmdPC_FindBestModifier
+SH2US_FIELD.BIN 0046dc10 30 tiny stub / inline accessor | R Retail_CmdParty_ConvertComboKeyDefault
+SH2US_FIELD.BIN 0046dc40 d0 retail-new extras (JP candidates below floor) | K FindPC__8CmdPartyFUs
+SH2US_FIELD.BIN 0046dd10 b0 retail-new extras (JP candidates below floor) | K GetPCIndex__8CmdPartyFUs
+SH2US_FIELD.BIN 0046def0 80 retail-new extras (JP candidates below floor) | R Retail_CmdParty_UpdateAllPCStates
+SH2US_FIELD.BIN 0046df70 e0 retail-new extras (JP candidates below floor) | R Retail_CmdParty_FindSavePCRecord
+SH2US_FIELD.BIN 0046e050 220 retail-new extras (JP candidates below floor) | K GetRestRingItem__8CmdPartyFs
+SH2US_FIELD.BIN 0046fbf0 240 retail-new (no JP candidate in bracket) | R Retail_CmdExplain_CreateImage
+SH2US_FIELD.BIN 0046fe30 120 retail-new (no JP candidate in bracket) | R Retail_CmdExplain_FormatCounts
+SH2US_FIELD.BIN 004734b0 f0 retail-new (no JP candidate in bracket) | R Retail_CmdItem_SetRingForItem
+SH2US_FIELD.BIN 00473b60 a0 retail-new (no JP candidate in bracket) | R Retail_CmdTitleLog_OpenWindow
+SH2US_FIELD.BIN 004765a0 5a0 retail-new extras (JP candidates below floor) | K Create__11MenuElementFPUcP9BufMemory
+SH2US_FIELD.BIN 00476b40 570 retail-new extras (JP candidates below floor) | R Retail_MenuElement_SetupLayout
+SH2US_FIELD.BIN 004770b0 e0 retail-new extras (JP candidates below floor) | R Retail_MenuElement_SetInfo
+SH2US_FIELD.BIN 00477190 360 retail-new extras (JP candidates below floor) | R Retail_MenuElement_CreateIconData
+SH2US_FIELD.BIN 004774f0 90 retail-new extras (JP candidates below floor) | R Retail_MenuElement_ReleaseIconData
+SH2US_FIELD.BIN 00477580 300 retail-new extras (JP candidates below floor) | R Retail_MenuElement_SetSelectState
+SH2US_FIELD.BIN 00477880 2a0 retail-new extras (JP candidates below floor) | R Retail_MenuElement_UpdateSprites
+SH2US_FIELD.BIN 00478390 a0 retail-new (no JP candidate in bracket) | K __ct__16MenuElementIconsFv
+SH2US_FIELD.BIN 004784a0 d0 retail-new (no JP candidate in bracket) | K __dt__16MenuElementIconsFv
+SH2US_FIELD.BIN 00478830 40 tiny stub / inline accessor | K SafeDelayDelete__10CmdElementFv
+SH2US_FIELD.BIN 00478870 110 retail-new extras (JP candidates below floor) | K GetReady__10CmdElementFv
+SH2US_FIELD.BIN 00478980 90 retail-new extras (JP candidates below floor) | R Retail_CmdElement_Release
+SH2US_FIELD.BIN 00478a10 210 retail-new extras (JP candidates below floor) | R Retail_CmdElement_ChangeImage
+SH2US_FIELD.BIN 00478f80 e0 retail-new (no JP candidate in bracket) | R Retail_CmdElement_ChangeImageByPage
+SH2US_FIELD.BIN 00479ea0 230 retail-new (no JP candidate in bracket) | R Retail_CmdOption_ApplyOptions
+SH2US_FIELD.BIN 0047b270 60 retail-new (no JP candidate in bracket) | R Retail_CmdPrivate_ForwardIsReady
+SH2US_FIELD.BIN 0047b2d0 50 retail-new (no JP candidate in bracket) | R Retail_CmdPrivate_ForwardVfunc2c
+SH2US_FIELD.BIN 0047b320 50 retail-new (no JP candidate in bracket) | R Retail_CmdPrivate_ForwardVfunc30
+SH2US_FIELD.BIN 0047d360 50 retail-new (no JP candidate in bracket) | K SafeDelayDelete__9CmdStatusFv
+SH2US_FIELD.BIN 0047d6b0 80 rewritten (JP candidates, no confident pair) | K Close__9CmdStatusFv
+SH2US_FIELD.BIN 0047f420 1a0 retail-new extras (JP candidates below floor) | K GetPropertyCount__12CmdEquipmentFv
+SH2US_FIELD.BIN 0047f5c0 100 retail-new extras (JP candidates below floor) | R Retail_CmdEquipment_GetPropertyAux
+SH2US_FIELD.BIN 0047f6c0 1e0 retail-new extras (JP candidates below floor) | R Retail_CmdEquipment_SetPropertyExplanation
+SH2US_FIELD.BIN 0047fea0 1d0 rewritten (JP candidates, no confident pair) | R Retail_CmdEquipment_OpenPage05
+SH2US_FIELD.BIN 00484700 e0 retail-new (no JP candidate in bracket) | R Retail_CmdTopMenu_Sub484700
+SH2US_FIELD.BIN 004868b0 70 rewritten (JP candidates, no confident pair) | K __ct__12CmdTechniqueFv
+SH2US_FIELD.BIN 004869a0 d0 retail-new (no JP candidate in bracket) | K SafeDelayDelete__12CmdTechniqueFv
+SH2US_FIELD.BIN 00486fb0 120 retail-new (no JP candidate in bracket) | K Close__12CmdTechniqueFv
+SH2US_FIELD.BIN 00487e10 110 retail-new (no JP candidate in bracket) | R Retail_CmdTechniqueGoods_Sub487e10
+SH2US_FIELD.BIN 00488230 70 rewritten (JP candidates, no confident pair) | K SafeDelayDelete__13CmdFriendshipFv
+SH2US_FIELD.BIN 00488a80 90 retail-new (no JP candidate in bracket) | K __dt__10CmdProfileFv
+SH2US_FIELD.BIN 00489090 350 retail-new extras (JP candidates below floor) | K GetReady__8CmdTarotFv
+SH2US_FIELD.BIN 004893e0 100 retail-new extras (JP candidates below floor) | K Close__8CmdTarotFv
+SH2US_FIELD.BIN 004894e0 80 retail-new extras (JP candidates below floor) | K Run__8CmdTarotFv
+SH2US_FIELD.BIN 00489680 150 retail-new extras (JP candidates below floor) | R Retail_CmdTarotGoods_SetExplanation
+SH2US_FIELD.BIN 004897d0 170 retail-new extras (JP candidates below floor) | R Retail_CmdTarotGoods_FillList
+SH2US_FIELD.BIN 00489940 430 retail-new extras (JP candidates below floor) | R Retail_CmdTarotGoods_HandleInput
+SH2US_FIELD.BIN 00489d70 1f0 retail-new extras (JP candidates below floor) | R Retail_CmdTarotGoods_FinishMove
+SH2US_FIELD.BIN 00489f60 460 retail-new extras (JP candidates below floor) | R Retail_CmdTarotGoods_OpenCard
+SH2US_FIELD.BIN 0048aef0 d0 retail-new (no JP candidate in bracket) | R Retail_CmdTarotImage_Sub48aef0
+SH2US_FIELD.BIN 0048b0d0 70 rewritten (JP candidates, no confident pair) | K SafeDelayDelete__13CmdPhotographFv
+SH2US_FIELD.BIN 0048b340 90 rewritten (JP candidates, no confident pair) | K Close__13CmdPhotographFv
+SH2US_FIELD.BIN 0048b7f0 60 rewritten (JP candidates, no confident pair) | K __ct__8CmdSwordFv
+SH2US_FIELD.BIN 0048b8d0 d0 retail-new (no JP candidate in bracket) | K SafeDelayDelete__8CmdSwordFv
+SH2US_FIELD.BIN 0048bea0 70 retail-new (no JP candidate in bracket) | K Run__8CmdSwordFv
+SH2US_FIELD.BIN 0048cc20 80 retail-new (no JP candidate in bracket) | K SafeDelayDelete__10CmdClothesFv
+SH2US_FIELD.BIN 0048cdf0 a0 retail-new (no JP candidate in bracket) | K Close__10CmdClothesFv
+SH2US_FIELD.BIN 00491340 100 retail-new (no JP candidate in bracket) | R Retail_CmdHelpExplain_FormatPage
+SH2US_FIELD.BIN 00493770 90 retail-new (no JP candidate in bracket) | R Retail_CmdGraveyard_SmoothFilterHolder_Dt
+SH2US_FIELD.BIN 00494440 b0 retail-new (no JP candidate in bracket) | R Retail_CmdGraveyard_Sub494440
+SH2US_FIELD.BIN 004949e0 210 retail-new (no JP candidate in bracket) | R Retail_CmdGraveyardMenu_Sub4949e0
+SH2US_FIELD.BIN 00494db0 e0 retail-new (no JP candidate in bracket) | K SafeDelayDelete__8CmdAromaFv
+SH2US_FIELD.BIN 004952b0 190 rewritten (JP candidates, no confident pair) | K Close__8CmdAromaFv
+SH2US_FIELD.BIN 00495630 b0 retail-new (no JP candidate in bracket) | R Retail_CmdAroma_FillList
+SH2US_FIELD.BIN 00495810 110 retail-new (no JP candidate in bracket) | R Retail_CmdAroma_SetExplanation
+SH2US_FIELD.BIN 00498e20 130 retail-new (no JP candidate in bracket) | R Retail_CmdLibrary_UpdateTitleList
+SH2US_FIELD.BIN 0049b1d0 70 retail-new (no JP candidate in bracket) | K SafeDelayDelete__16CmdLibraryDetailFv
+SH2US_FIELD.BIN 0049c180 b0 retail-new extras (JP candidates below floor) | R Retail_CmdLibraryDetail_Open
+SH2US_FIELD.BIN 0049c230 a0 retail-new extras (JP candidates below floor) | R Retail_CmdLibraryDetail_Close
+SH2US_FIELD.BIN 0049c2d0 280 retail-new extras (JP candidates below floor) | R Retail_CmdLibraryDetail_Layout
+SH2US_FIELD.BIN 0049fb30 f0 retail-new (no JP candidate in bracket) | R Retail_CmdRingCustom_FillExplainList
+SH2US_FIELD.BIN 004a01e0 180 rewritten (JP candidates, no confident pair) | K Exit__13CmdRingCustomFv
+SH2US_FIELD.BIN 004a39d0 80 retail-new (no JP candidate in bracket) | R Retail_CmdRingCustomHitArea_CopyArea1
+SH2US_FIELD.BIN 004a3a50 80 retail-new (no JP candidate in bracket) | R Retail_CmdRingCustomHitArea_CopyArea2
+SH2US_FIELD.BIN 004a5800 d0 rewritten (JP candidates, no confident pair) | K __ct__9CmdFusionFv
+SH2US_FIELD.BIN 004a5970 280 retail-new (no JP candidate in bracket) | K SafeDelayDelete__9CmdFusionFv
+SH2US_FIELD.BIN 004a6000 400 retail-new (no JP candidate in bracket) | K Close__9CmdFusionFv
+SH2US_FIELD.BIN 004a6400 20 tiny stub / inline accessor | R Retail_CmdFusion_GetAuraRef
+SH2US_FIELD.BIN 004a6420 40 tiny stub / inline accessor | R Retail_CmdFusion_AuraOn
+SH2US_FIELD.BIN 004a6460 40 tiny stub / inline accessor | R Retail_CmdFusion_AuraOff
+SH2US_FIELD.BIN 004a6d90 120 retail-new (no JP candidate in bracket) | R Retail_CmdFusion_CreateSkillList
+SH2US_FIELD.BIN 004a6eb0 220 retail-new (no JP candidate in bracket) | R Retail_CmdFusion_CreateLevelWin
+SH2US_FIELD.BIN 004a7c50 d0 retail-new extras (JP candidates below floor) | R Retail_CmdFusion_Sub4a7c50
+SH2US_FIELD.BIN 004a7d20 170 retail-new extras (JP candidates below floor) | R Retail_CmdFusion_SelectSkill
+SH2US_FIELD.BIN 004ad5b0 140 retail-new (no JP candidate in bracket) | R Retail_CmdScore_OpenWin05
+SH2US_FIELD.BIN 004ad840 140 retail-new (no JP candidate in bracket) | R Retail_CmdScore_CloseWindows
+SH2US_FIELD.BIN 004ad980 80 retail-new (no JP candidate in bracket) | R Retail_CmdScore_ClearScores
+SH2US_FIELD.BIN 004ae7a0 2f0 retail-new extras (JP candidates below floor) | R Retail_CmdScore_ExitAndClear
+SH2US_FIELD.BIN 004aea90 100 retail-new extras (JP candidates below floor) | K Exec__8CmdScoreFv
+SH2US_FIELD.BIN 004b0ea0 90 retail-new (no JP candidate in bracket) | K __ct__11CmdSubTitleFv
+SH2US_FIELD.BIN 004b1830 80 retail-new (no JP candidate in bracket) | K __dt__17CmdGoodsKeyCustomFv
+SH2US_FIELD.BIN 004b1a00 60 retail-new (no JP candidate in bracket) | K SafeDelayDelete__12CmdKeyCustomFv
+SH2US_FIELD.BIN 004b3860 90 retail-new (no JP candidate in bracket) | K __dt__16CmdKeyCustomMenuFv
+SH2US_FIELD.BIN 004b3de0 d0 retail-new (no JP candidate in bracket) | K __dt__10CmdSubMenuFv
+SH2US_FIELD.BIN 004b49c0 d0 retail-new (no JP candidate in bracket) | R Retail_CmdLibraryInfo_Sub4b49c0
+SH2US_FIELD.BIN 004b6a80 190 rewritten (JP candidates, no confident pair) | K UpdateScene__16CmdFusionLevelupFP9CmdFusion
+SH2US_FIELD.BIN 004b6c10 a0 rewritten (JP candidates, no confident pair) | K __ct__12CmdFormationFv
+SH2US_FIELD.BIN 004b7280 d0 retail-new (no JP candidate in bracket) | R Retail_CmdFormation_ResetAndMessage
+SH2US_FIELD.BIN 004b7650 290 retail-new (no JP candidate in bracket) | R Retail_CmdFormation_Confirm
+SH2US_FIELD.BIN 004b78e0 200 retail-new (no JP candidate in bracket) | R Retail_CmdFormation_CommitParty
+SH2US_FIELD.BIN 004b8c30 260 retail-new (no JP candidate in bracket) | R Retail_CmdFormationMember_OpenWin04
+SH2US_FIELD.BIN 004b8e90 200 retail-new (no JP candidate in bracket) | R Retail_CmdFormationMember_ShowExplanation
+SH2US_FIELD.BIN 004b9090 230 retail-new (no JP candidate in bracket) | R Retail_CmdFormationMember_Cancel
+SH2US_FIELD.BIN 004bb990 460 rewritten (JP candidates, no confident pair) | K UpdateName__16CmdFormationTeamFv
+SH2US_FIELD.BIN 004bc930 110 retail-new extras (JP candidates below floor) | K ResetTeam__16CmdFormationTeamFv
+SH2US_FIELD.BIN 004bca40 100 retail-new extras (JP candidates below floor) | R Retail_CmdFormationTeam_ResetSlots
+SH2US_FIELD.BIN 004bcb40 240 retail-new extras (JP candidates below floor) | R Retail_CmdFormationTeam_CopyTeam
+SH2US_FIELD.BIN 004bcd80 60 retail-new extras (JP candidates below floor) | R Retail_CmdFormationTeam_SetTeamExplanation
+SH2US_FIELD.BIN 004bcde0 b0 retail-new extras (JP candidates below floor) | R Retail_CmdFormationTeam_Sub4bcde0
+SH2US_FIELD.BIN 004bce90 80 retail-new extras (JP candidates below floor) | R Retail_CmdFormationTeam_Sub4bce90
+SH2US_FIELD.BIN 004bd400 70 retail-new (no JP candidate in bracket) | K __ct__11CmdWolfBoutFv
+SH2US_FIELD.BIN 004bd4f0 100 retail-new (no JP candidate in bracket) | K SafeDelayDelete__11CmdWolfBoutFv
+SH2US_FIELD.BIN 004bd8b0 150 rewritten (JP candidates, no confident pair) | K Close__11CmdWolfBoutFv
+SH2US_FIELD.BIN 004bda00 100 rewritten (JP candidates, no confident pair) | K Run__11CmdWolfBoutFv
+SH2US_FIELD.BIN 004be0b0 70 retail-new (no JP candidate in bracket) | K UpdateProfile__11CmdWolfBoutFv
+SH2US_FIELD.BIN 004c4970 f0 retail-new (no JP candidate in bracket) | K __dt__16CmdComboKeyGoodsFv
+SH2US_FIELD.BIN 004c55b0 40 tiny stub / inline accessor | K SafeDelayDelete__9CmdPCInfoFv
+SH2US_FIELD.BIN 004c7cf0 80 retail-new (no JP candidate in bracket) | K __ct__8CmdMagicFv
+SH2US_FIELD.BIN 004c9800 80 retail-new (no JP candidate in bracket) | K __ct__13CmdMagicGoodsFv
+SH2US_FIELD.BIN 004c9880 e0 retail-new (no JP candidate in bracket) | K __dt__13CmdMagicGoodsFv
+SH2US_FIELD.BIN 004cd2c0 160 retail-new (no JP candidate in bracket) | R Retail_CmdCrest_Sub4cd2c0
+SH2US_FIELD.BIN 004d64d0 e0 retail-new (no JP candidate in bracket) | K CloseEffect__13MenuModelAuraFi
+SH2US_FIELD.BIN 004d65b0 30 tiny stub / inline accessor | R Retail_MenuModelAura_SetField68
+SH2US_FIELD.BIN 004d81a0 80 retail-new extras (JP candidates below floor) | K Run__15CmdPropertyListFv
+SH2US_FIELD.BIN 004d8220 400 retail-new extras (JP candidates below floor) | R Retail_CmdPropertyList_CreateFenceScene
+SH2US_FIELD.BIN 004d9eb0 180 retail-new (no JP candidate in bracket) | K ShiftExplain__15CmdPropertyListFv
+SH2US_FIELD.BIN 004dabb0 90 retail-new (no JP candidate in bracket) | R Retail_CmdPropertyGoods_Ct2
+SH2US_FIELD.BIN 004dc800 d0 retail-new (no JP candidate in bracket) | R Retail_CmdRingCustomAutoRingGoods_Dt
+SH2US_FIELD.BIN 004ed400 40 tiny stub / inline accessor | R Retail_FaceImageData_Ct2
+SH2US_FIELD.BIN 004ed440 30 tiny stub / inline accessor | R Retail_FaceImageData_Clear
+SH2US_FIELD.BIN 004ed680 30 tiny stub / inline accessor | R Retail_FaceImage_SetField14
+SH2US_FIELD.BIN 004ed830 20 tiny stub / inline accessor | R Retail_FaceImage_GetField14
+SH2US_FIELD.BIN 004ed8b0 30 tiny stub / inline accessor | R Retail_FaceImage_GetBit2Of12
+SH2US_FIELD.BIN 004ed8e0 b0 retail-new extras (JP candidates below floor) | R Retail_FaceImage_OpenAnimated
+SH2US_FIELD.BIN 004ed990 40 tiny stub / inline accessor | R Retail_FaceImage_SetOpenMode
+SH2US_FIELD.BIN 004ed9d0 b0 retail-new extras (JP candidates below floor) | R Retail_FaceImage_CloseAnimated
+SH2US_FIELD.BIN 004eda80 40 tiny stub / inline accessor | R Retail_FaceImage_SetCloseMode
+SH2US_FIELD.BIN 004edb80 70 retail-new (no JP candidate in bracket) | R Retail_FaceImage_IsIdle
+SH2US_FIELD.BIN 004edcd0 40 tiny stub / inline accessor | R Retail_FaceImage_SetFlag12Bit0
+SH2US_FIELD.BIN 004edd10 70 retail-new (no JP candidate in bracket) | R Retail_FaceImage_CreateSendOnLocal
+SH2US_FIELD.BIN 004edd80 20 tiny stub / inline accessor | R Retail_FaceImage_GetField14b
+SH2US_FIELD.BIN 004edda0 20 tiny stub / inline accessor | R Retail_FaceImage_GetSubPtr18
+SH2US_FIELD.BIN 004ede80 40 tiny stub / inline accessor | K Close__9FaceImageFUci
+SH2US_FIELD.BIN 004edec0 40 tiny stub / inline accessor | K Open__9FaceImageFUci
+SH2US_FIELD.BIN 004ee510 40 tiny stub / inline accessor | R Retail_FldTeamChange_SetData48
+SH2US_FIELD.BIN 004ee580 20 tiny stub / inline accessor | R Retail_FldTeamChange_Get44
+SH2US_FIELD.BIN 004ee5a0 30 tiny stub / inline accessor | R Retail_FldTeamChange_Set20
+SH2US_FIELD.BIN 004ee5d0 70 retail-new (no JP candidate in bracket) | R Retail_MenuWindow_SetStateIdle1
+SH2US_FIELD.BIN 004ee640 40 tiny stub / inline accessor | R Retail_FldTeamChange_SetBytes5a5b
+SH2US_FIELD.BIN 004ee680 30 tiny stub / inline accessor | R Retail_FldTeamChange_Set54
+SH2US_FIELD.BIN 004ee6b0 40 tiny stub / inline accessor | R Retail_Font_GetSlotField2c
+SH2US_FIELD.BIN 004ee7c0 30 tiny stub / inline accessor | R Retail_FieldMessage_SetEC
+SH2US_FIELD.BIN 004eea40 30 tiny stub / inline accessor | R Retail_MenuWindow_GetKind
+SH2US_FIELD.BIN 004eecc0 40 tiny stub / inline accessor | R Retail_FieldMessage_CancelWait
+SH2US_FIELD.BIN 004eed00 20 tiny stub / inline accessor | R Retail_FieldMessage_Get94
+SH2US_FIELD.BIN 004eed20 20 tiny stub / inline accessor | R Retail_FieldMessage_GetBitsB0
+SH2US_FIELD.BIN 004eed40 20 tiny stub / inline accessor | R Retail_FieldMessage_GetBit12
+SH2US_FIELD.BIN 004eed60 20 tiny stub / inline accessor | R Retail_FieldMessage_Get68
+SH2US_FIELD.BIN 004eed80 20 tiny stub / inline accessor | R Retail_FieldMessage_Get6c
+SH2US_FIELD.BIN 004eeda0 80 retail-new (no JP candidate in bracket) | R Retail_FieldMessage_SetScrollArea
+SH2US_FIELD.BIN 004eee20 20 tiny stub / inline accessor | R Retail_FieldMessage_Get30
+SH2US_FIELD.BIN 004eee40 20 tiny stub / inline accessor | R Retail_FieldMessage_Get2c
+SH2US_FIELD.BIN 004eee60 40 tiny stub / inline accessor | R Retail_FieldMessage_OrderText
+SH2US_FIELD.BIN 004ef010 50 retail-new (no JP candidate in bracket) | R Retail_MenuWindow_SetScrollWithParam
+SH2US_FIELD.BIN 004ef0f0 40 tiny stub / inline accessor | R Retail_FieldMessage_SetKeyWaitBit
+SH2US_FIELD.BIN 004ef240 30 tiny stub / inline accessor | R Retail_FieldMessage_SetSelectModeF9
+SH2US_FIELD.BIN 004ef270 20 tiny stub / inline accessor | R Retail_FieldMessage_SetState1
+SH2US_FIELD.BIN 004ef290 20 tiny stub / inline accessor | K GetState__12FieldMessageCFv
+SH2US_FIELD.BIN 004ef2e0 100 retail-new (no JP candidate in bracket) | R Retail_FieldMessage_AddSelectEntry
+SH2US_FIELD.BIN 004ef3e0 30 tiny stub / inline accessor | R Retail_FieldMessage_SetState7c
+SH2US_FIELD.BIN 004ef590 40 tiny stub / inline accessor | R Retail_Cursor_ResetVertex
+SH2US_FIELD.BIN 004ef7d0 40 tiny stub / inline accessor | R Retail_FieldMessage_SetSubSize
+SH2US_FIELD.BIN 004ef810 40 tiny stub / inline accessor | R Retail_FieldMessage_SetSubPosition
+SH2US_FIELD.BIN 004ef8a0 70 retail-new (no JP candidate in bracket) | R Retail_MenuWindow_StartKeyWaitState
+SH2US_FIELD.BIN 004f0350 30 tiny stub / inline accessor | R Retail_FieldMessage_GetStateByte
+SH2US_FIELD.BIN 004f0380 a0 retail-new (no JP candidate in bracket) | R Retail_FieldMessage_SelectNext
+SH2US_FIELD.BIN 004f0420 30 tiny stub / inline accessor | R Retail_FieldMessage_GetBitFB
+SH2US_FIELD.BIN 004f0450 50 retail-new (no JP candidate in bracket) | R Retail_FieldMessage_IsTextFinished
+SH2US_FIELD.BIN 004f04a0 70 retail-new (no JP candidate in bracket) | R Retail_FieldMessage_FlushIfPending
+SH2US_FIELD.BIN 004f0540 30 tiny stub / inline accessor | R Retail_FieldMessage_GetBit22_6
+SH2US_FIELD.BIN 004f05b0 40 tiny stub / inline accessor | R Retail_CPad_GetRealMask
+SH2US_FIELD.BIN 004f13d0 90 retail-new (no JP candidate in bracket) | R Retail_CField_SuspendForMenu
+SH2US_FIELD.BIN 004f1460 a0 retail-new (no JP candidate in bracket) | R Retail_CField_ResumeAfterMenu
+SH2US_FIELD.BIN 004f1620 d0 retail-new (no JP candidate in bracket) | R Retail_CField_UnplugAllLSDHandlers
+SH2US_FIELD.BIN 004f2360 d0 retail-new (no JP candidate in bracket) | R Retail_CField_SwitchToMCESHandler
+SH2US_FIELD.BIN 004fcba0 10 tiny stub / inline accessor | R Retail_CField_ClearFlag9c7
+SH2US_FIELD.BIN 00500a90 30 tiny stub / inline accessor | R Retail_CField_GetWarpPointState
+SH2US_FIELD.BIN 00504d90 c0 retail-new (no JP candidate in bracket) | R Retail_CField_LSDFadeCallback
+SH2US_FIELD.BIN 005061c0 40 tiny stub / inline accessor | R Retail_CField_ClearCameraVectors
+SH2US_FIELD.BIN 00506c80 10 tiny stub / inline accessor | R Retail_CFieldEvent_SetTriple
+SH2US_FIELD.BIN 00507760 80 retail-new (no JP candidate in bracket) | R Retail_FieldDataCache_PollDecodeKey
+SH2US_FIELD.BIN 00508240 90 retail-new (no JP candidate in bracket) | R Retail_CFieldModel_ReadMotionCB1
+SH2US_FIELD.BIN 005082d0 c0 retail-new (no JP candidate in bracket) | R Retail_CFieldModel_ReadMotionCB2
+SH2US_FIELD.BIN 00508a10 50 retail-new (no JP candidate in bracket) | R Retail_CFieldModel_AllocLoadSlot
+SH2US_FIELD.BIN 00508fc0 e0 retail-new (no JP candidate in bracket) | R Retail_CFieldModel_FlushLoadQueue
+SH2US_FIELD.BIN 005097f0 10 tiny stub / inline accessor | R Retail_CFieldModel_SetBlinkFlags
+SH2US_FIELD.BIN 0050aed0 10 tiny stub / inline accessor | R Retail_CFieldModel_SetField318
+SH2US_FIELD.BIN 0050d440 1f0 rewritten (JP candidates, no confident pair) | R Retail_CFieldModel_GetFacingAngle
+SH2US_FIELD.BIN 0050e0a0 140 retail-new (no JP candidate in bracket) | R Retail_CFieldModel_ApplyLastMotion
+SH2US_FIELD.BIN 005126e0 10 tiny stub / inline accessor | R Retail_CXFModel_RequestMotion
+SH2US_FIELD.BIN 00514300 10 tiny stub / inline accessor | K OnChangeState__14BgeffLightPrimFv
+SH2US_FIELD.BIN 00519430 f0 retail-new (no JP candidate in bracket) | R Retail_CField_SetObjSEFromSDB
+SH2US_FIELD.BIN 0051bd00 70 retail-new (no JP candidate in bracket) | R Retail_CField_ClearBgmState
+SH2US_FIELD.BIN 0051bdf0 60 retail-new (no JP candidate in bracket) | R Retail_CField_Sub51bdf0
+SH2US_FIELD.BIN 0051c3f0 140 retail-new (no JP candidate in bracket) | K UnloadSeResident__6CFieldFv
+SH2US_FIELD.BIN 0051c8a0 80 retail-new (no JP candidate in bracket) | R Retail_CField_ReleaseSoundData
+SH2US_FIELD.BIN 0051cd90 1d0 retail-new extras (JP candidates below floor) | R Retail_CField_ResetAllSound
+SH2US_FIELD.BIN 0051cf60 40 tiny stub / inline accessor | K AddQ__6CFieldFUcUcUs
+SH2US_FIELD.BIN 0051d020 50 retail-new (no JP candidate in bracket) | R Retail_CField_ClearSndBufCache
+SH2US_FIELD.BIN 0051d190 a0 retail-new (no JP candidate in bracket) | R Retail_CField_FreeBgmBuffers
+SH2US_FIELD.BIN 0051d550 60 retail-new extras (JP candidates below floor) | K FindSoundReq__6CFieldFv
+SH2US_FIELD.BIN 0051d5b0 100 retail-new extras (JP candidates below floor) | R Retail_CField_CleanSoundQueue
+SH2US_FIELD.BIN 0051d800 50 retail-new (no JP candidate in bracket) | R Retail_CField_PollSoundLoadA
+SH2US_FIELD.BIN 0051d850 60 retail-new (no JP candidate in bracket) | R Retail_CField_PollSoundLoadB
+SH2US_FIELD.BIN 0051d8b0 80 retail-new (no JP candidate in bracket) | R Retail_CField_PollSoundFree
+SH2US_FIELD.BIN 0051da10 60 retail-new (no JP candidate in bracket) | R Retail_CField_StartEffectSimple
+SH2US_FIELD.BIN 0051da70 90 retail-new (no JP candidate in bracket) | R Retail_CField_StartEffectAlloc
+SH2US_FIELD.BIN 0051db00 10 tiny stub / inline accessor | R Retail_CField_ZeroQuad
+SH2US_FIELD.BIN 0051db10 c0 retail-new (no JP candidate in bracket) | R Retail_CField_EffectFileReadOrder
+SH2US_FIELD.BIN 0051dbd0 50 retail-new (no JP candidate in bracket) | R Retail_CField_EffectHide
+SH2US_FIELD.BIN 0051dc20 50 retail-new (no JP candidate in bracket) | R Retail_CField_EffectShow
+SH2US_FIELD.BIN 0051dc70 100 retail-new (no JP candidate in bracket) | R Retail_CField_RemoveEffectIf
+SH2US_FIELD.BIN 0051df90 1b0 retail-new extras (JP candidates below floor) | R Retail_CField_CreateEffectObject
+SH2US_FIELD.BIN 0051e140 20 tiny stub / inline accessor | R Retail_CField_ClearEffectFlags
+SH2US_FIELD.BIN 0051e160 30 tiny stub / inline accessor | R Retail_CField_SetEffectEndCallbackGen
+SH2US_FIELD.BIN 0051e190 30 tiny stub / inline accessor | R Retail_CField_SetEffectEndCallbackTar
+SH2US_FIELD.BIN 0051e3a0 1c0 retail-new (no JP candidate in bracket) | K EffectControl__6CFieldFiiii
+SH2US_FIELD.BIN 0051ec50 20 tiny stub / inline accessor | R Retail_CFieldBG_GetModelInfo
+SH2US_FIELD.BIN 0051fb50 100 rewritten (JP candidates, no confident pair) | R Retail_CFieldBG_DspAll
+SH2US_FIELD.BIN 0051fc50 60 rewritten (JP candidates, no confident pair) | R Retail_CFieldBG_DspBase
+SH2US_FIELD.BIN 0051fcb0 90 rewritten (JP candidates, no confident pair) | R Retail_CFieldBG_SuspendForMenu
+SH2US_FIELD.BIN 0051fd40 90 rewritten (JP candidates, no confident pair) | R Retail_CFieldBG_ResumeAfterMenu
+SH2US_FIELD.BIN 00520130 20 tiny stub / inline accessor | R Retail_CFieldBG_GetModelCount
+SH2US_FIELD.BIN 00520250 110 retail-new (no JP candidate in bracket) | R Retail_CFieldBG_CreateBgEffects
+SH2US_FIELD.BIN 00520ab0 10 tiny stub / inline accessor | R Retail_CFieldBG_GetField74
+SH2US_FIELD.BIN 00520ac0 110 retail-new extras (JP candidates below floor) | R Retail_CFieldBG_Sub520ac0
+SH2US_FIELD.BIN 00520c40 150 retail-new extras (JP candidates below floor) | K __ct__13FldTeamChangeFv
+SH2US_FIELD.BIN 00520da0 a0 retail-new extras (JP candidates below floor) | K __dt__13FldTeamChangeFv
+SH2US_FIELD.BIN 00521140 a0 rewritten (JP candidates, no confident pair) | R Retail_FldTeamChange_Sub521140
+SH2US_FIELD.BIN 00521260 10 tiny stub / inline accessor | R Retail_FldTeamChange_Nop
+SH2US_FIELD.BIN 00521270 110 retail-new (no JP candidate in bracket) | R Retail_FldTeamChange_EaseStep
+SH2US_FIELD.BIN 00521610 40 tiny stub / inline accessor | R Retail_FldTeamChange_UpdateIfNotPaused
+SH2US_FIELD.BIN 00526be0 e10 retail-new (no JP candidate in bracket) | R Retail_shop_Sub526be0
+SH2US_FIELD.BIN 00529290 830 retail-new (no JP candidate in bracket) | R Retail_shop_Sub529290
+SH2US_FIELD.BIN 00530730 550 retail-new extras (JP candidates below floor) | R Retail_shop_Sub530730
+SH2US_FIELD.BIN 00530c80 100 retail-new extras (JP candidates below floor) | R Retail_shop_Sub530c80
+SH2US_FIELD.BIN 00530d80 a0 retail-new extras (JP candidates below floor) | R Retail_shop_CursorHolder_Dt
+SH2US_FIELD.BIN 0053a4b0 f0 rewritten (JP candidates, no confident pair) | K mReleaseYesNoWin__6tailorFv
+SH2US_FIELD.BIN 00546860 50 rewritten (JP candidates, no confident pair) | R Retail_solomon_Sub546860
+SH2US_FIELD.BIN 00547c00 310 rewritten (JP candidates, no confident pair) | K mSetupMainWin__7solomonFv
+SH2US_FIELD.BIN 00547f10 90 rewritten (JP candidates, no confident pair) | K mReleaseMainWin__7solomonFv
+SH2US_FIELD.BIN 00547fa0 90 rewritten (JP candidates, no confident pair) | K mReleaseHintWin__7solomonFv
+SH2US_FIELD.BIN 00548d30 90 rewritten (JP candidates, no confident pair) | K mReleaseMessWin__7solomonFv
+SH2US_FIELD.BIN 00549ea0 90 rewritten (JP candidates, no confident pair) | K mReleaseDemonWin__7solomonFv
+SH2US_FIELD.BIN 0054a690 210 rewritten (JP candidates, no confident pair) | K mSetupMainCursor__7solomonFi
+SH2US_FIELD.BIN 0054a8a0 80 rewritten (JP candidates, no confident pair) | K mReleaseMainCursor__7solomonFv
+SH2US_FIELD.BIN 0054b680 180 retail-new (no JP candidate in bracket) | R Retail_solomon_SetupResultWin
+SH2US_FIELD.BIN 0054b800 90 retail-new (no JP candidate in bracket) | R Retail_solomon_ReleaseResultWin
+SH2US_FIELD.BIN 0054bd00 20 tiny stub / inline accessor | R Retail_solomonEffect_GetState48
+SH2US_FIELD.BIN 0054e670 50 retail-new extras (JP candidates below floor) | R Retail_floatDemonHelper_Ct
+SH2US_FIELD.BIN 0054e6c0 f0 retail-new extras (JP candidates below floor) | R Retail_floatDemonHelper_Dt
+SH2US_FIELD.BIN 0054e7b0 b0 retail-new extras (JP candidates below floor) | R Retail_floatDemon_Start
+SH2US_FIELD.BIN 0054e860 170 retail-new extras (JP candidates below floor) | R Retail_floatDemon_Calc1
+SH2US_FIELD.BIN 0054e9d0 2b0 retail-new extras (JP candidates below floor) | R Retail_floatDemon_Calc2
+SH2US_FIELD.BIN 0054ec80 270 retail-new extras (JP candidates below floor) | R Retail_floatDemon_Calc3
+SH2US_FIELD.BIN 0054f680 260 rewritten (JP candidates, no confident pair) | K setPos__13solomonCursorFiii
+SH2US_FIELD.BIN 0054fd10 80 rewritten (JP candidates, no confident pair) | K removeCursor__13solomonCursorFv
+SH2US_FIELD.BIN 00550250 c0 retail-new (no JP candidate in bracket) | R Retail_solomonSlot_SetFade
+SH2US_FIELD.BIN 00551b40 d0 rewritten (JP candidates, no confident pair) | K initialize__10solomonThmFP7primTexbii
+SH2US_FIELD.BIN 00551ce0 80 retail-new (no JP candidate in bracket) | R Retail_solomonThm_Sub551ce0
+SH2US_FIELD.BIN 00552460 a10 rewritten (JP candidates, no confident pair) | K mSetupThmBaseWin__10solomonThmFv
+SH2US_FIELD.BIN 00552e70 1e0 rewritten (JP candidates, no confident pair) | K mReleaseThmBaseWin__10solomonThmFv
+SH2US_FIELD.BIN 00553050 2d0 rewritten (JP candidates, no confident pair) | K mSetupDemonWin__10solomonThmFv
+SH2US_FIELD.BIN 00553320 3c0 rewritten (JP candidates, no confident pair) | K mSetupHintWin__10solomonThmFv
+SH2US_FIELD.BIN 005539b0 b0 retail-new (no JP candidate in bracket) | R Retail_solomonEffect_SwapLSDHandlers
+SH2US_FIELD.BIN 00553ad0 d0 retail-new (no JP candidate in bracket) | K __ct__13worldMapPanelFv
+SH2US_FIELD.BIN 00553ba0 200 retail-new (no JP candidate in bracket) | K __dt__13worldMapPanelFv
+SH2US_FIELD.BIN 00553da0 130 retail-new (no JP candidate in bracket) | K initialize__13worldMapPanelFv
+SH2US_FIELD.BIN 00553ed0 20 tiny stub / inline accessor | R Retail_worldMapPanel_Nop
+SH2US_FIELD.BIN 00553ef0 14d0 retail-new (no JP candidate in bracket) | K Polling__13worldMapPanelFv
+SH2US_FIELD.BIN 005553c0 540 retail-new (no JP candidate in bracket) | K mSetupMainWin__13worldMapPanelFv
+SH2US_FIELD.BIN 00555900 700 retail-new (no JP candidate in bracket) | K mSetupSubWin__13worldMapPanelFv
+SH2US_FIELD.BIN 00556000 110 retail-new (no JP candidate in bracket) | K mSetupMsgTable__13worldMapPanelFv
+SH2US_FIELD.BIN 00556110 1b0 retail-new (no JP candidate in bracket) | K mPlugLSD__13worldMapPanelFv
+SH2US_FIELD.BIN 005562c0 110 retail-new (no JP candidate in bracket) | K mUnplugLSD__13worldMapPanelFv
+SH2US_FIELD.BIN 005563d0 480 retail-new (no JP candidate in bracket) | K mSelectDestination__13worldMapPanelFv
+SH2US_FIELD.BIN 00556850 180 retail-new (no JP candidate in bracket) | R Retail_worldMapPanel_Sub556850
+SH2US_FIELD.BIN 005569d0 110 retail-new (no JP candidate in bracket) | K mSetupScrollMarks__13worldMapPanelFv
+SH2US_FIELD.BIN 00556ae0 50 retail-new (no JP candidate in bracket) | R Retail_worldMapObjA_Ct
+SH2US_FIELD.BIN 00556b30 f0 retail-new (no JP candidate in bracket) | R Retail_worldMapObjA_Dt
+SH2US_FIELD.BIN 00556cd0 100 retail-new (no JP candidate in bracket) | K setDisp__14pageScrollMarkFi
+SH2US_FIELD.BIN 00556dd0 230 retail-new (no JP candidate in bracket) | K Polling__14pageScrollMarkFv
+SH2US_FIELD.BIN 00557000 280 retail-new (no JP candidate in bracket) | K select__14pageScrollMarkFi
+SH2US_FIELD.BIN 00557280 1b0 retail-new (no JP candidate in bracket) | R Retail_pageScrollMark_CreateTitleWin
+SH2US_FIELD.BIN 00557430 c0 retail-new (no JP candidate in bracket) | R Retail_pageScrollMark_SelectDestination
+SH2US_FIELD.BIN 005574f0 1d0 retail-new (no JP candidate in bracket) | R Retail_pageScrollMark_CreateTextWin
+SH2US_FIELD.BIN 005576c0 160 retail-new (no JP candidate in bracket) | R Retail_pageScrollMark_ReleaseWins
+SH2US_FIELD.BIN 00559510 50 rewritten (JP candidates, no confident pair) | R Retail_worldMap_CheckKeyHelperA
+SH2US_FIELD.BIN 00559560 50 rewritten (JP candidates, no confident pair) | R Retail_worldMap_CheckKeyHelperB
+SH2US_FIELD.BIN 0055a4a0 f0 retail-new (no JP candidate in bracket) | K mSetupMenuFadeOut__8worldMapFv
+SH2US_FIELD.BIN 0055a590 30 tiny stub / inline accessor | R Retail_worldMap_GetField118
+SH2US_FIELD.BIN 0055aa50 90 rewritten (JP candidates, no confident pair) | K mReleaseSelectWin__8worldMapFv
+SH2US_FIELD.BIN 0055ae10 130 rewritten (JP candidates, no confident pair) | K mReleaseSelectWinCursor__8worldMapFv
+SH2US_FIELD.BIN 0055e290 100 rewritten (JP candidates, no confident pair) | K mReleaseThmWin__11worldMapThmFv
+SH2US_FIELD.BIN 0055f590 120 retail-new extras (JP candidates below floor) | K setPos__13worldMapPointFff
+SH2US_FIELD.BIN 0055f6b0 50 retail-new extras (JP candidates below floor) | R Retail_worldMapObjB_Ct
+SH2US_FIELD.BIN 0055f700 100 retail-new extras (JP candidates below floor) | R Retail_worldMapObjB_Dt
+SH2US_FIELD.BIN 0055f800 80 retail-new extras (JP candidates below floor) | R Retail_worldMapPoint_Start
+SH2US_FIELD.BIN 0055f880 70 retail-new extras (JP candidates below floor) | R Retail_worldMapPoint_Sub
+SH2US_FIELD.BIN 0055f8f0 50 retail-new extras (JP candidates below floor) | R Retail_worldMapPoint_Sub2
+SH2US_FIELD.BIN 0055f940 220 retail-new extras (JP candidates below floor) | K mSetupWin__13worldMapPointFv
+SH2US_FIELD.BIN 0055fb60 400 retail-new extras (JP candidates below floor) | K Polling__13worldMapPointFv
+SH2US_FIELD.BIN 0055ff60 0 tiny stub / inline accessor | R Retail_worldMapPoint_Tail
+SH2US_BATTLE.BIN 0048c0d0 3d60 retail-new (no JP candidate in bracket) | R Retail_CBattle_Phase0B_RingSkill
+SH2US_BATTLE.BIN 0048fe30 23d0 retail-new (no JP candidate in bracket) | K TarotEffectFunc__7CBattleFv
+SH2US_BATTLE.BIN 00493450 a80 retail-new (no JP candidate in bracket) | R Retail_CBattle_Phase0F_BerserkApproachAlly
+SH2US_BATTLE.BIN 00493ed0 b30 retail-new (no JP candidate in bracket) | R Retail_CBattle_Phase10_BerserkFindItem
+SH2US_BATTLE.BIN 00494a00 8d0 retail-new (no JP candidate in bracket) | R Retail_CBattle_Phase11_BerserkTalk
+SH2US_BATTLE.BIN 004952d0 600 retail-new (no JP candidate in bracket) | R Retail_CBattle_Phase12_BerserkPose
+SH2US_BATTLE.BIN 004958d0 4270 retail-new (no JP candidate in bracket) | R Retail_CBattle_Phase15_Win
+SH2US_BATTLE.BIN 00499b40 3190 retail-new (no JP candidate in bracket) | R Retail_CBattle_Phase16_Lose
+SH2US_BATTLE.BIN 0049ccd0 1c0 retail-new (no JP candidate in bracket) | K CloseBattleUI__7CBattleFb
+SH2US_BATTLE.BIN 004a1280 60 rewritten (JP candidates, no confident pair) | K MonsterSet__7CBattleFP9MONSETTbl
+SH2US_BATTLE.BIN 004a2b50 5e0 rewritten (JP candidates, no confident pair) | K DeathInit__7CBattleFi
+SH2US_BATTLE.BIN 004e0d70 dc0 rewritten (JP candidates, no confident pair) | K GetNextTurnChr2__7CBattleFv
+SH2US_BATTLE.BIN 0051cfa0 420 rewritten (JP candidates, no confident pair) | K Reset__12TotalHitInfoFv
+SH2US_BATTLE.BIN 0051da80 120 retail-new (no JP candidate in bracket) | R Retail_TotalHitInfo_ShowAll
+SH2US_BATTLE.BIN 005718b0 d00 retail-new (no JP candidate in bracket) | K __ct__13BtlTarotSelectFv
+SH2US_BATTLE.BIN 005725b0 1d0 retail-new (no JP candidate in bracket) | K __dt__13BtlTarotSelectFv
+SH2US_BATTLE.BIN 00572780 d0 retail-new (no JP candidate in bracket) | K Destruct__13BtlTarotSelectFv
+SH2US_BATTLE.BIN 00572850 3fd0 retail-new (no JP candidate in bracket) | K Polling__13BtlTarotSelectFv
+SH2US_BATTLE.BIN 00576820 3cf0 retail-new (no JP candidate in bracket) | K MakePacket__13BtlTarotSelectFv
+SH2US_BATTLE.BIN 0057a510 7e0 retail-new (no JP candidate in bracket) | K __ct__14BtlTarotEffectFv
+SH2US_BATTLE.BIN 0057acf0 160 retail-new (no JP candidate in bracket) | K __dt__14BtlTarotEffectFv
+SH2US_BATTLE.BIN 0057ae50 d0 retail-new (no JP candidate in bracket) | K Destruct__14BtlTarotEffectFv
+SH2US_BATTLE.BIN 0057af20 2ad0 retail-new (no JP candidate in bracket) | K Polling__14BtlTarotEffectFv
+SH2US_BATTLE.BIN 0057d9f0 10 tiny stub / inline accessor | K EndSet__14BtlTarotEffectFv
+SH2US_BATTLE.BIN 0057db20 10 tiny stub / inline accessor | K EndSet__17BBoxAddAttribute1Fv
+SH2US_BATTLE.BIN 00587900 220 retail-new (no JP candidate in bracket) | K searchBBox__8BtlModelFPci
+SH2US_BATTLE.BIN 0058f340 200 retail-new (no JP candidate in bracket) | R Retail_BtlModel_PrewarmDynamics
+SH2US_BATTLE.BIN 005cec30 70 retail-new (no JP candidate in bracket) | R Retail_CBtlPAfter2_SetDDispMode10
+SH2US_BATTLE.BIN 005ceca0 70 retail-new (no JP candidate in bracket) | R Retail_CBtlPAfter2_SetDDispMode9
+SH2US_BATTLE.BIN 005cf210 80 retail-new (no JP candidate in bracket) | R Retail_CBtlPAfter2_ShowAllHitInfo
+SH2US_BATTLE.BIN 005ed6e0 820 retail-new (no JP candidate in bracket) | R Retail_BtlMenu_ListCursorInput
+SH2US_BATTLE.BIN 006202f0 b80 rewritten (JP candidates, no confident pair) | K Polling__7BMesWinFv
+SH2US_BATTLE.BIN 00624570 860 retail-new (no JP candidate in bracket) | K Get3DAngle3__F7FVector
+SH2US_BATTLE.BIN 00624f70 200 retail-new (no JP candidate in bracket) | R Retail_RotTransVectorCopy
+SH2US_BATTLE.BIN 00627830 d30 rewritten (JP candidates, no confident pair) | R Retail_CBattle_SetupStatusRecords
+SH2US_BATTLE.BIN 0062fc80 370 retail-new (no JP candidate in bracket) | R Retail_SetBtlModelField504
+SH2US_BATTLE.BIN 006330d0 460 retail-new (no JP candidate in bracket) | R Retail_SetForceRemove__Fi
+SH2US_BATTLE.BIN 00659ea0 cf0 retail-new (no JP candidate in bracket) | R Retail_CBattle_CheckEquipAbilityTrigger
+SH2US_BATTLE.BIN 0065d370 13c0 retail-new (no JP candidate in bracket) | R Retail_CBattle_FindRemoteEffectPos
+SH2US_BATTLE.BIN 00672080 3c10 retail-new extras (JP candidates below floor) | K SetBtlMessage__7CBattleFiPv
+SH2US_BATTLE.BIN 00675c90 1a0 retail-new extras (JP candidates below floor) | R Retail_CBattle_GetPAtkTable
+SH2US_BATTLE.BIN 00675e30 440 retail-new extras (JP candidates below floor) | K BtlChrReadyCheck__7CBattleFv
+SH2US_BATTLE.BIN 00678be0 150 retail-new (no JP candidate in bracket) | R Retail_CBattle_ReleaseChrWait
+SH2US_BATTLE.BIN 00678d30 570 retail-new (no JP candidate in bracket) | R Retail_CBattle_FindNearestOpponent
+SH2US_BATTLE.BIN 0067b220 140 retail-new (no JP candidate in bracket) | R Retail_CBattle_PruneChrMask463C
+SH2US_BATTLE.BIN 00688330 20 tiny stub / inline accessor | K GetPos__8BtlModelFv
+SH2US_BATTLE.BIN 0068a1b0 60c0 retail-new (no JP candidate in bracket) | R Retail_CBattle_AutoSelectAction
+SH2US_BATTLE.BIN 0069e160 2ad0 retail-new (no JP candidate in bracket) | K TarotRevertCard__7CBattleFii
+SH2US_BATTLE.BIN 006a0c30 41b0 retail-new (no JP candidate in bracket) | K TarotApplyCard__7CBattleFii
+SH2US_BATTLE.BIN 006a62f0 300 rewritten (JP candidates, no confident pair) | K DecSP__7CBattleFii
+SH2US_BATTLE.BIN 006a6af0 480 retail-new extras (JP candidates below floor) | R Retail_CBattle_CheckAbilitySealed
+SH2US_BATTLE.BIN 006a6f70 a80 retail-new extras (JP candidates below floor) | K GetIconList__7CBattleFiPiPi
+SH2US_BATTLE.BIN 006a8220 1b0 retail-new (no JP candidate in bracket) | R Retail_CBattle_SetAllChrEffMask
+SH2US_BATTLE.BIN 006a8eb0 2a0 retail-new (no JP candidate in bracket) | R Retail_CBattle_FindLastBossPart
+SH2US_BATTLE.BIN 006c6730 78e0 retail-new extras (JP candidates below floor) | R Retail_BtlChrSequence_State0E0F
+SH2US_BATTLE.BIN 006ce010 2f0 retail-new extras (JP candidates below floor) | R Retail_BtlChrSequence_State31
+SH2US_BATTLE.BIN 006ce300 470 retail-new extras (JP candidates below floor) | R Retail_BtlChrSequence_State32
+SH2US_BATTLE.BIN 006ce770 3a0 retail-new extras (JP candidates below floor) | R Retail_BtlChrSequence_State33
+SH2US_BATTLE.BIN 006ceb10 3a0 retail-new extras (JP candidates below floor) | R Retail_BtlChrSequence_State34
+SH2US_BATTLE.BIN 006ceeb0 170 retail-new extras (JP candidates below floor) | K AddFriendship__7CBattleFiis
+SH2US_BATTLE.BIN 006cf020 1e0 retail-new extras (JP candidates below floor) | K AIInit__7CBattleFi
+SH2US_BATTLE.BIN 006d9450 5b60 rewritten (JP candidates, no confident pair) | K GetTarget__7CBattleFiiiiii
+SH2US_BATTLE.BIN 006defb0 a0 rewritten (JP candidates, no confident pair) | K GetMoveTarget__7CBattleFiiii
+SH2US_BATTLE.BIN 006df050 ce0 rewritten (JP candidates, no confident pair) | K GetComboTarget__7CBattleFib
+SH2US_BATTLE.BIN 006dfd30 530 rewritten (JP candidates, no confident pair) | K CheckComboTarget__7CBattleFPiPiPiPiPiPi
+SH2US_BATTLE.BIN 006e0260 c0 rewritten (JP candidates, no confident pair) | K EffectCheck__7CBattleFiiiP12EFCTCOMParam
+SH2US_BATTLE.BIN 006e0320 23c0 rewritten (JP candidates, no confident pair) | R Retail_CBattle_EffectCheckCore
+SH2US_BATTLE.BIN 006e26e0 0 tiny stub / inline accessor | R Retail_CBattle_PickWeakestTarget

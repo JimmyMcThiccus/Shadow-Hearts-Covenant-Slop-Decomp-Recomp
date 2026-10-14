@@ -1,0 +1,7 @@
+# solomon (JP 0x004f20c0 … 0x004fe980, 43 methods; + solomonThm, solomonEffect, solomonSlot, solomonCursor, solomonTutorial, solomonArea, floatDemon, pageScrollMark, udScrollMark; object 0xbd0)
+
+"Solomon" (role inferred from method names: `mSetDemon/mBackDemon`, `mCheckNewMagic`, `solomonSlot`, area reset): a demon-placement screen on an area map that unlocks magic, with hint window and area reset.
+Opened from the menu page 0x15 (`CmdMenu::Ready(0x15)` -> `new solomon` 0xbd0 + `initialize(cb, CmdMenu*)`; `CmdMenu::SolomonEvent` finishes it; data from `SOLOMON.PKB` via `DVD_CBFunc`).
+
+Tables: `mDemonAttr` (72 bytes, shared with worldMap), `solomonMess_*_J` (title, area names, tutorial, hints, demon notes ...).
+State machine (Polling JP 0x004f25a0, 0x5f60 bytes; `+state`): 0 wait load -> 1/2 `solomonTutorial` (first time) -> 3/4 query "Start?" -> 5/6 second query -> 8 effect ready (`solomonEffect::isReady`, `mSetupBG`) -> 9 main map view loop (`mCheckKey`, `mCheckMapView(stick)`, scroll the world `mSetWorldScroll/mWorldScroll`, pick area `mCheckArea/mFixArea`) -> 0xa/0xb main window (`mSetupMainWin`) -> 0xc/0xd hint (`mSetupHintWin`, `solomonThm::dispHint`) -> 0x10/0x11 demon menu (`mSetupDemonMenuWin`) -> 0x12/0x13 demon list (`mMakeDemonList`, `floatDemon`, slot cursor `solomonCursor`) -> 0x14..0x17 confirm place/remove (`mSetDemon/mBackDemon`, `mSetLine/mEraseLine` connecting lines) -> 0x18/0x19 area reset window -> 0x1a new-magic check (`mCheckNewMagic`) -> 0x1b..0x1f effect/background transitions (`solomonEffect::start`, `mFadeoutBG`).

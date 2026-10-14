@@ -1,0 +1,4 @@
+# The project lives on an ExFAT external drive; keep the build cache on the internal disk
+# (ExFAT has no symlinks/permissions and is slow for the tens of thousands of build files).
+[build]
+target-dir = "/Users/jamietheanything/.cache/sh2-decomp-target"

@@ -1,0 +1,17 @@
+# In-game menu system (`Cmd*`) — shared structure and page catalogue
+
+Toolkit: section F (`Menu`, `MenuScene`, `MenuWindow`, `MenuText`, `MenuSprite`, `MenuGroup`, `MenuTexture`, `MenuPlace`, `MenuRender`, `MenuCapture`, `FontDraw`, `SendOnLocal`, `MenuDataTable`, `MenuObj`).
+Application (this overlay): **139 classes** in the Cmd family (`port/crates/sh2_field/src/classes_cmd.rs` lists each: base, size, embedded sub-objects, vtables, every method with JP address and size; `class_layouts.md` has the same as a table).
+
+## Skeleton
+
+* `CmdMenu : Menu` (0x17f8 bytes, vtable +0x14). Embedded: `MenuRender +0x70`, `CmdParty +0xb8` (party data: 4 PCs, equipment, combo keys...), `CmdCommon +0x348` (shared cursor + texture), `CmdNote +0x4e0` (help line), `CmdTitleLog +0x780` (page title window), `CmdButtonReport +0xa60` (button hints), `CmdElement +0x10f0` (element/status icons), `MenuScene +0x17a0` (solomon bridge scene).
+  Constructor `CmdMenu(short page, int (*cb)(int, void*, CmdMenu*), void* user)`; `Initialize` creates resources and enters page `page`. State machine in `+0x3e` (see `cmd.rs::CmdMenuState`), owner callback events in `cmd.rs::CmdMenuEvent` (`CFieldSocket::cbMenu` is the field's callback). `CmdMenu::Ready(page,a,b)` (JP 0x00436390) lazily creates a page object and loads its resource file via `MenuScene::OrderFile(name, menu)`; page 0 resources are embedded.
+* Pages (`cmd.rs::CmdPage`): 0 `CmdTop` (main menu: PC info, play info, location...), 1 `CmdItem`, 2 `CmdWhiteMagic`, 3 `CmdMagic`, 4 `CmdCrest`, 5 `CmdEquipment`, 6 `CmdRingCustom`, 7 `CmdPrivate` (status: `CmdStatus`, `CmdFriendship`, `CmdProfile`, `CmdTarot`, `CmdSword`, `CmdClothes`, `CmdPhotograph`, `CmdTechnique`, `CmdAroma`..., all `CmdPrivateScene` subclasses), 8 `CmdFormation`, 9 `CmdGraveyard`, 10 `CmdComboKey`, 11 `CmdComboMagic`, 12 `CmdHelp`, 13 `CmdScore`, 14 `CmdLibrary`, 15 `CmdPropertyList`, 16 `CmdOption`, 17 `CmdKeyCustom`, 0x15 `solomon`.
+* Widget pattern: each page owns `CmdWindow` subclasses (`CmdWindow : MenuWindow`, multiple inheritance with two secondary vtables at +0x18/+0x24 — hence the `@24@`/`@36@` thunks) that embed `FontDraw`s, `SendOnLocal`s, `MenuGroup/Sprite/Text` and implement `CreateScene/UpdateScene/Select/GetReady/Run`. Lists are `CmdGoods` (0x150 bytes per row: two `FontItem`s at +0x50/+0xd0 ... `CmdWindow::SetClutGoods` resets the colour attributes) with `Cmd<X>Goods` subclasses per page (`CmdItemGoods`, `CmdMagicGoods`, `CmdGoodsCrest`, ...).
+* Resource files: `CmdMenu::+0x36c` points at a table of `{name, ...}` (8 bytes per page, +0x10 base) located through the `CmdCommon` package (`CMNMENU.DAT` in `COMMON.PKB`); menu text comes from MSD message files (`CmdExplain::SetInfo(Menus, MSDSystem)`, `CmdNote::SetExplanation(const char*, e)`), so most strings are **not** in FIELD.BIN.
+* `CmdMenu::DataEvent(ev, ptr)` handles the save/load screen (`dataAccess`) returning; `SolomonEvent` handles the Solomon sub-scene.
+
+## What is "data" here
+
+`CmdPage` + the class registry give the complete static structure of the menu tree; per-page behaviour (cursor maps, item enumeration) is code operating on the party/inventory (`CmdPC`, `CmdParty`: `SortPC`, `FlushData`, `GetComboKeyCount`, `GetRealStatus`, `IsExpandRing`, `TakeOffEquipment`...). A Rust menu implementation should drive these pages from `sh2_menu` widgets using the `ClassInfo` method lists as the checklist (JP address = decompiled source in `decomp/G/<Class>.c`).

@@ -1,0 +1,18 @@
+[package]
+name = "sh2_menu"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# NOTE (section F): the toolkit is renderer-agnostic (traits in `gfx`), so the heavy
+# bevy / sh2_gfx / sh2_script deps were dropped to keep `cargo check -p sh2_menu` fast and
+# independent of in-flight edits in other crates. The Bevy layer implements `gfx::MenuGfx`.
+[dependencies]
+glam.workspace = true
+thiserror.workspace = true
+log.workspace = true
+bevy.workspace = true
+sh2_core = { workspace = true, features = ["bevy"] }
+sh2_gfx.workspace = true
+sh2_audio = { workspace = true, features = ["bevy"] }
+sh2_script.workspace = true

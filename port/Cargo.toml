@@ -1,0 +1,43 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/sh2_core",
+    "crates/sh2_formats",
+    "crates/sh2_gfx",
+    "crates/sh2_script",
+    "crates/sh2_menu",
+    "crates/sh2_field",
+    "crates/sh2_battle",
+    "crates/sh2_audio",
+    "crates/sh2_app",
+    "crates/sh2_pine",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+bevy = "0.19.1"
+# must match the glam that bevy_math re-exports (bevy 0.19 -> glam 0.32), otherwise Vec3/Mat4 differ between our crates and Bevy
+glam = "0.32"
+bytemuck = { version = "1", features = ["derive"] }
+thiserror = "2"
+anyhow = "1"
+log = "0.4"
+# default-features = false: members that need the Bevy glue (Resource derives, SshSysPlugin, game::*) add features = ["bevy"]
+sh2_core = { path = "crates/sh2_core", default-features = false }
+sh2_formats = { path = "crates/sh2_formats" }
+sh2_gfx = { path = "crates/sh2_gfx" }
+sh2_script = { path = "crates/sh2_script" }
+sh2_menu = { path = "crates/sh2_menu" }
+sh2_field = { path = "crates/sh2_field" }
+sh2_battle = { path = "crates/sh2_battle" }
+sh2_audio = { path = "crates/sh2_audio", default-features = false }
+
+[profile.dev]
+opt-level = 1
+[profile.dev.package."*"]
+opt-level = 3
+debug = "line-tables-only"   # keeps dependency artifacts (Bevy) ~3x smaller on disk

@@ -1,0 +1,20 @@
+SH2US_FIELD.BIN 004f13d0 Retail_CField_SuspendForMenu NEW | Retail_CFieldModel_SuspendForMenu for each model + CFieldBG suspend
+SH2US_FIELD.BIN 004f1460 Retail_CField_ResumeAfterMenu NEW | counterpart: models resume, CFieldBG resume, PollingSound
+SH2US_FIELD.BIN 004f1620 Retail_CField_UnplugAllLSDHandlers NEW | LSDPlayer::UnplugDevice for 13 global handlers
+SH2US_FIELD.BIN 004f2360 Retail_CField_SwitchToMCESHandler NEW | Unplug handler 0x459840, Plug 0x459a20, set pause/flags
+SH2US_FIELD.BIN 004fcba0 Retail_CField_ClearFlag9c7 STUB | +0x9c7 = 0 (callers InitSDB/MapJumpA)
+SH2US_FIELD.BIN 00500a90 Retail_CField_GetWarpPointState NEW | state bits of warp point idx (stride 0xc at +0x84e)
+SH2US_FIELD.BIN 00504d90 Retail_CField_LSDFadeCallback NEW | modes 2/3/6: CFieldSocket::SetFader and LSDPlayer Release/Pause
+SH2US_FIELD.BIN 005061c0 Retail_CField_ClearCameraVectors NEW | zero a block of FVectors at +0x30..+0x60 (caller CField::Start)
+SH2US_FIELD.BIN 00506c80 Retail_CFieldEvent_SetTriple NEW | stores 3 words (callers CField::InitSDB)
+SH2US_FIELD.BIN 00507760 Retail_FieldDataCache_PollDecodeKey NEW | countdown then _FieldDataCache::DecodeKey
+SH2US_FIELD.BIN 00508240 Retail_CFieldModel_ReadMotionCB1 NEW | motion load callback (slot stride 0x10 at +0x2d0), decrements pending count
+SH2US_FIELD.BIN 005082d0 Retail_CFieldModel_ReadMotionCB2 NEW | variant using GetLoadQ
+SH2US_FIELD.BIN 00508a10 Retail_CFieldModel_AllocLoadSlot NEW | first free 0x10-byte load slot, mark used
+SH2US_FIELD.BIN 00508fc0 Retail_CFieldModel_FlushLoadQueue NEW | DIntr; run ReadCB/ReadMotionCB for completed slots; EIntr
+SH2US_FIELD.BIN 005097f0 Retail_CFieldModel_SetBlinkFlags NEW | +0x124 = (v>>8)&0xf then SetBlink
+SH2US_FIELD.BIN 0050aed0 Retail_CFieldModel_SetField318 STUB | +0x318 = v; return 1
+SH2US_FIELD.BIN 0050d440 Retail_CFieldModel_GetFacingAngle NEW | angle between model facing (GetDir/world rot) and reference vector via acosf + OuterProduct
+SH2US_FIELD.BIN 0050e0a0 Retail_CFieldModel_ApplyLastMotion NEW | setMotion with last-motion name (+0x31c), blink/flags
+SH2US_FIELD.BIN 005126e0 Retail_CXFModel_RequestMotion NEW | strcmp with current motion name; FindMotionData; SetMotion / PlayMoveMotion
+SH2US_FIELD.BIN 00514300 OnChangeState__14BgeffLightPrimFv NEW | empty override

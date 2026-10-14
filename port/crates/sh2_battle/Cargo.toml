@@ -1,0 +1,22 @@
+[package]
+name = "sh2_battle"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Section H originally kept glam/bytemuck/sh2_core/sh2_formats/sh2_gfx/sh2_script/bevy behind an `integration`
+# feature so the pure rules crate built independently of the other (then in-progress) sections.  All workspace
+# crates now build together, so the feature is gone and the dependencies are unconditional.
+# `sh2_menu` owns the shared BtlSaveSec level/EXP logic (`sh2_menu::btlsave`), re-exported by `rules`.
+[dependencies]
+thiserror.workspace = true
+log.workspace = true
+glam.workspace = true
+bytemuck.workspace = true
+sh2_core = { workspace = true, features = ["bevy"] }
+sh2_formats.workspace = true
+sh2_gfx.workspace = true
+sh2_script.workspace = true
+sh2_menu.workspace = true
+sh2_audio.workspace = true
+bevy.workspace = true

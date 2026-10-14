@@ -1,0 +1,11 @@
+SH2US_FIELD.BIN 004d64d0 CloseEffect__13MenuModelAuraFi NEW | Retail_MenuModelManeger_SetFlag4 + effect close toggle (callers CmdFusion)
+SH2US_FIELD.BIN 004d65b0 Retail_MenuModelAura_SetField68 STUB | +0x68 = v
+SH2US_FIELD.BIN 004d81a0 Run__15CmdPropertyListFv C1 | JP 0x49c120 (ptmf dispatch)
+SH2US_FIELD.BIN 004d8220 GetReady__15CmdPropertyListFv REW | JP 0x49ba20 (0x700 -> 0x400): MenuScene ctor, CmdFence, CreateFence
+SH2US_FIELD.BIN 004d9eb0 ShiftExplain__15CmdPropertyListFv C1 | JP 0x49d760: Finish/SetupMove/SetExplanation
+SH2US_FIELD.BIN 004dabb0 __ct__16CmdPropertyGoodsFv C1 | JP 0x49e200
+SH2US_FIELD.BIN 004dc800 Retail_CmdRingCustomAutoRingGoods_Dt NEW | array dtor + FontDraw + CmdWindow dtor
+!SH2US_FIELD.BIN 004886d0 Close__13CmdFriendshipFv FIX | was Close__13CmdPhotograph; sits inside CmdFriendship (JP Close 0x454f90)
+!SH2US_FIELD.BIN 004e7890 Close__15CmdRetailPage05Fv FIX | was Close__8CmdAroma; lies inside CmdRetailPage05
+!SH2US_FIELD.BIN 004bee00 ShiftExplain__11CmdWolfBoutFv FIX | was ShiftExplain__15CmdPropertyList; inside CmdWolfBout (JP unmatched ShiftExplain 0x140)
+!SH2US_FIELD.BIN 00488c90 Close__10CmdProfileFv FIX | was Polling__11MenuElement; inside CmdProfile (JP Close 0x40)

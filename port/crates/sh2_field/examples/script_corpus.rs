@@ -1,0 +1,187 @@
+//! Runs every map script of a disc headlessly through the real `FieldHost`: the start function, then every event of the event table
+//! (arguments 1, 2 and 4), answering waits with pad presses, and reports calls to unimplemented ops, stuck jobs and requests.
+//! `cargo run --release -p sh2_field --example script_corpus -- [--us] [--map NAME] [--verbose]`
+use sh2_core::game::padbit;
+use sh2_field::host::{tick_state, FieldHost};
+use sh2_field::pkb_compat::PkbSet;
+use sh2_field::plugin::{build_runtime, FieldRuntime};
+use sh2_menu::session::GameSession;
+use sh2_script::cscript::PadState;
+use sh2_script::image::ScriptImage;
+use std::collections::BTreeMap;
+
+fn step(rt: &mut FieldRuntime, session: &mut GameSession, tick: u32) {
+    // press circle every 6th tick: finishes typing, releases KeyWait and picks the first selection entry
+    let press = if tick % 12 == 0 { padbit::CIRCLE } else { 0 };
+    rt.st.press = press;
+    tick_state(&mut rt.st, &mut rt.sim);
+    rt.sim.update_camera();
+    for (id, args) in std::mem::take(&mut rt.st.event_queue) {
+        rt.vm.call_event(id, &args);
+    }
+    rt.vm.set_pad(PadState { raw: press as u32, new_press: press as u32, repeat: 0, consumed: 0 });
+    rt.vm.poll(&mut FieldHost { st: &mut rt.st, sim: &mut rt.sim, session: Some(session) });
+    // host-side services the Bevy layer normally provides
+    rt.st.faders.clear();
+    rt.st.audio.clear();
+    rt.st.menu_wait = false;
+    rt.st.menu_req = None;
+}
+
+/// the script asked for a scene change (the real game tears the map down)
+fn transition(rt: &FieldRuntime) -> Option<String> {
+    if let Some((m, e)) = &rt.st.pending_jump {
+        return Some(format!("jump {m}:{e}"));
+    }
+    if rt.st.battle.is_some() {
+        return Some("battle".into());
+    }
+    if rt.st.world_map_jump.is_some() {
+        return Some("worldmap".into());
+    }
+    None
+}
+
+fn reset_vm(rt: &mut FieldRuntime, map: &str, bytes: &[u8]) {
+    let mut vm = sh2_script::cscript::CScript::new(0x200, 0x400, 6000);
+    vm.init_script(Some(map), bytes).unwrap();
+    vm.start_script();
+    vm.mem.regs = rt.vm.mem.regs.clone();
+    rt.vm = vm;
+    rt.st.pending_jump = None;
+    rt.st.battle = None;
+    rt.st.world_map_jump = None;
+    rt.st.event_queue.clear();
+    // the real game rebuilds the runtime on every scene change
+    rt.st.ui.reset();
+    rt.st.actors = Default::default();
+    rt.st.warp_fx = None;
+    rt.st.mces = Default::default();
+    rt.st.camera = None;
+    rt.sim.scr_cam = None;
+}
+
+fn main() {
+    let a: Vec<String> = std::env::args().collect();
+    let us = a.iter().any(|x| x == "--us");
+    let verbose = a.iter().any(|x| x == "--verbose");
+    let max_events: usize = a.iter().position(|x| x == "--max-events").and_then(|i| a.get(i + 1)).and_then(|v| v.parse().ok()).unwrap_or(usize::MAX);
+    let start_ticks: u32 = std::env::var("CORPUS_START_TICKS").ok().and_then(|v| v.parse().ok()).unwrap_or(3000);
+    let only: Option<String> = a.iter().position(|x| x == "--map").and_then(|i| a.get(i + 1)).cloned();
+    let var = if us { "SH2_US_DISC_DIR" } else { "SH2_DISC_DIR" };
+    let dir = std::env::var(var).expect(var);
+    let set = PkbSet::open(&dir).unwrap();
+    let list = set.list_dir_while("FIELD/MPS", |e| e.name.ends_with(".MPS") || e.name.ends_with(".MSC")).unwrap();
+    let mut unimpl: BTreeMap<(u8, u8), (u64, usize)> = BTreeMap::new();
+    let mut total_calls = 0u64;
+    let mut maps = 0;
+    let mut stuck = vec![];
+    let mut transitions = vec![];
+    for e in list.iter().filter(|e| e.name.ends_with(".MSC")) {
+        let map = e.name.trim_end_matches(".MSC").to_string();
+        if let Some(o) = &only {
+            if &map != o {
+                continue;
+            }
+        }
+        let mut session = GameSession::default();
+        let Some(mut rt) = build_runtime(&set, None, &map, 0, &session) else {
+            println!("{map}: cannot build");
+            continue;
+        };
+        maps += 1;
+        // start function
+        let mut t = 0u32;
+        let bytes = set.read(&format!("FIELD/MPS/{map}.MSC")).unwrap();
+        while t < start_ticks && rt.vm.is_running() && transition(&rt).is_none() {
+            if std::env::var_os("CORPUS_TRACE").is_some() && t % 100 == 0 {
+                eprintln!("t {t}: win0 {:?} msg {} typed {} key {} cur {}", rt.st.ui.windows[0].phase, rt.st.ui.windows[0].msg.is_some(), rt.st.ui.windows[0].typed(), rt.st.ui.windows[0].key_pending, rt.st.ui.cur_win);
+            }
+            step(&mut rt, &mut session, t);
+            t += 1;
+        }
+        if let Some(tr) = transition(&rt) {
+            transitions.push(format!("{map}: start -> {tr} after {t} ticks"));
+            reset_vm(&mut rt, &map, &bytes);
+        } else if rt.vm.is_running() {
+            let mut tail: Vec<String> = Vec::new();
+            for l in rt.st.log.iter().rev() {
+                if tail.last() != Some(l) {
+                    tail.push(l.clone());
+                }
+                if tail.len() >= 16 {
+                    break;
+                }
+            }
+            let wins: Vec<String> = rt.st.ui.windows.iter().enumerate().filter(|(_, w)| w.created).map(|(i, w)| format!("win{i} {:?} msg {} typed {} key {}", w.phase, w.msg.is_some(), w.typed(), w.key_pending)).collect();
+            stuck.push(format!("{map}: start function still running after {t} ticks; last calls {tail:?} {wins:?} cur {} actors {:?}", rt.st.ui.cur_win, rt.st.actors.slots.iter().enumerate().filter_map(|(i, a)| a.as_ref().map(|a| (i, a.cmd, a.cmd_done, a.mv.is_some(), a.motion_left, a.motion_loop, a.target_yaw.is_some()))).collect::<Vec<_>>()));
+            reset_vm(&mut rt, &map, &bytes);
+        }
+        // events
+        let img = ScriptImage::parse(&bytes).unwrap();
+        let ids: Vec<u32> = img.events.iter().filter(|s| s.kind == 0).flat_map(|s| s.entries.iter().map(|e| e.id)).collect();
+        for id in ids.into_iter().take(max_events) {
+            for args in [vec![1u32], vec![2], vec![4]] {
+                // a fresh map load: run the start function first (as the real game does on every map entry)
+                let Some(mut r2) = build_runtime(&set, None, &map, 0, &session) else { continue };
+                let mut t0 = 0u32;
+                while t0 < 3000 && r2.vm.is_running() && transition(&r2).is_none() {
+                    step(&mut r2, &mut session, t0);
+                    t0 += 1;
+                }
+                if transition(&r2).is_some() || r2.vm.is_running() {
+                    reset_vm(&mut r2, &map, &bytes);
+                }
+                rt = r2;
+                if !rt.vm.call_event(id, &args) {
+                    continue;
+                }
+                let mut t = 0u32;
+                while t < 6000 && rt.vm.is_running() && transition(&rt).is_none() {
+                    step(&mut rt, &mut session, t);
+                    t += 1;
+                }
+                if let Some(tr) = transition(&rt) {
+                    transitions.push(format!("{map}: event {id:#x} {args:?} -> {tr}"));
+                    reset_vm(&mut rt, &map, &bytes);
+                } else if rt.vm.is_running() {
+                    let mut tail: Vec<String> = Vec::new();
+            for l in rt.st.log.iter().rev() {
+                if tail.last() != Some(l) {
+                    tail.push(l.clone());
+                }
+                if tail.len() >= 16 {
+                    break;
+                }
+            }
+                    stuck.push(format!("{map}: event {id:#x} args {args:?} still running after {t} ticks; last calls {tail:?}; mces {:?} menu_wait {} actors {:?}", rt.st.mces, rt.st.menu_wait, rt.st.actors.slots.iter().enumerate().filter_map(|(i, a)| a.as_ref().map(|a| (i, a.cmd, a.cmd_done, a.mv.is_some()))).collect::<Vec<_>>()));
+                    reset_vm(&mut rt, &map, &bytes);
+                }
+            }
+        }
+        total_calls += rt.st.calls;
+        for (k, n) in &rt.st.unimplemented {
+            let ent = unimpl.entry(*k).or_default();
+            ent.0 += n;
+            ent.1 += 1;
+        }
+        if verbose {
+            println!("{map}: {} calls, motions {:?}", rt.st.calls, rt.st.mces.played);
+        }
+    }
+    println!("maps run: {maps}   engine calls: {total_calls}");
+    println!("unimplemented ops hit at run time: {}", if unimpl.is_empty() { "none".to_string() } else { String::new() });
+    for ((ex, sub), (n, maps)) in &unimpl {
+        println!("  {ex:02x}.{sub:02x}  {n} calls in {maps} maps");
+    }
+    println!("scene-change requests: {}", transitions.len());
+    if verbose {
+        for s in &transitions {
+            println!("  {s}");
+        }
+    }
+    println!("stuck: {}", stuck.len());
+    for s in stuck.iter().take(60) {
+        println!("  {s}");
+    }
+}

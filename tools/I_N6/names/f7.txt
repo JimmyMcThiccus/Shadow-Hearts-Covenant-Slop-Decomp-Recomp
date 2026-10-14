@@ -1,0 +1,2 @@
+!SH2US_FIELD.BIN 00488b10 SafeDelayDelete__10CmdProfileFv FIX | was DelayDelete__9CmdPCInfo; inside CmdProfile (JP SafeDelayDelete 0x455520)
+!SH2US_FIELD.BIN 00495440 Run__8CmdAromaFv FIX | was Run__11CmdWolfBout; inside CmdAroma (JP unmatched Run 0x45f790)

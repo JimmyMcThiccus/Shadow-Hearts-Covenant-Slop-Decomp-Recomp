@@ -1,0 +1,22 @@
+[package]
+name = "sh2_audio"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Shadow Hearts: Covenant audio: SDH sound banks, SPU ADPCM, sequencer, stream BGM, rodio / WAV backends, Bevy plugin"
+
+[features]
+# `playback` opens the default output device through rodio (cpal); without it only the Null and WAV-dump backends exist.
+default = ["playback", "bevy"]
+playback = ["dep:rodio"]
+bevy = ["dep:bevy", "sh2_core/bevy"]
+
+[dependencies]
+thiserror.workspace = true
+log.workspace = true
+sh2_script.workspace = true
+sh2_core = { workspace = true }
+bevy = { workspace = true, optional = true }
+# rodio is already part of the dependency graph through bevy_audio (same version / features); no extra download.
+rodio = { version = "0.22", default-features = false, features = ["playback"], optional = true }
+

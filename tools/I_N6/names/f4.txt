@@ -1,0 +1,42 @@
+SH2US_FIELD.BIN 00519430 Retail_CField_SetObjSEFromSDB NEW | CSTGDB lookup, SDB object SE size, SetObjSE
+SH2US_FIELD.BIN 0051bd00 Retail_CField_ClearBgmState NEW | CMusic::FadeBGM + memset of bgm request block
+SH2US_FIELD.BIN 0051bdf0 Retail_CField_Sub51bdf0 NEW | BGM request helper next to SetBattleBgm
+SH2US_FIELD.BIN 0051c3f0 UnloadSeResident__6CFieldFv NEW | RemoveSDH for all resident SE, release buffers (called by dataAccess)
+SH2US_FIELD.BIN 0051c8a0 Retail_CField_ReleaseSoundData NEW | SetSoundData/SetObjSE reset, UnloadSe, stream BGM stop
+SH2US_FIELD.BIN 0051cd90 Retail_CField_ResetAllSound NEW | PollingSound, CMusic::Release, RemoveSDH all, memset
+SH2US_FIELD.BIN 0051cf60 AddQ__6CFieldFUcUcUs NEW | push {u8,u8,u16} into the 8-entry sound request ring (+0x2c, head +0x14d, tail +0x14c); JP 0x4d9620
+SH2US_FIELD.BIN 0051d020 Retail_CField_ClearSndBufCache NEW | CSndBufCache::Clear + reset state
+SH2US_FIELD.BIN 0051d190 Retail_CField_FreeBgmBuffers NEW | delete BufMemory, memset
+SH2US_FIELD.BIN 0051d550 FindSoundReq__6CFieldFv NEW | JP 0x4d9c50: search sound request queue
+SH2US_FIELD.BIN 0051d5b0 Retail_CField_CleanSoundQueue NEW | drop finished requests (uses AddQ), delete buffers
+SH2US_FIELD.BIN 0051d800 Retail_CField_PollSoundLoadA NEW | LoadSe on pending request
+SH2US_FIELD.BIN 0051d850 Retail_CField_PollSoundLoadB NEW | sound load poll variant
+SH2US_FIELD.BIN 0051d8b0 Retail_CField_PollSoundFree NEW | delete BufMemory + free
+SH2US_FIELD.BIN 0051da10 Retail_CField_StartEffectSimple NEW | StartEffect wrapper -> 0x51db10
+SH2US_FIELD.BIN 0051da70 Retail_CField_StartEffectAlloc NEW | new array, construct, StartEffect
+SH2US_FIELD.BIN 0051db00 Retail_CField_ZeroQuad STUB | writes 4 zero words (caller StartEffect)
+SH2US_FIELD.BIN 0051db10 Retail_CField_EffectFileReadOrder NEW | sprintf path + FileReadOrder for an effect file
+SH2US_FIELD.BIN 0051dbd0 Retail_CField_EffectHide NEW | Effect::HideOT on matching effects
+SH2US_FIELD.BIN 0051dc20 Retail_CField_EffectShow NEW | Effect::ShowOT on matching effects
+SH2US_FIELD.BIN 0051dc70 Retail_CField_RemoveEffectIf NEW | RemoveEffect for effects whose owner matches
+SH2US_FIELD.BIN 0051df90 Retail_CField_CreateEffectObject NEW | new Effect, Create, SetReplaceCallback, SetGenModel/Pos, SetTar*
+SH2US_FIELD.BIN 0051e140 Retail_CField_ClearEffectFlags STUB | flags &= 0xf8
+SH2US_FIELD.BIN 0051e160 Retail_CField_SetEffectEndCallbackGen STUB | Effect::SetEndCallbackGen on owner effect
+SH2US_FIELD.BIN 0051e190 Retail_CField_SetEffectEndCallbackTar STUB | Effect::SetEndCallbackTar on owner effect
+SH2US_FIELD.BIN 0051e3a0 EffectControl__6CFieldFiiii NEW | JP 0x4da440: pause/stop/resume matching effects (IsPaused/Stop)
+SH2US_FIELD.BIN 0051ec50 Retail_CFieldBG_GetModelInfo STUB | outputs short +0xb8, returns +0x6c
+SH2US_FIELD.BIN 0051fb50 Retail_CFieldBG_DspAll NEW | BG display loop
+SH2US_FIELD.BIN 0051fc50 Retail_CFieldBG_DspBase NEW | display helper
+SH2US_FIELD.BIN 0051fcb0 Retail_CFieldBG_SuspendForMenu NEW | suspend BG models
+SH2US_FIELD.BIN 0051fd40 Retail_CFieldBG_ResumeAfterMenu NEW | resume BG models
+SH2US_FIELD.BIN 00520130 Retail_CFieldBG_GetModelCount STUB | 0 or +0xb4
+SH2US_FIELD.BIN 00520250 Retail_CFieldBG_CreateBgEffects NEW | CSTGDB data lookup, AssignMagic, BgEffectMan::CreateEffect
+SH2US_FIELD.BIN 00520ab0 Retail_CFieldBG_GetField74 STUB | return **this+0x74
+SH2US_FIELD.BIN 00520ac0 Retail_CFieldBG_Sub520ac0 NEW | ExLight helper
+SH2US_FIELD.BIN 00520c40 __ct__13FldTeamChangeFv NEW | CPolObj, P2Pkt, ClutAdress, P2Font members
+SH2US_FIELD.BIN 00520d90 Retail_FldTeamChange_ThunkMakePacket STUB | -> 0x521610
+SH2US_FIELD.BIN 00520da0 __dt__13FldTeamChangeFv NEW | CImage, P2Pkt::Release, VIF1Prim, CPolObj dtor chain
+SH2US_FIELD.BIN 00521140 Dispose__13FldTeamChangeFv REW | JP unused Dispose; calls PrevTeam helpers + MakePacket
+SH2US_FIELD.BIN 00521260 Retail_FldTeamChange_Nop STUB | empty
+SH2US_FIELD.BIN 00521270 PrevTeam__13FldTeamChangeFi NEW | sinf easing step with SysTool::GetTimer
+SH2US_FIELD.BIN 00521610 Update__13FldTeamChangeFi NEW | isPaused guard then MakePacket

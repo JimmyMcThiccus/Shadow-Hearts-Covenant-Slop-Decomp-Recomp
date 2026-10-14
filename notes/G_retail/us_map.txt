@@ -1,0 +1,688 @@
+# jp_addr us_addr name conf jp_size us_size   (FIELD.BIN overlay: SH2JP_FIELD.BIN load 0x00430a00 -> SH2US_FIELD.BIN load 0x0045ea80)
+# conf: A anchored (chunk-tag constant / vtable), H ordered call-graph+constant alignment score>=0.55, M ordered alignment score<0.55 (tiny functions / inlined callees), C exact match from section G or hand-corrected after reading both bodies
+# Retail-only functions are named Retail_<Class>_<what>. The US overlay code is 10-25% smaller than the JP one because retail is register-allocated with inlined VU0 math (see README.md).
+004a2a50 004f0640 clipRadian__FRf C b0 a0
+004a2b00 004f06e0 __ct__6CFieldFv H 1f0 150
+004a2db0 004f0830 __dt__6CFieldFv H f0 120
+004a2ef0 004f0950 CheckResetPause__6CFieldFv H c0 90
+004a2fb0 004f09e0 Delete__6CFieldFv H 100 f0
+004a30b0 004f0ad0 Init__6CFieldFPCc H 80 90
+004a3130 004f0b60 LinkA__6CFieldFv H 30 40
+004a3240 004f0ba0 Start__6CFieldFv H 120 c0
+004a3390 004f0c60 closeInquiry__6CFieldFv H 30 20
+004a33c0 004f0c80 Restart__6CFieldFv H e0 80
+004a34d0 004f0d00 PurgeModel__6CFieldFv H a0 80
+004a3570 004f0d80 SaveModel__6CFieldFv H c0 a0
+004a36a0 004f0e20 ClearSDB__6CFieldFi H 260 1b0
+004a3980 004f0fd0 GetBGModel__6CFieldFi C 70 30
+004a39f0 004f1000 GetCtrlModel__6CFieldFv C 40 20
+004a3a30 004f1020 CheckEventBox__6CFieldFR7FVector H 70 60
+004a3aa0 004f10c0 Pause__6CFieldFi C e0 70
+004a3bc0 004f1130 Dsp__6CFieldFv H 1c0 170
+004a3e20 004f12a0 Clr__6CFieldFv H 170 130
+004a3f90 004f1500 FldInitLSDPlayer__Fv C 150 120
+004a40e0 004f16f0 FindFileTbl__14_FieldSaveInfoFPc H 100 d0
+004a41e0 004f17c0 SaveModelS__6CFieldFi H 290 230
+004a44e0 004f19f0 RestoreModel__6CFieldFii H 350 290
+004a4830 004f1c80 SaveField__6CFieldFv H 140 110
+004a4970 004f1df0 RestoreField__6CFieldFv H 1f0 1e0
+004a4b80 004f1fd0 PlayMCES__6CFieldFPCcii H 180 1c0
+004a4d40 004f2190 cbMCES__6CFieldFv H 1a0 190
+004a4ee0 004f2320 StartMCES__6CFieldFv H 50 40
+004a4f30 004f2430 SetMCESMode__6CFieldFPCcii H b0 90
+004a4fe0 004f2600 FieldBreakMCES__Fv C 40 40
+004a5020 004f2640 FieldExitPauseMCES__Fv C a0 80
+004a50c0 004f24c0 BreakMCES__6CFieldFi H 150 140
+004a5250 004f26c0 MCESInvokeBattle__Fv C f0 f0
+004a5340 004f27b0 ResetMCES__6CFieldFi H 130 150
+004a54a0 004f2900 UpdateMCES__6CFieldFv H 410 4e0
+004a5990 004f2de0 FileReadOrder__6CFieldFiPCcPv H 60 30
+004a59f0 004f2e10 _toUpper__Fi C 50 20
+004a5a40 004f2e30 _stricmp__FPCcPCc C a0 80
+004a5ae0 004f2eb0 cbDataRead__6CFieldFiP9BufMemoryiPcPv H 160 130
+004a5c40 004f2fe0 ReleaseWindow__6CFieldFv H 2e0 170
+004a5f20 004f3150 MakeMoveControl__FRfRfP4CPad C 1f0 180
+004a6260 004f32d0 Polling__6CFieldFv A 1e40 1600
+004a83f0 004f48d0 UpdateNavi__6CFieldFUii H d0 80
+004a84c0 004f4950 CameraUpdate__6CFieldFf H 4f0 410
+004a89f0 004f4d60 CheckMirror__6CFieldFv H 130 100
+004a8b20 004f4e60 ReverseVector__6CFieldFR7FVector H c0 90
+004a8be0 004f4ef0 UpdateFieldCamera__6CFieldFv A 1a00 1590
+004aa710 004f6480 bComp__12CFieldCameraFv H 40 30
+004aa750 004f64b0 UpdateScrCamera__6CFieldFf H 10b0 d60
+004ab860 004f7210 InitSDB__6CFieldFP6CSTGDB A 8a0 710
+004ac100 004f7920 GetEntryPoint__6CFieldFiRi A f0 c0
+004ac1f0 004f79e0 AddLight__6CFieldFP5FrameUi H 200 120
+004ac3f0 004f7b00 UpdateLight__6CFieldFv H 450 400
+004ac870 004f7f00 AutoDelLight__6CFieldFv H e0 b0
+004ac950 004f7fb0 CallFunc__6CFieldFiiP9_ParStack A 3af0 2680
+004b06b0 004fa7d0 SpecialMenu__6CFieldFii H 2a0 320
+004b0a20 004faaf0 cbShop__6CFieldFiPv H 120 100
+004b0b40 004fabf0 cbTailor__6CFieldFiPv H 110 100
+004b0c50 004facf0 GetNumber__FRPCc C 90 50
+004b0ce0 004fad40 SetRing__6CFieldFiiiiiPCc H 200 1b0
+004b0ee0 004faef0 RingControl__6CFieldFiiii H 50 30
+004b0f30 004faf20 cbRing__6CFieldFiPvPv H d0 a0
+004b1000 004fafc0 UpdateRing__6CFieldFv H 530 420
+004b1530 004fb3e0 RingResult__6CFieldFv H 60 40
+004b1590 004fb420 VectorOperation__FiP9_ParStack C 5c0 4a0
+004b1b70 004fb8c0 SetFieldData__6CFieldFiii H 860 8b0
+004b24e0 004fc170 GetFieldData__6CFieldFiii H 370 4c0
+004b28b0 004fc630 MapJump__6CFieldFPCc H 130 e0
+004b29e0 004fc710 MapJumpA__6CFieldFPCci H 130 140
+004b2b90 004fc8b0 CharPathEvent__6CFieldFP11CFieldModelUii H d0 c0
+004b2c60 004fc970 SetFieldEvent__6CFieldFiUiiii H 100 100
+004b2d60 004fca70 AddDelayEvent__6CFieldFiUiiii C 110 80
+004b2e70 004fcaf0 UpdateDelayEvent__6CFieldFv H f0 b0
+004b2f60 004fcbb0 CallFieldEvent__6CFieldFiUiii H c0 140
+004b3020 004fccf0 LoadCharacter__6CFieldFiiUi H 60 70
+004b3080 004fcd60 LoadModelCB__6CFieldFP11CFieldModel H 50 50
+004b30d0 004fcdb0 LoadCharacter__6CFieldFiPCciUi H 290 1e0
+004b3360 004fcf90 UnloadCharacter__6CFieldFi H 180 140
+004b34e0 004fd0d0 DispCharacterEP__6CFieldFiiiiPCc H 1c0 180
+004b36a0 004fd250 DispCharacter__6CFieldFii7FVectoriiiPCc H 400 320
+004b3aa0 004fd570 ClrCharacter__6CFieldFii H f0 c0
+004b3b90 004fd630 WaitCharacterEx__6CFieldFii H 180 120
+004b3d40 004fdbe0 FindFrame__FP11CFieldModelPCc C 90 60
+004b3dd0 004fdc40 DetachModel__6CFieldFii H 220 1c0
+004b4020 004fde00 CalcStandParent__FR7FVectorP11CFieldModelf C 110 e0
+004b4130 004fdee0 CharAddItem__6CFieldFiiPCci H 280 270
+004b43b0 004fe150 CharRemoveItem__6CFieldFiPCc H 160 140
+004b4510 004fe290 SetMotion__6CFieldFiii H 80 50
+004b4590 004fe2e0 SetBGMotion__6CFieldFiPCcPCc H 120 e0
+004b46b0 004fe3c0 SetCharacterDir__6CFieldFiiii H 520 420
+004b4bd0 004fe7e0 GetCharacterInfo__6CFieldFii H 220 1f0
+004b4e20 004fe9d0 SetCharacterInfo__6CFieldFiii H 1a0 190
+004b5040 004feb60 CreateWindow__6CFieldFiiii H a0 40
+004b50e0 004feba0 RecreateWindow__6CFieldFPQ26CField8_WndInfo H 140 d0
+004b52a0 004fec70 SetWindowPos__6CFieldFii H 70 20
+004b5310 004fec90 SetWindowSize__6CFieldFii H 60 20
+004b5370 004fecb0 OpenWindow__6CFieldFii H d0 b0
+004b5440 004fed60 CloseWindow__6CFieldFii H 80 40
+004b54c0 004feda0 UpdateMsgState__6CFieldFv H 120 e0
+004b5600 004fee80 OpenMessage__6CFieldFPcii H 110 c0
+004b5710 004fef40 ClearMessage__6CFieldFv H 70 40
+004b5780 004fef80 KeyWait__6CFieldFv H 100 b0
+004b5880 004ff030 KeyWaitStat__6CFieldFv H 100 b0
+004b5980 004ff0e0 LoadFace__6CFieldFii H d0 c0
+004b5ac0 004ff1a0 ReleaseFace__6CFieldFi H 80 50
+004b5b40 004ff240 SetFacePos__6CFieldFii H 80 90
+004b5c00 004ff1f0 SetFaceSize__6CFieldFii C 80 50
+004b5c80 004ff2d0 OpenFace__6CFieldFii C 70 40
+004b5cf0 004ff310 CloseFace__6CFieldFii C 70 40
+004b5d60 004ff350 CreateName__6CFieldFiiii H c0 70
+004b5e20 004ff3c0 SetNamePos__6CFieldFii H 90 50
+004b5eb0 004ff410 OpenName__6CFieldFPcii H 90 70
+004b5f40 004ff480 CloseName__6CFieldFii C 80 40
+004b5fc0 004ff4c0 SelectInitItem__6CFieldFv C b0 80
+004b6070 004ff540 SelectAddItem__6CFieldFPCc H 70 40
+004b60e0 004ff5d0 SelectInit__6CFieldFi C 90 90
+004b6230 004ff660 Select__6CFieldFRi H 270 180
+004b64c0 004ff7e0 GetImgName__FPcPCc C 40 20
+004b6500 004ff800 LoadImage__6CFieldFPCci H c0 a0
+004b65c0 004ff8a0 DspImage__6CFieldFiiiii H 80 40
+004b6640 004ff8e0 ClrImage__6CFieldFiiib H 90 60
+004b66d0 004ff940 SetEncountRate__6CFieldFi H 90 60
+004b6760 004ff9a0 UpdateMoveDistance__6CFieldFfi H 70 30
+004b67d0 004ff9d0 TreasureControl__6CFieldFiii H 250 1c0
+004b6a20 004ffb90 DspIcon__6CFieldFii H 60 40
+004b6a80 004ffbd0 SetLookPoint__6CFieldFiPffUiii H 1e0 150
+004b6c60 004ffd20 ClrLookPoint__6CFieldFi H e0 a0
+004b6d40 004ffdc0 ChkLookPoint__6CFieldFi H 200 180
+004b6f40 004fff40 DetachLookPoint__6CFieldFi H c0 90
+004b7000 004fffd0 AttachLookPoint__6CFieldFi H 110 d0
+004b7110 005000a0 CreateSavePoint__FP9_SavPointP5Model C b0 80
+004b71f0 00500190 SetSavePoint__6CFieldFiPfi H 360 250
+004b7550 005003e0 UpdateSavePoint__6CFieldFv C d0 60
+004b7620 00500440 ClrSavePoint__6CFieldFi H 150 100
+004b7770 00500540 ChkSavePoint__6CFieldFv C f0 90
+004b78b0 005005d0 ShowSavePoint__6CFieldFi H 110 90
+004b79c0 00500660 CreateWarpPoint__FP9_WapPointi C c0 80
+004b7ac0 005006e0 SetWarpPoint__6CFieldFiPfii H 2d0 210
+004b7d90 005008f0 UpdateWarpPoint__6CFieldFv H d0 c0
+004b7e90 005009b0 ClrWarpPoint__6CFieldFi H 130 e0
+004b7fc0 00500ac0 WarpFade__6CFieldFii H f0 c0
+004b80b0 00500b80 ShowWarpPoint__6CFieldFi H 120 90
+004b81d0 00500c10 DoWarp__6CFieldFiiUiUi H 3b0 2a0
+004b8580 00500eb0 IsWarp__6CFieldFi H 90 70
+004b8670 00500f20 VibRelease__6CFieldFv H a0 70
+004b8710 00500f90 StartVib__6CFieldFiii H 110 d0
+004b8820 00501060 StartVib__6CFieldFiPCci H 130 e0
+004b8950 00501140 VibControl__6CFieldFiiii H 260 1d0
+004b8be0 00501310 isLoadBusy__6CFieldFv H c0 a0
+004b8cc0 005013b0 CheckEncount__6CFieldFv H 520 460
+004b91e0 00501810 ScriptSuspend__6CFieldFv H 50 50
+004b9230 00501860 InvokeBattle__6CFieldFiiiiii H 300 240
+004b9550 00501aa0 SetCamera__6CFieldFPfifi H b0 80
+004b9600 00501b20 SetCamera__6CFieldFPfiif H b0 80
+004b96b0 00501ba0 SetCamera__6CFieldFiPfPff H b0 90
+004b9760 00501c30 RestoreCamera__6CFieldFf C 40 70
+004b97a0 00502280 GetCamPath__6CFieldFiP7FVectorf H 7b0 630
+004b9f50 005028b0 GetNearestPath__FPQ23SDB10tagFCAMERA7FVectorRi C 1270 1110
+004bb1c0 005039c0 GetCamPathA__6CFieldFiP7FVectorf H 5b0 430
+004bb770 00503df0 GetCamPath2__6CFieldFP7FVectori7FVector H 5b0 6c0
+004bbd20 005044b0 ChkPathPoint__6CFieldF7FVectorP7FVectorPf H 280 270
+004bbfa0 00504720 GetPathPoint__6CFieldFfP7FVector H a0 f0
+004bc080 00504810 Clear__Q29FldSpline6_flagsFv H 20 20
+004bc0a0 00504830 __dt__9FldSplineFv H 60 60
+004bc100 00504890 Release__9FldSplineFv H 80 70
+004bc180 00504900 SetPoint__9FldSplineFUiP7FVector H 60 30
+004bc1e0 00504930 Create__9FldSplineFUiUiP7FVector H 170 110
+004bc350 00504a40 GetPosition__9FldSplineFf H 4d0 350
+004bc820 00504e50 isCreated__9FldSplineFv H 30 20
+004bc8a0 00504e70 __dt__9CFloorManFv H 60 50
+004bc900 00504ec0 SetData__9CFloorManFP6CSTGDB A 430 2e0
+004bcd30 005051a0 SetRotY__9CFloorManFf H 110 d0
+004bce40 00505270 SetObstacle__9CFloorManFii H b0 70
+004bcef0 005052e0 OnFloorChk__9CFloorManF7FVector H 690 570
+004bd580 00505850 TriangleChk__9CFloorManFPQ23SDB12tagFTRIANGLE7FVectorP6Matrix H 570 3d0
+004bdaf0 00505c20 OnFloorPoint__9CFloorManF7FVectorPQ23SDB12tagFTRIANGLE H 3a0 330
+004bde90 00505f50 CircleChk__9CFloorManF7FVectorf H 300 270
+004be260 00506200 __dt__12CFieldCameraFv H 60 50
+004be2c0 00506250 Init__12CFieldCameraFv H 170 140
+004be450 00506390 SetTargetPos__12CFieldCameraF7FVector C 70 40
+004be4c0 005063d0 SetViewAngle__12CFieldCameraFf H 80 50
+004be540 00506420 Apply__12CFieldCameraFf H 980 790
+004bef20 00506bb0 CompFrame__12CFieldCameraFf C 80 40
+004befa0 00506c20 __ct__11CFieldEventFv H 20 10
+004befc0 00506c30 __dt__11CFieldEventFv H 60 50
+004bf0b0 00506c90 HitCheck__11CFieldEventF7FVectorii H 460 380
+004bf510 00507620 GetEventNum__11CFieldEventFi H 70 40
+004bf580 00507660 GetEventBox__11CFieldEventFi H 70 40
+004bf5f0 005076a0 GetEventBoxFromID__11CFieldEventFiPs H c0 60
+004bf6b0 00507700 GetEventBoxFromGroup__11CFieldEventFiPs H c0 60
+004bf770 00507890 Release__15_FieldDataCacheFv H 90 a0
+004bf800 00507930 FindKey__15_FieldDataCacheFPCc H 120 c0
+004bf920 005079f0 EncodeChar__Fi C b0 60
+004bf9d0 00507a50 EncodeKey__15_FieldDataCacheFPCcRUi H 170 160
+004bfb40 00507bb0 DecodeKey__15_FieldDataCacheFPcUiUi H 270 220
+004bfdb0 00507dd0 Find__15_FieldDataCacheFiPCc H c0 a0
+004bfe70 00507e70 GetNewData__15_FieldDataCacheFiPCc H e0 b0
+004bff50 00507f20 EncodeMotionName__FPCc C 170 110
+004c00c0 00508030 DecodeMotionName__FPcUi C 1b0 190
+004c0270 005081c0 GetMotionName__FUi C 60 50
+004c02d0 00508210 InitFieldModel__Fv M 10 10
+004c02e0 00508220 GetModelReadCt__Fv M 10 10
+004c0370 00508230 mdlReadMotionCB__FiP9BufMemoryiPcPv C 70 10
+004c03e0 00508390 ReadMotionCB__11CFieldModelFiP9BufMemory H 1b0 160
+004c0620 00508540 GetLoadQ__11CFieldModelFi H 60 30
+004c0680 00508570 PurgeLoadQ__11CFieldModelFi H 30 20
+004c06b0 00508590 __ct__11CFieldModelFv H c0 70
+004c0840 00508600 InitWork__11CFieldModelFv H 1b0 140
+004c09f0 00508740 __dt__11CFieldModelFv H 100 c0
+004c0af0 00508800 Delete__11CFieldModelFv H 130 e0
+004c0c20 00508900 FindData__11CFieldModelFPCc H 40 20
+004c0c60 00508920 ReadFile__11CFieldModelFPCc H e0 f0
+004c0d40 00508a60 LoadMotion__11CFieldModelFPCcUiPFUiUiPv_vPv H 1f0 1c0
+004c0f30 00508c20 DetachModel__11CFieldModelFP15_FieldDataCache H 310 270
+004c1240 00508e90 UnloadMotion__11CFieldModelFPCc H 1a0 130
+004c13e0 005090a0 ReadCB__11CFieldModelFP15_FieldDataCachei H 370 2c0
+004c1750 00509360 LoadModel__11CFieldModelFPCc H b0 80
+004c1800 005093e0 Reset__11CFieldModelFi H 140 110
+004c1980 005094f0 ChgCtrl__11CFieldModelFi H 80 60
+004c1a40 00509550 GetAnmName__11CFieldModelFPUc H 50 20
+004c1a90 00509570 FindMotionData__11CFieldModelFPCc H 80 50
+004c1b10 005095c0 SetModelType__11CFieldModelFi H 90 80
+004c1ba0 00509640 SetMoveLock__11CFieldModelFi H 40 40
+004c1c60 00509680 SetModel__11CFieldModelFPUci H 1e0 170
+004c1e40 00509800 SetBlink__11CFieldModelFi H 140 d0
+004c1f80 005098d0 SetTalk__11CFieldModelFi H 120 f0
+004c20a0 005099c0 SetMotion__11CFieldModelFii H 120 f0
+004c23a0 00509bd0 SetMotion__11CFieldModelFi H 90 70
+004c2500 00509cc0 SetMotion__11CFieldModelFPCc H 2a0 250
+004c27a0 00509f10 DispModel__11CFieldModelFi H 40 10
+004c27e0 00509f20 DspModelEff__11CFieldModelFv H 170 f0
+004c2980 0050a010 ClrModelEff__11CFieldModelFv H d0 90
+004c2a50 0050a0a0 SetGhost__11CFieldModelFv H b0 a0
+004c2b00 0050a140 SetMirror__11CFieldModelFi H 150 100
+004c2c50 0050a240 DspMirror__11CFieldModelFv H 2d0 1f0
+004c2fc0 0050a430 ClrMirror__11CFieldModelFi H 120 e0
+004c30e0 0050a510 UpdateMirrorOfs__11CFieldModelFiR7FVector H a0 60
+004c3180 0050a570 DispModel__11CFieldModelFiii H 470 440
+004c35f0 0050a9b0 Clear__11CFieldModelFi H 120 d0
+004c3710 0050aaf0 Dsp__11CFieldModelFi H 1b0 180
+004c38c0 0050ad40 Clr__11CFieldModelFi H 120 e0
+004c39e0 0050ae20 ClearModel__11CFieldModelFv H d0 b0
+004c3ae0 0050aee0 ClearShadow__11CFieldModelFv H 100 c0
+004c3be0 0050afa0 DispClearCtrl__11CFieldModelFv H 380 2a0
+004c3f60 0050b240 SetViewPoint__11CFieldModelFP7FVectorfii H c0 50
+004c4020 0050b290 InterPolPitch__Ffff C 120 a0
+004c4140 0050b330 UpdateViewPoint__11CFieldModelFf H cd0 960
+004c4e10 0050bc90 GetSmoothVelocity__Ffffff C 1a0 c0
+004c4fb0 0050bd50 Update__11CFieldModelFf H 1a90 1370
+004c6a60 0050d0c0 GetFramePos__11CFieldModelFPc H a0 80
+004c6b00 0050d140 SetPos__11CFieldModelF7FVectorb H f0 140
+004c6bf0 0050d280 ClipRadian__Ff C 180 f0
+004c6d70 0050d370 GetWorldPos__11CFieldModelFv H 100 d0
+004c6ef0 0050d630 GetDir__11CFieldModelFv H b0 80
+004c6fa0 0050d6b0 GetRotAngle__Fi C c0 80
+004c7060 0050d730 SetDir__11CFieldModelFiii H 80 80
+004c70e0 0050d7b0 SetDir__11CFieldModelFR7FVectorii H 6e0 5d0
+004c77e0 0050dd80 HitChkM2M__11CFieldModelFf H 250 260
+004c7a30 0050dfe0 HitChkM2E__11CFieldModelFv H 30 40
+004c7a60 0050e020 SetMoveMotion__11CFieldModelFiii H b0 70
+004c7b10 0050e090 SetLastMotion__11CFieldModelFPCc H 40 10
+004c7b50 0050e1e0 PlayMoveMotion__11CFieldModelFi H 1c0 160
+004c7d10 0050e340 CheckLastCmdComplete__11CFieldModelFv H 130 d0
+004c7e40 0050e410 checkKind__FPCc C d0 a0
+004c7f10 0050e4b0 SearchFrame__11CFieldModelFPCc H 70 50
+004c7f80 0050e500 AutoMove__11CFieldModelFP7FVectoriii H 320 310
+004c82a0 0050e810 PathMove__11CFieldModelFiPC9_PATHLISTUi H d0 e0
+004c8370 0050e8f0 clear__13_AutoMoveInfoFv H 30 10
+004c83a0 0050e900 FixNode__13_AutoMoveInfoFv H f0 80
+004c8490 0050e980 clear__13_PathMoveInfoFv H 30 10
+004c84c0 0050e990 MakeMoveNode__11CFieldModelFP7FVector7FVector H 960 880
+004c8e20 0050f210 UpdateNodeLen__11CFieldModelFv H 1b0 120
+004c8fd0 0050f330 PauseAutoMove__11CFieldModelFi H 140 1c0
+004c9110 0050f4f0 ArriveDistination__11CFieldModelFi H 140 170
+004c9250 0050f660 UpdateAutoMove__11CFieldModelFf H 800 6f0
+004c9a50 00511530 isCollided__11CFieldModelFv C 30 10
+004c9a80 0050fd50 UpdatePathMove__11CFieldModelFf H 870 7d0
+004ca2f0 00510520 PushChkFlags__11CFieldModelFv H 50 30
+004ca340 00510550 PopChkFlags__11CFieldModelFv H 80 50
+004ca3c0 005105a0 FloorChk__11CFieldModelFv H 130 130
+004ca4f0 005106d0 GetRand__Fi C 40 30
+004ca530 00510700 CalcModelBBox__FP5ModelPf C 2b0 210
+004ca7e0 00510910 AutoAvoid__11CFieldModelFv H 400 430
+004cac00 00510fa0 CreateModel__11CFieldModelFv H f0 80
+004cad50 00511020 GetFrame__11CFieldModelFv H 50 20
+004cada0 00511040 AddTime__11CFieldModelFf H 90 70
+004cae30 005110b0 CalcMatrix__11CFieldModelFv H 90 70
+004caec0 00511120 EventCallBack__11CFieldModelFPCcPCciiUi H 1c0 140
+004cb080 00511260 MotionEndCallBack__11CFieldModelFPCc H 390 2d0
+004cb410 00511560 TransCallBack__11CFieldModelFRC7FVector7FVector H e30 dd0
+004cc240 00511540 SetCollided__11CFieldModelFi C 40 20
+004cc280 00512330 __ct__7CFModelFv H 50 40
+004cc2d0 00512370 __dt__7CFModelFv H 90 70
+004cc360 005123e0 getPacket__7CFModelFv H 80 70
+004cc410 00512450 EventCallBack__7CFModelFPCcPCciiUi M 80 80
+004cc4d0 005124e0 TranseCallBack__7CFModelFRC7FVector7FVector M 60 60
+004cc530 00512540 __ct__8CXFModelFv H 50 40
+004cc580 00512580 __dt__8CXFModelFv H 90 70
+004cc610 005125f0 getPacket__8CXFModelFv H 90 70
+004cc6a0 00512660 EventCallBack__8CXFModelFPCcPCciiUi M 80 80
+004cc720 00512750 MotionEndCallBack__8CXFModelFPCc H 40 30
+004cc840 00512780 __dt__8CBalIconFv H 80 60
+004cc8c0 005127e0 Delete__8CBalIconFv H 40 40
+004cc900 00512820 Release__8CBalIconFv H 60 40
+004cc960 00512860 SetPat__8CBalIconFii H 2c0 200
+004cce50 00512a60 Dsp__8CBalIconFv H 40 10
+004cce90 00512a70 Clr__8CBalIconFv H 40 20
+004cced0 00512a90 SetCenter__8CBalIconFP7FVector H 140 150
+004cd010 00512be0 AddTime__8CBalIconFf H b30 7a0
+004cdc00 00513380 DspIcon__11CFieldModelFi H c0 90
+004cdcc0 00513410 CnvY__FUi C 1c0 140
+004cde80 00513550 CnvModelGray__FP5Model C 100 a0
+004ce040 00513610 __ct__14BgeffLightPrimFPv H 120 e0
+004ce160 005136f0 __dt__14BgeffLightPrimFv H 90 70
+004ce1f0 00513760 OnDelete__14BgeffLightPrimFv H 50 40
+004ce240 005137a0 __ct__10BgeffLightFiPv H 2e0 260
+004ce520 00513a00 __dt__10BgeffLightFv H 80 70
+004ce5a0 00513a70 DeleteLight__10BgeffLightFv H 80 60
+004ce620 00513ad0 Calculate__10BgeffLightFv H 330 2d0
+004ce950 00513da0 SetPacket__10BgeffLightFv H 630 540
+004cf0f0 00514320 CreateFldBGEffect__FiPv M b0 70
+004cf1a0 00514390 __ct__8CNaviMapFv H 140 110
+004cf340 005144a0 Release__8CNaviMapFv H c0 80
+004cf400 00514520 Delete__8CNaviMapFv H 40 40
+004cf440 00514560 SetData__8CNaviMapFP15_NaviMapDataHdr H 2f0 1f0
+004cf730 00514750 DspMesh__8CNaviMapFii H f0 a0
+004cf820 005147f0 isDsp__8CNaviMapFv H 50 30
+004cf870 00514820 DspClr__8CNaviMapFi H c0 90
+004cf930 005148b0 Dsp__8CNaviMapFi H 50 30
+004cf980 005148e0 Clr__8CNaviMapFi H d0 90
+004cfa50 00514970 Update__8CNaviMapFfP7FVectorf H 990 760
+004d0560 005150d0 GetColVector__FP7FVectorUi C 150 e0
+004d06b0 005151b0 GetPolyColor__8CNaviMapFP7FVector H 360 340
+004d0a10 005154f0 MakePacket__8CNaviMapFv H b50 770
+004d1670 00515c60 MakeMapPacket__8CNaviMapFv H 8c0 780
+004d1f30 005163e0 MakeMaskPacket__8CNaviMapFv H a80 870
+004d29b0 00516c50 Set4Sprite__8CNaviMapFRP4_QWDiiiiiii H 300 1e0
+004d2cb0 00516e30 SetCursor__8CNaviMapFv H 5a0 460
+004d3250 00517290 GetNavVector__8CNaviMapFP7FVectorP10_NavVertex H 170 120
+004d33c0 005173b0 CnvVertex__8CNaviMapFP4_QWDP7FVectorP6Matrix H 2f0 290
+004d36b0 00517640 HalfCol__FUi C 40 20
+004d36f0 00517660 MakeItemPacket__8CNaviMapFv H a40 ba0
+004d41c0 005182c0 GetCenterPos__8CNaviMapFR7FVector H a0 a0
+004d4260 00518360 GetRectVertex__8CNaviMapFP4_DWDP7FVectoriff H 330 2a0
+004d4590 00518600 GetArrowVertex__8CNaviMapFP4_DWDP7FVectori H 2d0 250
+004d4860 00518850 GetSprVertex__8CNaviMapFP4_DWDP7FVectorifii H 3e0 330
+004d4c40 00518b80 GetFT4Vertex__8CNaviMapFP4_DWDP7FVectorifii H 3f0 310
+004d5030 00518e90 AddItem__8CNaviMapFiR7FVectoriibUi H 190 110
+004d51c0 00518fa0 SetItem__8CNaviMapFiiR7FVectoriibUi H 1d0 170
+004d5390 00519110 RemoveItem__8CNaviMapFi H c0 70
+004d5450 00519180 DspItem__8CNaviMapFib H 90 50
+004d54e0 005191d0 GetItem__8CNaviMapFi H 80 90
+004d5560 00519260 __dt__8CNaviMapFv H a0 80
+004d5600 005192e0 GetBgmFileName__FPcPCc C 40 20
+004d5640 00519300 GetSeFileName__FPcPCc C 40 20
+004d5680 00519320 cbReadBGM__FiP9BufMemoryiPcPv H 30 40
+004d56b0 00519360 OnLoadBGM__6CFieldFv H 80 90
+004d5730 005193f0 GetObjSeSize__FPQ23SDB9tagFOBJSE C 90 40
+004d57c0 00519520 SetObjSE__6CFieldFiUiUiiP7FVector H 1d0 180
+004d5990 005196a0 SetObjSE__6CFieldFiPUli H 580 490
+004d5f10 00519b30 AutoLoadSE__6CFieldFv A 1d0 1b0
+004d60e0 00519ce0 Exp3DVolume__F7FVector7FVector7FVectorRiRii C 500 3d0
+004d65e0 0051a0b0 Calc3DPosition__FP7FVectorP7FVectorP6_ObjSE C c70 c20
+004d7250 0051acd0 Exp3DVolumeC__FR7FVectorR7FVectorR7FVectorf C 130 120
+004d7380 0051adf0 UpdateObjSE__6CFieldFv H 600 5c0
+004d7980 0051b3b0 CallSe__6CFieldFiiUi H 4e0 420
+004d7e60 0051b7d0 LoadBgm__6CFieldFPCc H 210 1c0
+004d8070 0051b990 LoadOrder__6CFieldFPCc H b0 90
+004d8120 0051ba20 CancelPlayOrder__6CFieldFv H f0 a0
+004d8210 0051bac0 PlayBgm__6CFieldFiUi H 1e0 1e0
+004d83f0 0051bca0 BgmFade__6CFieldFUiUi H 80 60
+004d8470 0051bd70 SetBgmVolume__6CFieldFi H 30 10
+004d84a0 0051bd80 WaitBgm__6CFieldFi H a0 60
+004d8540 0051bde0 SetBattleBgm__6CFieldFPCc H 10 10
+004d8550 0051be50 LoadSe__6CFieldFPCci H 210 1c0
+004d8760 0051c010 UnloadSeAll__6CFieldFv H c0 e0
+004d8820 0051c0f0 UnloadSeAll2__6CFieldFv H 130 110
+004d8950 0051c200 UnloadSeFromBank__6CFieldFi H 110 c0
+004d8a60 0051c2c0 UnloadSe__6CFieldFPCc H 180 130
+004d8be0 0051c530 MarkSE__6CFieldFv H c0 60
+004d8ca0 0051c590 ReleaseMarkSE__6CFieldFv H 110 100
+004d8db0 0051c690 PlaySe__6CFieldFUii H 80 70
+004d8e30 0051c700 PlaySeR__6CFieldFiUiii H 170 130
+004d8fa0 0051c830 SetSeVolume__6CFieldFi H 10 10
+004d8fb0 0051c840 StopSe__6CFieldFUi H 60 40
+004d9010 0051c880 WaitSe__6CFieldFUii H 50 20
+004d9060 0051c920 SetSoundData__6CFieldFiii H 110 110
+004d91b0 0051ca30 PlayStreamBgm__6CFieldFPCci H d0 a0
+004d9280 0051cad0 FadeStreamBgm__6CFieldFi H 40 30
+004d92c0 0051cb00 cbReadSoundFile__6CFieldFiP9BufMemoryiPv H e0 b0
+004d93e0 0051cbb0 cbMusicA__6CFieldFUcUi H 1d0 180
+004d95b0 0051cd30 ResetSE__6CFieldFv H 70 60
+004d96c0 0051cfa0 ClearBgmData__6CFieldFv H 90 80
+004d9750 0051d070 CmdBgmPlayReq__6CFieldFiUi H 180 120
+004d98d0 0051d230 CmdSeLoadSDH__6CFieldFi H 2b0 290
+004d9b80 0051d4c0 FindSE__6CFieldFPCc H d0 90
+004d9d10 0051d6b0 PollingSound__6CFieldFv H 180 150
+004d9e90 0051d930 SetEffParameter__6CFieldFPvPv H 160 e0
+004d9ff0 0051dd70 StartEffect__6CFieldFPCcUiPvPv H 270 220
+004da290 0051e1c0 OnLoadEffect__6CFieldFP9BufMemoryiPv H 170 b0
+004da620 0051e560 __ct__8CFieldBGFv H 30 10
+004da650 0051e570 Create__8CFieldBGFP9BufMemoryi H 100 d0
+004da750 0051e640 Create__8CFieldBGFP6CSTGDBi A 6b0 610
+004daec0 0051ec70 CheckMirrorNormal__FR7FVector C f0 90
+004dafb0 0051ed00 CheckMirror__8CFieldBGFP9GsxCameraR7FVector H ad0 a40
+004dba80 0051f740 Release__8CFieldBGFv H 140 110
+004dbbc0 0051f850 Dsp__8CFieldBGFv H 410 300
+004dc170 0051fdd0 Clr__8CFieldBGFv H 200 170
+004dc370 0051ff40 SaveRestoreMotion__8CFieldBGFiPc H 130 f0
+004dc4c0 00520030 Update__8CFieldBGFf H a0 90
+004dc560 005200c0 LgtAttachFrame__8CFieldBGFiP5Frame H 40 10
+004dc5a0 005200d0 FindFrame__8CFieldBGFiPCc H 80 40
+004dc680 00520110 GetModelCount__8CFieldBGFv H 60 20
+004dc6e0 00520150 GetShadowCtrl__8CFieldBGFb H d0 90
+004dc7b0 005201e0 ReleaseShadow__8CFieldBGFv H 90 70
+004dc840 00520360 StartEffect__8CFieldBGFi H 160 100
+004dc9a0 00520460 StopEffect__8CFieldBGFi H 150 100
+004dcaf0 00520560 EffectAlpha__8CFieldBGFifi H 140 110
+004dcc30 00520670 AddExLight__8CFieldBGFPv H 80 70
+004dccb0 005206e0 RecreateExLight__8CFieldBGFv H 3b0 3d0
+004dd080 00520bd0 RemoveExLight__8CFieldBGFv H 90 70
+004dd1c0 00520e40 Delete__13FldTeamChangeFv H 70 50
+004dd230 00520e90 Dsp__13FldTeamChangeFv H 80 60
+004dd2b0 00520ef0 Clr__13FldTeamChangeFv H 80 60
+004dd330 00520f50 CreateData__13FldTeamChangeFv H 1c0 140
+004dd4f0 00521090 Entry__13FldTeamChangeFv H 80 60
+004dd570 005210f0 Dispose__13FldTeamChangeFv H 70 50
+004dd6d0 005211e0 NextTeam__13FldTeamChangeFi H 80 40
+004dd750 00521220 PrevTeam__13FldTeamChangeFi H 80 40
+004dd7d0 00521380 Update__13FldTeamChangeFi H 3e0 290
+004ddbb0 00521650 MakePacket__13FldTeamChangeFv H 310 240
+004ddec0 00521890 MakeLinePacket__13FldTeamChangeFRP4_QWDiiiUi H 140 c0
+004de000 00521950 MakeNamePacket__13FldTeamChangeFP5P2Pkt H 4a0 350
+004de4a0 00521ca0 MakeBasePacket__13FldTeamChangeFP5P2Pkt H 420 360
+004de8c0 00522000 MakeCharPacket__13FldTeamChangeFP5P2Pkt H 470 2e0
+
+# --- retail-only / unmatched functions of the engine range (US address, size, current Ghidra name) ---
+-        004f0630 FUN_004f0630 10
+-        004f1080 Retail_CField_CheckEventBoxSweep 40
+-        004f13d0 FUN_004f13d0 90
+-        004f1460 FUN_004f1460 a0
+-        004f1620 FUN_004f1620 d0
+-        004f1d90 Retail_CField_ResetAll 60
+-        004f2360 FUN_004f2360 d0
+-        004fa630 Retail_CField_InvokeCmdScene d0
+-        004fa700 Retail_CField_cbCmdScene 10
+-        004fa710 Retail_CField_cbCmdScene c0
+-        004fc850 FUN_004fc850 60
+-        004fcba0 FUN_004fcba0 10
+-        004fd750 Retail_SegSegIntersectXZ f0
+-        004fd840 Retail_TriSegIntersectXZ a0
+-        004fd8e0 Retail_CField_SetNpcSight 140
+-        004fda20 Retail_CField_CheckNpcSight 1c0
+-        004ff580 Retail_CField_SelectInit2 50
+-        00500120 FUN_00500120 70
+-        00500a90 FUN_00500a90 30
+-        00501ca0 Retail_CField_CamBlurFxCmd c0
+-        00501d60 Retail_CField_EvalCamBlurFx 290
+-        00501ff0 Retail_CField_StepCamBlurFx 290
+-        00504d90 FUN_00504d90 c0
+-        005061c0 FUN_005061c0 40
+-        00506bf0 Retail_CFieldCamera_CompSnap 30
+-        00506c80 FUN_00506c80 10
+-        00507010 Retail_CFieldEvent_SweepHit 610
+-        00507760 FUN_00507760 80
+-        005077e0 Retail_FieldDataCache_TickN b0
+-        00508240 FUN_00508240 90
+-        005082d0 FUN_005082d0 c0
+-        005084f0 FUN_005084f0 50
+-        005088e0 Retail_FieldDataCache_Tick 10
+-        005088f0 Retail_FieldDataCache_ReleaseAll 10
+-        00508a10 FUN_00508a10 50
+-        00508fc0 FUN_00508fc0 e0
+-        005097f0 FUN_005097f0 10
+-        00509ab0 FUN_00509ab0 120
+-        00509c40 FUN_00509c40 80
+-        0050aa80 Retail_CFieldModel_DspAfterMenu 70
+-        0050ac70 Retail_CFieldModel_SuspendForMenu 80
+-        0050acf0 Retail_CFieldModel_ResumeAfterMenu 50
+-        0050aed0 FUN_0050aed0 10
+-        0050d440 FUN_0050d440 1f0
+-        0050e0a0 FUN_0050e0a0 140
+-        00510d40 Retail_CFieldModel_SightTest 250
+-        00510f90 FUN_00510f90 10
+-        005124d0 FUN_005124d0 10
+-        005126e0 FUN_005126e0 10
+-        005126f0 FUN_005126f0 60
+-        005135f0 FUN_005135f0 10
+-        00513600 FUN_00513600 10
+-        005142e0 FUN_005142e0 10
+-        005142f0 FUN_005142f0 10
+-        00514300 FUN_00514300 10
+-        00514310 FUN_00514310 10
+-        00518200 FUN_00518200 c0
+-        00519430 FUN_00519430 f0
+-        0051bd00 FUN_0051bd00 70
+-        0051bdf0 FUN_0051bdf0 60
+-        0051c3f0 FUN_0051c3f0 140
+-        0051c8a0 FUN_0051c8a0 80
+-        0051cd90 FUN_0051cd90 1d0
+-        0051cf60 FUN_0051cf60 40
+-        0051d020 FUN_0051d020 50
+-        0051d190 FUN_0051d190 a0
+-        0051d550 FUN_0051d550 60
+-        0051d5b0 FUN_0051d5b0 100
+-        0051d800 FUN_0051d800 50
+-        0051d850 FUN_0051d850 60
+-        0051d8b0 FUN_0051d8b0 80
+-        0051da10 FUN_0051da10 60
+-        0051da70 FUN_0051da70 90
+-        0051db00 FUN_0051db00 10
+-        0051db10 FUN_0051db10 c0
+-        0051dbd0 FUN_0051dbd0 50
+-        0051dc20 FUN_0051dc20 50
+-        0051dc70 FUN_0051dc70 100
+-        0051df90 FUN_0051df90 1b0
+-        0051e140 FUN_0051e140 20
+-        0051e160 FUN_0051e160 30
+-        0051e190 FUN_0051e190 30
+-        0051e270 FUN_0051e270 130
+-        0051e3a0 FUN_0051e3a0 1c0
+-        0051ec50 FUN_0051ec50 20
+-        0051fb50 FUN_0051fb50 100
+-        0051fc50 FUN_0051fc50 60
+-        0051fcb0 FUN_0051fcb0 90
+-        0051fd40 FUN_0051fd40 90
+-        00520130 FUN_00520130 20
+-        00520250 FUN_00520250 110
+-        00520ab0 FUN_00520ab0 10
+-        00520ac0 FUN_00520ac0 110
+-        00520c40 FUN_00520c40 150
+-        00520d90 thunk_FUN_00521610 10
+-        00520da0 FUN_00520da0 a0
+-        00521140 FUN_00521140 a0
+-        00521260 FUN_00521260 10
+-        00521270 FUN_00521270 110
+-        00521610 FUN_00521610 40
+
+# --- main executable (SLPM_602.19 -> SLUS_210.41) ---
+003bbcf0 003f3700 SetChrPosSaveState__Fi H 80 50
+003bbd70 003f3750 InitChrPosSave__Fv H 40 30
+003bbdb0 003f3780 ClrChrPosSave__Fi H 40 20
+003bbdf0 003f37a0 SaveChrPos__FiP7FVectori H e0 c0
+003bbed0 003f3860 RestoreChrPos__FiP7FVector H 110 b0
+003bbfe0 003f3910 SetShortPos__FPsP7FVector H 90 60
+003bc070 003f3970 SetShortPos4__FPsP7FVector H 60 60
+003bc0d0 003f39d0 GetShortPos__FP7FVectorPs H b0 60
+003bc180 003f3a30 GetShortPos4__FP7FVectorPs H 60 50
+003bc1e0 003f3a80 FindDTCInfo__FPCc H e0 b0
+003bc2c0 003f3b30 GetDTCData__FP8_DTCINFOi H 70 30
+003bc330 003f3b60 SetTreasureFlag__Fii H 110 b0
+003bc440 003f3c10 RestoreTreasureFlag__Fv H 100 d0
+003bc540 003f43c0 InventoryChange__Fiii H 640 6e0
+003bcb80 003f4aa0 CharacterEquip__Fiiiii C 380 230
+003bcf00 003f4cd0 GetGameSection__Fv C 40 10
+003bcf40 003f4ce0 GraveYardEnable__Fi H 90 70
+003bcfd0 003f4d50 InitFieldSocketM__FPCc A 90 70
+003bd060 003f4ea0 FieldMapJump__FPCci H 80 80
+003bd0e0 003f4f20 FieldMapJumpGY__FPCc H 90 c0
+003bd170 003f4fe0 FieldCameraID__Fi H 80 70
+003bd1f0 003f5050 GetMapName__FPcPCci H 80 30
+003bd270 003f5080 cbRead__FiP9BufMemoryiPcPv A 130 b0
+003bd3a0 003f5130 FieldPreLoad__FPCc H 150 100
+003bd4f0 003f5230 FieldPreLoadCancel__Fv H a0 70
+003bd590 003f52a0 WakeMapJump__12CFieldSocketFPCc M 1a0 180
+003bd730 003f5420 LayerMan_Init__Fv C 50 50
+003bd780 003f5470 LayerMan_GetLayer__Fi C 60 20
+003bd7e0 003f5490 LayerMan_LoadLayer__FPCUc C 60 90
+003bd840 003f5520 olLoadCB__FibiPv C 40 70
+003bd8e0 003f55f0 __ct__12CFieldSocketFPCc H a0 80
+003bd980 003f5670 SetMPS__12CFieldSocketFPCc H 40 30
+003bd9c0 003f56a0 Init__12CFieldSocketFv H 90 50
+003bda50 003f56f0 InvokeGameOver__Fv C 30 10
+003bda80 003f5710 __dt__12CFieldSocketFv H f0 a0
+003bdb70 003f57b0 LoadFieldData__Fv A 60 60
+003bdbd0 003f5810 preLoad__12CFieldSocketFv H c0 a0
+003bdc90 003f58b0 PreloadOverlay__12CFieldSocketFv H c0 90
+003bdd50 003f5940 fieldOverlay__12CFieldSocketFv H 250 1a0
+003bdfa0 003f5ae0 fieldLoadCB__12CFieldSocketFibi C 20 10
+003bdfc0 003f5af0 SetSmoothFilter__12CFieldSocketFfi H 90 70
+003be050 003f5b60 SetBlurFilter__12CFieldSocketFi H 50 40
+003be0a0 003f5ba0 DspFilter__12CFieldSocketFv H b0 90
+003be150 003f5c30 ClrFilter__12CFieldSocketFv H 90 80
+003be1e0 003f5cb0 InitFilter__12CFieldSocketFv H f0 a0
+003be2d0 003f5d50 Start__12CFieldSocketFv H 90 70
+003be360 003f5e50 WakeUp__12CFieldSocketFv H 340 260
+003be6a0 003f60b0 DelayUpdate__12CFieldSocketFv H 90 70
+003be730 003f6120 closeInquiry__12CFieldSocketFv H 1e0 150
+003be910 003f6270 LoadFieldData__12CFieldSocketFv H 60 50
+003be970 003f62c0 Sleep__12CFieldSocketFv H 1a0 100
+003beb10 003f63c0 GetTailorFlagAddr__Fv H 30 20
+003beb40 003f64e0 WorldMapJump__12CFieldSocketFiiUi C 60 30
+003beba0 003f6510 WorldMapJumpA__12CFieldSocketFiiUi C 110 140
+003becb0 003f6650 isFaderDsp__12CFieldSocketFi C 50 20
+003bed00 003f6670 GetFaderLevel__12CFieldSocketFi C f0 90
+003bedf0 003f6700 SetFader__12CFieldSocketFiii C 230 110
+003bf020 003f6810 ClrFader__12CFieldSocketFi C 80 50
+003bf0a0 003f6860 PauseFader__12CFieldSocketFi C 70 40
+003bf110 003f68a0 UpdateFader__12CFieldSocketFUi H 1f0 130
+003bf300 003f69d0 CommandMenu__12CFieldSocketFii M 380 2a0
+003bf680 003f6c70 CheckCmdMenu__12CFieldSocketFv H c0 70
+003bf740 003f6ce0 cbMenu__12CFieldSocketFiPvP7CmdMenu C 190 120
+003bf8d0 003f6e00 cbMenu2__12CFieldSocketFiPvP7CmdMenu C 170 f0
+003bfa40 003f6ef0 cbSave__12CFieldSocketFiPv H 120 d0
+003bfb60 003f7000 Polling__12CFieldSocketFv H 8e0 780
+003c0440 003f7800 LoadMPS__12CFieldSocketFPCc H 1f0 190
+003c0630 003f7990 CacheMPS__12CFieldSocketFPCc H a0 b0
+003c06d0 003f7a40 ReloadMPS__12CFieldSocketFv H a0 70
+003c0770 003f7ab0 SetWarp__12CFieldSocketFi C 130 e0
+003c08a0 003f7b90 InitFieldSaveData__Fv H 30 30
+003c08d0 003f7bc0 ResetFieldSaveData__Fi C 90 40
+003c0a20 003f7c00 GetWorldMapSection__Fv C 70 40
+003c0a90 003f7c40 GetSavedMpsName__Fi H 80 60
+003c0b10 003f7ca0 GetSavedChrPos__FPf H 90 90
+003c0ba0 003f7d30 GetFldGSFlag__Fv H 30 20
+003c0bd0 003f7d50 GetFieldBattleInfo__Fv H 30 20
+003c0c00 003f7d70 FieldNpcLibrary__Fii H 100 a0
+003c0d00 003f7e10 FieldGetDistance__FPf H 70 50
+003c0d70 003f7e60 FieldUpdateTotalDistance__Ffii H 260 190
+003c0fd0 003f7ff0 FieldChkEncountItem__Fv C 170 c0
+003c1140 003f8130 LoadScriptRegister__12CFieldSocketFv M d0 60
+003c1210 003f8190 FieldSaveCharPosition__FP7FVectori H 70 60
+003c1280 003f8280 SaveScriptRegister__12CFieldSocketFv H 150 100
+003c13d0 003f8470 SetGameOverType__12CFieldSocketFii H 1a0 f0
+003c1570 003f8560 Clear__12CSndBufCacheFv C c0 80
+003c1630 003f85e0 ReadFileCB__12CSndBufCacheFiP9BufMemoryiPcPv H 130 100
+003c1760 003f86e0 NextLoad__12CSndBufCacheFv H 130 f0
+003c1890 003f87d0 Load__12CSndBufCacheFPCciiPFiP9BufMemoryiPcPv_iPv H 290 230
+003c1b20 003f8a00 Find__12CSndBufCacheFPCci H c0 a0
+003c1be0 003f8aa0 FindType__12CSndBufCacheFi C 90 50
+003c1c70 003f8af0 StripFileName__12CSndBufCacheFPCc H 1d0 110
+003c1e40 003f8c00 StripFileNameB__12CSndBufCacheFPCc C 90 50
+003c1ef0 003f8c70 sdbReadCB__FiP9BufMemoryiPcPv H 70 50
+003c1f60 003f8cc0 __ct__6CSTGDBFv H 80 50
+003c1fe0 003f8d10 __dt__6CSTGDBFv H 90 70
+003c2070 003f8d80 SetData__6CSTGDBFPv H a0 70
+003c2110 003f8df0 CheckVersion__6CSTGDBFUl H 60 30
+003c2170 003f8e20 InitSDB__6CSTGDBFv H 220 190
+003c2390 003f8fb0 Load__6CSTGDBFPCc H 90 70
+003c2420 003f9020 LoadCB__6CSTGDBFP9BufMemoryi H a0 60
+003c24c0 003f9080 ClearData__6CSTGDBFv H c0 80
+003c2580 003f9100 Find__6CSTGDBFUl A b0 70
+003c2630 003f9170 GetDataNum__6CSTGDBFPQ23SDB9tagHEADER H 40 20
+003c2670 003f9190 GetDataAddr__6CSTGDBFPQ23SDB9tagHEADER H 50 30
+003c26c0 003f91c0 FindGenericData__6CSTGDBFPCc H 100 d0
+003c27c0 003f9290 cmntexReadCB__FiP9BufMemoryiPcPv C 50 30
+003c2810 003f92c0 __ct__11BgEffectManFv H 60 50
+003c2870 003f9310 Init__11BgEffectManFv H 70 70
+003c28e0 003f9380 GetEffect__11BgEffectManFii H 80 30
+
+# retail-only / unmatched in 0x3f3680-0x3fa000
+-        003f3ce0 FUN_003f3ce0 110
+-        003f3df0 FUN_003f3df0 40
+-        003f3ea0 FUN_003f3ea0 30
+-        003f3ed0 FUN_003f3ed0 60
+-        003f3f30 FUN_003f3f30 380
+-        003f42b0 FUN_003f42b0 110
+-        003f4e30 FUN_003f4e30 40
+-        003f4e70 FUN_003f4e70 30
+-        003f5dc0 FUN_003f5dc0 90
+-        003f63e0 FUN_003f63e0 30
+-        003f6410 FUN_003f6410 d0
+-        003f6fd0 FUN_003f6fd0 30
+-        003f7780 FUN_003f7780 10
+-        003f80b0 FUN_003f80b0 80
+-        003f81f0 FUN_003f81f0 60
+-        003f8250 FUN_003f8250 30
+-        003f8380 FUN_003f8380 f0
+-        003f8c50 FUN_003f8c50 10
+-        003f8c60 FUN_003f8c60 10
+-        003f93b0 FUN_003f93b0 150
+-        003f9500 FUN_003f9500 90
+-        003f9590 FUN_003f9590 90
+-        003f9620 FUN_003f9620 70
+-        003f9690 FUN_003f9690 50
+-        003f96e0 FUN_003f96e0 70
+-        003f9750 FUN_003f9750 70
+-        003f97c0 FUN_003f97c0 50
+-        003f9810 FUN_003f9810 50
+-        003f9860 FUN_003f9860 50
+-        003f98b0 FUN_003f98b0 540
+-        003f9df0 FUN_003f9df0 40
+-        003f9e30 FUN_003f9e30 c0
+-        003f9ef0 FUN_003f9ef0 90
+-        003f9f80 FUN_003f9f80 a0

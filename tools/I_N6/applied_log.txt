@@ -1,0 +1,185 @@
+SH2US_FIELD.BIN 004f13d0 Retail_CField_SuspendForMenu NEW FUN_004f13d0 Retail_CFieldModel_SuspendForMenu for each model + CFieldBG suspend
+SH2US_FIELD.BIN 004f1460 Retail_CField_ResumeAfterMenu NEW FUN_004f1460 counterpart: models resume, CFieldBG resume, PollingSound
+SH2US_FIELD.BIN 004f1620 Retail_CField_UnplugAllLSDHandlers NEW FUN_004f1620 LSDPlayer::UnplugDevice for 13 global handlers
+SH2US_FIELD.BIN 004f2360 Retail_CField_SwitchToMCESHandler NEW FUN_004f2360 Unplug handler 0x459840, Plug 0x459a20, set pause/flags
+SH2US_FIELD.BIN 004fcba0 Retail_CField_ClearFlag9c7 STUB FUN_004fcba0 +0x9c7 = 0 (callers InitSDB/MapJumpA)
+SH2US_FIELD.BIN 00500a90 Retail_CField_GetWarpPointState NEW FUN_00500a90 state bits of warp point idx (stride 0xc at +0x84e)
+SH2US_FIELD.BIN 00504d90 Retail_CField_LSDFadeCallback NEW FUN_00504d90 modes 2/3/6: CFieldSocket::SetFader and LSDPlayer Release/Pause
+SH2US_FIELD.BIN 005061c0 Retail_CField_ClearCameraVectors NEW FUN_005061c0 zero a block of FVectors at +0x30..+0x60 (caller CField::Start)
+SH2US_FIELD.BIN 00506c80 Retail_CFieldEvent_SetTriple NEW FUN_00506c80 stores 3 words (callers CField::InitSDB)
+SH2US_FIELD.BIN 00507760 Retail_FieldDataCache_PollDecodeKey NEW FUN_00507760 countdown then _FieldDataCache::DecodeKey
+SH2US_FIELD.BIN 00508240 Retail_CFieldModel_ReadMotionCB1 NEW FUN_00508240 motion load callback (slot stride 0x10 at +0x2d0), decrements pending count
+SH2US_FIELD.BIN 005082d0 Retail_CFieldModel_ReadMotionCB2 NEW FUN_005082d0 variant using GetLoadQ
+SH2US_FIELD.BIN 00508a10 Retail_CFieldModel_AllocLoadSlot NEW FUN_00508a10 first free 0x10-byte load slot, mark used
+SH2US_FIELD.BIN 00508fc0 Retail_CFieldModel_FlushLoadQueue NEW FUN_00508fc0 DIntr; run ReadCB/ReadMotionCB for completed slots; EIntr
+SH2US_FIELD.BIN 005097f0 Retail_CFieldModel_SetBlinkFlags NEW FUN_005097f0 +0x124 = (v>>8)&0xf then SetBlink
+SH2US_FIELD.BIN 0050aed0 Retail_CFieldModel_SetField318 STUB FUN_0050aed0 +0x318 = v; return 1
+SH2US_FIELD.BIN 0050d440 Retail_CFieldModel_GetFacingAngle NEW FUN_0050d440 angle between model facing (GetDir/world rot) and reference vector via acosf + OuterProduct
+SH2US_FIELD.BIN 0050e0a0 Retail_CFieldModel_ApplyLastMotion NEW FUN_0050e0a0 setMotion with last-motion name (+0x31c), blink/flags
+SH2US_FIELD.BIN 005126e0 Retail_CXFModel_RequestMotion NEW FUN_005126e0 strcmp with current motion name; FindMotionData; SetMotion / PlayMoveMotion
+SH2US_FIELD.BIN 00514300 OnChangeState__14BgeffLightPrimFv NEW FUN_00514300 empty override
+SH2US_FIELD.BIN 00519430 Retail_CField_SetObjSEFromSDB NEW FUN_00519430 CSTGDB lookup, SDB object SE size, SetObjSE
+SH2US_FIELD.BIN 0051bd00 Retail_CField_ClearBgmState NEW FUN_0051bd00 CMusic::FadeBGM + memset of bgm request block
+SH2US_FIELD.BIN 0051bdf0 Retail_CField_Sub51bdf0 NEW FUN_0051bdf0 BGM request helper next to SetBattleBgm
+SH2US_FIELD.BIN 0051c3f0 UnloadSeResident__6CFieldFv NEW FUN_0051c3f0 RemoveSDH for all resident SE, release buffers (called by dataAccess)
+SH2US_FIELD.BIN 0051c8a0 Retail_CField_ReleaseSoundData NEW FUN_0051c8a0 SetSoundData/SetObjSE reset, UnloadSe, stream BGM stop
+SH2US_FIELD.BIN 0051cd90 Retail_CField_ResetAllSound NEW FUN_0051cd90 PollingSound, CMusic::Release, RemoveSDH all, memset
+SH2US_FIELD.BIN 0051cf60 AddQ__6CFieldFUcUcUs NEW FUN_0051cf60 push {u8,u8,u16} into the 8-entry sound request ring (+0x2c, head +0x14d, tail +0x14c); JP 0x4d9620
+SH2US_FIELD.BIN 0051d020 Retail_CField_ClearSndBufCache NEW FUN_0051d020 CSndBufCache::Clear + reset state
+SH2US_FIELD.BIN 0051d190 Retail_CField_FreeBgmBuffers NEW FUN_0051d190 delete BufMemory, memset
+SH2US_FIELD.BIN 0051d550 FindSoundReq__6CFieldFv NEW FUN_0051d550 JP 0x4d9c50: search sound request queue
+SH2US_FIELD.BIN 0051d5b0 Retail_CField_CleanSoundQueue NEW FUN_0051d5b0 drop finished requests (uses AddQ), delete buffers
+SH2US_FIELD.BIN 0051d800 Retail_CField_PollSoundLoadA NEW FUN_0051d800 LoadSe on pending request
+SH2US_FIELD.BIN 0051d850 Retail_CField_PollSoundLoadB NEW FUN_0051d850 sound load poll variant
+SH2US_FIELD.BIN 0051d8b0 Retail_CField_PollSoundFree NEW FUN_0051d8b0 delete BufMemory + free
+SH2US_FIELD.BIN 0051da10 Retail_CField_StartEffectSimple NEW FUN_0051da10 StartEffect wrapper -> 0x51db10
+SH2US_FIELD.BIN 0051da70 Retail_CField_StartEffectAlloc NEW FUN_0051da70 new array, construct, StartEffect
+SH2US_FIELD.BIN 0051db00 Retail_CField_ZeroQuad STUB FUN_0051db00 writes 4 zero words (caller StartEffect)
+SH2US_FIELD.BIN 0051db10 Retail_CField_EffectFileReadOrder NEW FUN_0051db10 sprintf path + FileReadOrder for an effect file
+SH2US_FIELD.BIN 0051dbd0 Retail_CField_EffectHide NEW FUN_0051dbd0 Effect::HideOT on matching effects
+SH2US_FIELD.BIN 0051dc20 Retail_CField_EffectShow NEW FUN_0051dc20 Effect::ShowOT on matching effects
+SH2US_FIELD.BIN 0051dc70 Retail_CField_RemoveEffectIf NEW FUN_0051dc70 RemoveEffect for effects whose owner matches
+SH2US_FIELD.BIN 0051df90 Retail_CField_CreateEffectObject NEW FUN_0051df90 new Effect, Create, SetReplaceCallback, SetGenModel/Pos, SetTar*
+SH2US_FIELD.BIN 0051e140 Retail_CField_ClearEffectFlags STUB FUN_0051e140 flags &= 0xf8
+SH2US_FIELD.BIN 0051e160 Retail_CField_SetEffectEndCallbackGen STUB FUN_0051e160 Effect::SetEndCallbackGen on owner effect
+SH2US_FIELD.BIN 0051e190 Retail_CField_SetEffectEndCallbackTar STUB FUN_0051e190 Effect::SetEndCallbackTar on owner effect
+SH2US_FIELD.BIN 0051e3a0 EffectControl__6CFieldFiiii NEW FUN_0051e3a0 JP 0x4da440: pause/stop/resume matching effects (IsPaused/Stop)
+SH2US_FIELD.BIN 0051ec50 Retail_CFieldBG_GetModelInfo STUB FUN_0051ec50 outputs short +0xb8, returns +0x6c
+SH2US_FIELD.BIN 0051fb50 Retail_CFieldBG_DspAll NEW FUN_0051fb50 BG display loop
+SH2US_FIELD.BIN 0051fc50 Retail_CFieldBG_DspBase NEW FUN_0051fc50 display helper
+SH2US_FIELD.BIN 0051fcb0 Retail_CFieldBG_SuspendForMenu NEW FUN_0051fcb0 suspend BG models
+SH2US_FIELD.BIN 0051fd40 Retail_CFieldBG_ResumeAfterMenu NEW FUN_0051fd40 resume BG models
+SH2US_FIELD.BIN 00520130 Retail_CFieldBG_GetModelCount STUB FUN_00520130 0 or +0xb4
+SH2US_FIELD.BIN 00520250 Retail_CFieldBG_CreateBgEffects NEW FUN_00520250 CSTGDB data lookup, AssignMagic, BgEffectMan::CreateEffect
+SH2US_FIELD.BIN 00520ab0 Retail_CFieldBG_GetField74 STUB FUN_00520ab0 return **this+0x74
+SH2US_FIELD.BIN 00520ac0 Retail_CFieldBG_Sub520ac0 NEW FUN_00520ac0 ExLight helper
+SH2US_FIELD.BIN 00520c40 __ct__13FldTeamChangeFv NEW FUN_00520c40 CPolObj, P2Pkt, ClutAdress, P2Font members
+SH2US_FIELD.BIN 00520d90 Retail_FldTeamChange_ThunkMakePacket STUB thunk_FUN_00521610 -> 0x521610
+SH2US_FIELD.BIN 00520da0 __dt__13FldTeamChangeFv NEW FUN_00520da0 CImage, P2Pkt::Release, VIF1Prim, CPolObj dtor chain
+SH2US_FIELD.BIN 00521140 Dispose__13FldTeamChangeFv REW FUN_00521140 JP unused Dispose; calls PrevTeam helpers + MakePacket
+SH2US_FIELD.BIN 00521260 Retail_FldTeamChange_Nop STUB FUN_00521260 empty
+SH2US_FIELD.BIN 00521270 PrevTeam__13FldTeamChangeFi NEW FUN_00521270 sinf easing step with SysTool::GetTimer
+SH2US_FIELD.BIN 00521610 Update__13FldTeamChangeFi NEW FUN_00521610 isPaused guard then MakePacket
+SH2US_FIELD.BIN 00526be0 Retail_shop_Sub526be0 NEW FUN_00526be0 primWin construction with textures/Yoahism check (shop window builder; class certain)
+SH2US_FIELD.BIN 00529290 Retail_shop_Sub529290 NEW FUN_00529290 primWin + array construction (buy/sell list builder)
+SH2US_FIELD.BIN 00530730 Retail_shop_Sub530730 NEW FUN_00530730 pure computation helper (mCheckSellItem family)
+SH2US_FIELD.BIN 00530c80 Retail_shop_Sub530c80 NEW FUN_00530c80 leaf helper
+SH2US_FIELD.BIN 00530d80 Retail_shop_CursorHolder_Dt NEW FUN_00530d80 Cursor dtor + delete
+SH2US_FIELD.BIN 0053a4b0 mReleaseYesNoWin__6tailorFv C1 FUN_0053a4b0 JP 0x4efec0
+SH2US_FIELD.BIN 00546860 Retail_solomon_Sub546860 NEW FUN_00546860 small helper in the solomon (soul fusion) screen
+SH2US_FIELD.BIN 00547c00 mSetupMainWin__7solomonFv C1 FUN_00547c00 JP 0x4fb0b0 (MsgTable strings + primWin createText)
+SH2US_FIELD.BIN 00547f10 mReleaseMainWin__7solomonFv C1 FUN_00547f10 JP 0x4fb320 (ReleaseOT + delete)
+SH2US_FIELD.BIN 00547fa0 mReleaseHintWin__7solomonFv C1 FUN_00547fa0 JP 0x4fb8d0
+SH2US_FIELD.BIN 00548d30 mReleaseMessWin__7solomonFv C1 FUN_00548d30 JP 0x4fc440
+SH2US_FIELD.BIN 00549ea0 mReleaseDemonWin__7solomonFv C1 FUN_00549ea0 JP 0x4fd260
+SH2US_FIELD.BIN 0054a690 mSetupMainCursor__7solomonFi C1 FUN_0054a690 JP 0x4fd8e0 (Cursor ctor/Create/AddOT/Select)
+SH2US_FIELD.BIN 0054a8a0 mReleaseMainCursor__7solomonFv C1 FUN_0054a8a0 JP mReleaseMainCursor 
+SH2US_FIELD.BIN 0054b680 Retail_solomon_SetupResultWin NEW FUN_0054b680 primWin createPoly/buildWin
+SH2US_FIELD.BIN 0054b800 Retail_solomon_ReleaseResultWin NEW FUN_0054b800 ReleaseOT
+SH2US_FIELD.BIN 0054bd00 Retail_solomonEffect_GetState48 STUB FUN_0054bd00 return this+0x48 byte
+SH2US_FIELD.BIN 0054e670 __ct__10floatDemonFv NEW FUN_0054e670 CPolObj ctor
+SH2US_FIELD.BIN 0054e6c0 __dt__10floatDemonFv C1 FUN_0054e6c0 Dispose, ReleaseOT, dtor chain
+SH2US_FIELD.BIN 0054e7b0 Retail_floatDemon_Start NEW FUN_0054e7b0 mSetupScrollMark + CPoller::Entry
+SH2US_FIELD.BIN 0054e860 Retail_floatDemon_Calc1 NEW FUN_0054e860 calc (calls eraseSlot helper)
+SH2US_FIELD.BIN 0054e9d0 Retail_floatDemon_Calc2 NEW FUN_0054e9d0 pure math
+SH2US_FIELD.BIN 0054ec80 Retail_floatDemon_Calc3 NEW FUN_0054ec80 pure math
+SH2US_FIELD.BIN 0054f680 setPos__13solomonCursorFiii C1 FUN_0054f680 JP 0x501c10: primPacket setPos, GetPlace/Select/QuickMove
+SH2US_FIELD.BIN 0054fd10 removeCursor__13solomonCursorFv C1 FUN_0054fd10 JP 0x5021c0
+SH2US_FIELD.BIN 00550250 Retail_solomonSlot_SetFade NEW FUN_00550250 setRGBA based fade of a slot sprite
+SH2US_FIELD.BIN 00551b40 initialize__10solomonThmFP7primTexbii C1 FUN_00551b40 JP 0x503ee0
+SH2US_FIELD.BIN 00551ce0 Retail_solomonThm_Sub551ce0 NEW FUN_00551ce0 leaf helper after setArea
+SH2US_FIELD.BIN 00552460 mSetupThmBaseWin__10solomonThmFv C1 FUN_00552460 JP 0x505610 (0x6b0 -> 0xa10)
+SH2US_FIELD.BIN 00552e70 mReleaseThmBaseWin__10solomonThmFv C1 FUN_00552e70 JP 0x505e00
+SH2US_FIELD.BIN 00553050 mSetupDemonWin__10solomonThmFv C1 FUN_00553050 JP 0x505? (0x280)
+SH2US_FIELD.BIN 00553320 mSetupHintWin__10solomonThmFv C1 FUN_00553320 JP (0x2d0)
+SH2US_FIELD.BIN 005539b0 Retail_solomonEffect_SwapLSDHandlers NEW FUN_005539b0 UnplugDevice + PlugDevice of the solomon scene handlers
+SH2US_FIELD.BIN 00553ad0 __ct__13worldMapPanelFv NEW FUN_00553ad0 retail-new worldMap panel class: CPolObj + Font
+SH2US_FIELD.BIN 00553ba0 __dt__13worldMapPanelFv NEW FUN_00553ba0 ReleaseField, MsgTable/primTex/primSound/Font dtors
+SH2US_FIELD.BIN 00553da0 initialize__13worldMapPanelFv NEW FUN_00553da0 primSound, SetPathname, DvdromOrder::ReadOrder, create
+SH2US_FIELD.BIN 00553ed0 Retail_worldMapPanel_Nop STUB FUN_00553ed0 sets a flag byte
+SH2US_FIELD.BIN 00553ef0 Polling__13worldMapPanelFv NEW FUN_00553ef0 0x14d0 state machine: pad, SetFader, SetFFMode, windows
+SH2US_FIELD.BIN 005553c0 mSetupMainWin__13worldMapPanelFv NEW FUN_005553c0 GetTitleShared + primWin textures/text
+SH2US_FIELD.BIN 00555900 mSetupSubWin__13worldMapPanelFv NEW FUN_00555900 ReleaseOT, primWin build (0x700)
+SH2US_FIELD.BIN 00556000 mSetupMsgTable__13worldMapPanelFv NEW FUN_00556000 MsgTable from primTex data
+SH2US_FIELD.BIN 00556110 mPlugLSD__13worldMapPanelFv NEW FUN_00556110 new LSDPlayer, PlugDevice, Reset
+SH2US_FIELD.BIN 005562c0 mUnplugLSD__13worldMapPanelFv NEW FUN_005562c0 LSDPlayer::UnplugDevice
+SH2US_FIELD.BIN 005563d0 mSelectDestination__13worldMapPanelFv NEW FUN_005563d0 GetTitleShared + strcmp loop over destination names (0x480)
+SH2US_FIELD.BIN 00556850 Retail_worldMapPanel_Sub556850 NEW FUN_00556850 pure compute helper
+SH2US_FIELD.BIN 005569d0 mSetupScrollMarks__13worldMapPanelFv NEW FUN_005569d0 new udScrollMark + initialize
+SH2US_FIELD.BIN 00556ae0 __ct__14pageScrollMarkFv NEW FUN_00556ae0 CPolObj ctor
+SH2US_FIELD.BIN 00556b30 __dt__14pageScrollMarkFv NEW FUN_00556b30 Dispose, ReleaseOT, dtor chain
+SH2US_FIELD.BIN 00556cd0 setDisp__14pageScrollMarkFi NEW FUN_00556cd0 JP 0x5010d0 (calls select)
+SH2US_FIELD.BIN 00556dd0 Polling__14pageScrollMarkFv NEW FUN_00556dd0 JP 0x5011b0
+SH2US_FIELD.BIN 00557000 select__14pageScrollMarkFi NEW FUN_00557000 JP 0x501410
+SH2US_FIELD.BIN 00557280 Retail_pageScrollMark_CreateTitleWin NEW FUN_00557280 primWin with setWinMenuTex/setUVBlock
+SH2US_FIELD.BIN 00557430 Retail_pageScrollMark_SelectDestination NEW FUN_00557430 calls mSelectDestination
+SH2US_FIELD.BIN 005574f0 Retail_pageScrollMark_CreateTextWin NEW FUN_005574f0 primWin + MsgTable text
+SH2US_FIELD.BIN 005576c0 Retail_pageScrollMark_ReleaseWins NEW FUN_005576c0 ReleaseOT
+SH2US_FIELD.BIN 00559510 Retail_worldMap_CheckKeyHelperA NEW FUN_00559510 leaf helper in mCheckKey family
+SH2US_FIELD.BIN 00559560 Retail_worldMap_CheckKeyHelperB NEW FUN_00559560 leaf helper in mCheckKey family
+SH2US_FIELD.BIN 0055a4a0 mSetupMenuFadeOut__8worldMapFv C1 FUN_0055a4a0 JP 0x508db0
+SH2US_FIELD.BIN 0055a590 Retail_worldMap_GetField118 STUB FUN_0055a590 return (this+0x98)->+0x118
+SH2US_FIELD.BIN 0055aa50 mReleaseSelectWin__8worldMapFv C1 FUN_0055aa50 JP 0x5091b0
+SH2US_FIELD.BIN 0055ae10 mReleaseSelectWinCursor__8worldMapFv C1 FUN_0055ae10 JP 0x5093c0
+SH2US_FIELD.BIN 0055e290 mReleaseThmWin__11worldMapThmFv C1 FUN_0055e290 JP 0x50bde0
+SH2US_FIELD.BIN 0055f590 setPos__13worldMapPointFff C1 FUN_0055f590 JP 0x50cff0
+SH2US_FIELD.BIN 0055f6b0 __ct__13worldMapPointFv NEW FUN_0055f6b0 CPolObj ctor
+SH2US_FIELD.BIN 0055f700 __dt__13worldMapPointFv NEW FUN_0055f700 ReleaseOT, Dispose, dtor chain
+SH2US_FIELD.BIN 0055f800 Retail_worldMapPoint_Start NEW FUN_0055f800 CPoller::Entry + mSetupWin
+SH2US_FIELD.BIN 0055f880 Retail_worldMapPoint_Sub NEW FUN_0055f880 leaf helper
+SH2US_FIELD.BIN 0055f8f0 Retail_worldMapPoint_Sub2 NEW FUN_0055f8f0 leaf helper
+SH2US_FIELD.BIN 0055f940 mSetupWin__13worldMapPointFv NEW FUN_0055f940 primWin + setWinMenuTex
+SH2US_FIELD.BIN 0055fb60 Polling__13worldMapPointFv NEW FUN_0055fb60 animation (SetUV) 0x400
+SH2US_FIELD.BIN 0055ff60 Retail_worldMapPoint_Tail NEW FUN_0055ff60 field flag copy then mSetupWin chain (if +0x102 == 0)
+SH2US_FIELD.BIN 004d64d0 CloseEffect__13MenuModelAuraFi NEW FUN_004d64d0 Retail_MenuModelManeger_SetFlag4 + effect close toggle (callers CmdFusion)
+SH2US_FIELD.BIN 004d65b0 Retail_MenuModelAura_SetField68 STUB FUN_004d65b0 +0x68 = v
+SH2US_FIELD.BIN 004d81a0 Run__15CmdPropertyListFv C1 FUN_004d81a0 JP 0x49c120 (ptmf dispatch)
+SH2US_FIELD.BIN 004d8220 GetReady__15CmdPropertyListFv REW FUN_004d8220 JP 0x49ba20 (0x700 -> 0x400): MenuScene ctor, CmdFence, CreateFence
+SH2US_FIELD.BIN 004d9eb0 ShiftExplain__15CmdPropertyListFv C1 FUN_004d9eb0 JP 0x49d760: Finish/SetupMove/SetExplanation
+SH2US_FIELD.BIN 004dabb0 __ct__16CmdPropertyGoodsFv C1 FUN_004dabb0 JP 0x49e200
+SH2US_FIELD.BIN 004dc800 Retail_CmdRingCustomAutoRingGoods_Dt NEW FUN_004dc800 array dtor + FontDraw + CmdWindow dtor
+SH2US_FIELD.BIN 004886d0 Close__13CmdFriendshipFv FIX Close__13CmdPhotographFv was Close__13CmdPhotograph; sits inside CmdFriendship (JP Close 0x454f90)
+SH2US_FIELD.BIN 004e7890 Close__15CmdRetailPage05Fv FIX Close__8CmdAromaFv was Close__8CmdAroma; lies inside CmdRetailPage05
+SH2US_FIELD.BIN 004bee00 ShiftExplain__11CmdWolfBoutFv FIX ShiftExplain__15CmdPropertyListFv was ShiftExplain__15CmdPropertyList; inside CmdWolfBout (JP unmatched ShiftExplain 0x140)
+SH2US_FIELD.BIN 00488c90 Close__10CmdProfileFv FIX Polling__11MenuElementFv was Polling__11MenuElement; inside CmdProfile (JP Close 0x40)
+SH2US_FIELD.BIN 00488b10 SafeDelayDelete__10CmdProfileFv FIX DelayDelete__9CmdPCInfoFv was DelayDelete__9CmdPCInfo; inside CmdProfile (JP SafeDelayDelete 0x455520)
+SH2US_FIELD.BIN 00495440 Run__8CmdAromaFv FIX Run__11CmdWolfBoutFv was Run__11CmdWolfBout; inside CmdAroma (JP unmatched Run 0x45f790)
+SH2US_FIELD.BIN 00521140 Retail_FldTeamChange_Sub521140 DUP Dispose__13FldTeamChangeFv PrevTeam/MakePacket combo; earlier Dispose__13FldTeamChange is at 0x5210f0
+SH2US_FIELD.BIN 004ae7a0 Retail_CmdScore_ExitAndClear DUP Exit__8CmdScoreFv earlier Exit__8CmdScore is at 0x4ae5c0
+SH2US_FIELD.BIN 004d8220 Retail_CmdPropertyList_CreateFenceScene DUP GetReady__15CmdPropertyListFv earlier GetReady__15CmdPropertyList is at 0x4d78d0
+SH2US_FIELD.BIN 00521270 Retail_FldTeamChange_EaseStep DUP PrevTeam__13FldTeamChangeFi earlier PrevTeam__13FldTeamChange is at 0x521220
+SH2US_FIELD.BIN 0049fb30 Retail_CmdRingCustom_FillExplainList DUP SetExplain__13CmdRingCustomFv earlier SetExplain__13CmdRingCustom is at 0x49f9b0
+SH2US_FIELD.BIN 004ef810 Retail_FieldMessage_SetSubPosition DUP SetPosition__12FieldMessageFff earlier SetPosition__12FieldMessage is at 0x4ef5d0
+SH2US_FIELD.BIN 004ef7d0 Retail_FieldMessage_SetSubSize DUP SetSize__12FieldMessageFss earlier SetSize__12FieldMessage is at 0x4ef690
+SH2US_FIELD.BIN 004ef8a0 Retail_MenuWindow_StartKeyWaitState DUP StartKeyWait__12FieldMessageFv earlier StartKeyWait__12FieldMessage is at 0x4ef850
+SH2US_FIELD.BIN 00521610 Retail_FldTeamChange_UpdateIfNotPaused DUP Update__13FldTeamChangeFi earlier Update__13FldTeamChange is at 0x521380
+SH2US_FIELD.BIN 0054e670 Retail_floatDemonHelper_Ct DUP __ct__10floatDemonFv earlier __ct__10floatDemon is at 0x54dd20
+SH2US_FIELD.BIN 0054e6c0 Retail_floatDemonHelper_Dt DUP __dt__10floatDemonFv CPolObj subclass dtor next to the helper ctor
+SH2US_FIELD.BIN 004ed400 Retail_FaceImageData_Ct2 DUP __ct__13FaceImageDataFv earlier __ct__13FaceImageData is at 0x4ed390
+SH2US_FIELD.BIN 00556ae0 Retail_worldMapObjA_Ct DUP __ct__14pageScrollMarkFv earlier __ct__14pageScrollMark is at 0x47dcd0 (a CmdXXX member ctor); this is the CPolObj ctor of the pageScrollMark-like class after worldMapPanel
+SH2US_FIELD.BIN 00556b30 Retail_worldMapObjA_Dt DUP __dt__14pageScrollMarkFv earlier __dt__14pageScrollMark is at 0x54dd70
+SH2US_FIELD.BIN 0055f6b0 Retail_worldMapObjB_Ct DUP __ct__13worldMapPointFv earlier __ct__13worldMapPoint is at 0x55f240
+SH2US_FIELD.BIN 0055f700 Retail_worldMapObjB_Dt DUP __dt__13worldMapPointFv earlier __dt__13worldMapPoint is at 0x55f2a0
+SH2US_FIELD.BIN 004dabb0 Retail_CmdPropertyGoods_Ct2 DUP __ct__16CmdPropertyGoodsFv earlier __ct__16CmdPropertyGoods is at 0x48a3c0 (which is really CmdTarotGoods::ct, see below)
+SH2US_FIELD.BIN 004b3de0 Retail_CmdSubMenu_Dt2 DUP __dt__10CmdSubMenuFv earlier __dt__10CmdSubMenu is at 0x488160
+SH2US_FIELD.BIN 0048c240 __ct__13CmdSwordGoodsFv FIX __ct__13CmdMagicGoodsFv was __ct__13CmdMagicGoods; followed by __dt__13CmdSwordGoods and CreateScene__13CmdSwordGoods
+SH2US_FIELD.BIN 0049c5d0 __dt__14CmdLibraryListFv FIX __dt__13CmdMagicGoodsFv was __dt__13CmdMagicGoods; follows __ct__14CmdLibraryList
+SH2US_FIELD.BIN 0048a3c0 __ct__13CmdTarotGoodsFv FIX __ct__16CmdPropertyGoodsFv was __ct__16CmdPropertyGoods; followed by __dt__13CmdTarotGoods
+SH2US_FIELD.BIN 00470fe0 __ct__7CmdItemFv FIX __ct__6CmdTopFv was __ct__6CmdTop; followed by __dt__7CmdItem
+SH2US_FIELD.BIN 0049ce70 __ct__7CmdSortFv FIX __ct__12CmdFormationFv was __ct__12CmdFormation; followed by __dt__7CmdSort
+SH2US_FIELD.BIN 004880f0 __ct__10CmdSubMenuFv FIX __ct__8CmdMagicFv was __ct__8CmdMagic; followed by __dt__10CmdSubMenu
+SH2US_FIELD.BIN 00488e90 __ct__8CmdTarotFv FIX __ct__11CmdSubTitleFv was __ct__11CmdSubTitle; followed by __dt__8CmdTarot
+SH2US_FIELD.BIN 0048b040 __dt__13CmdPhotographFv FIX __dt__10CmdProfileFv was __dt__10CmdProfile; follows __ct__13CmdPhotograph
+SH2US_FIELD.BIN 0048cb40 __ct__10CmdClothesFv FIX __ct__11CmdWolfBoutFv was __ct__11CmdWolfBout; followed by __dt__10CmdClothes
+SH2US_FIELD.BIN 0047dcd0 __ct__15CmdPrivateSceneFv FIX __ct__14pageScrollMarkFv was __ct__14pageScrollMark; followed by __dt__15CmdPrivateScene
+SH2US_FIELD.BIN 0047ac80 __ct__10CmdPrivateFv FIX __ct__10CmdClothesFv was __ct__10CmdClothes; followed by __dt__10CmdPrivate
+SH2US_FIELD.BIN 004ab540 __dt__13CmdFusionListFv FIX __dt__16CmdComboKeyGoodsFv was __dt__16CmdComboKeyGoods; follows __ct__13CmdFusionList
+SH2US_FIELD.BIN 004b3940 __dt__15CmdGoodsPadMenuFv FIX __dt__16CmdKeyCustomMenuFv was __dt__16CmdKeyCustomMenu; follows __ct__15CmdGoodsPadMenu
+SH2US_FIELD.BIN 00483540 __dt__12CmdGoodsIconFv FIX __dt__15CmdGoodsPadMenuFv was __dt__15CmdGoodsPadMenu; follows __ct__12CmdGoodsIcon
+SH2US_FIELD.BIN 004880f0 __ct__13CmdFriendshipFv FIX __ct__10CmdSubMenuFv pair 0x4880f0/0x488160 builds a CmdPrivateScene-derived class followed by SafeDelayDelete__13CmdFriendship (was __ct__8CmdMagic)
+SH2US_FIELD.BIN 00488160 __dt__13CmdFriendshipFv FIX __dt__10CmdSubMenuFv was __dt__10CmdSubMenu
+SH2US_FIELD.BIN 004b3de0 __dt__10CmdSubMenuFv FIX Retail_CmdSubMenu_Dt2 restored: adjacent to __ct__10CmdSubMenu at 0x4b3d70
+SH2US_FIELD.BIN 004831c0 __dt__16CmdGoodsEquipmentFv FIX __dt__12CmdGoodsIconFv was __dt__12CmdGoodsIcon; secondary goods class dtor between __dt__17CmdEquipmentGoods and its CreateScene
+SH2US_FIELD.BIN 00493770 Retail_CmdGraveyard_SmoothFilterHolder_Dt DUP __dt__12CmdGraveyardFv earlier __dt__12CmdGraveyard is at 0x493800
+SH2US_FIELD.BIN 0047d140 __dt__12CmdParameterFv FIX __dt__17CmdGoodsKeyCustomFv was __dt__17CmdGoodsKeyCustom; between __ct__9CmdStatus and __ct__12CmdParameter
+SLUS_210.41 00215b98 _sceCd_ncmd_prechk FIX _sceCd_scmd_prechk was _sceCd_scmd_prechk; JP _sceCd_ncmd_prechk 0x215b58 precedes sceCdNcmdDiskReady

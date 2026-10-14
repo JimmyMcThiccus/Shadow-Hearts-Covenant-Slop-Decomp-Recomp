@@ -1,0 +1,866 @@
+# jp_addr us_addr name score   (FIELD.BIN overlay; JP load 0x00430a00 -> US load 0x0045ea80)
+# VERIFIED pairs (renamed in Ghidra SH2US_FIELD.BIN): score >= 0.9 with JP/US function size within 15% (exact within 3% or score >= 0.99),
+# or score 0.8-0.9 with size within 3% and address-order consistent, or decompile-constant comparison (Jaccard >= 0.6, call count +-2) with size within 15%.
+00430b40 0045ebc0 CbOff_2__FPcPv 1.000
+00430b80 0045ec00 __ct__9SavePointFv 0.818
+00430c30 0045ecc0 Init__Q29SavePoint18@class$2151SVP_cppFv 0.950
+00430c50 0045ece0 __ct__7FVectorFv 1.000
+00430c70 0045ed00 __dt__9SavePointFv 1.000
+00430e80 0045ef10 Create__9SavePointFv 1.000
+00430f30 0045f050 CreateDirect__9SavePointFP9BufMemory 0.961
+004312d0 0045f400 getBuffer__9BufMemoryFv 1.000
+004312f0 0045f420 Origin__7FVectorFv 1.000
+00431330 0045f460 __ct__7FVectorFffff 1.000
+004313c0 0045f4f0 vw__7FVectorFv 1.000
+004313e0 0045f510 vz__7FVectorFv 1.000
+00431400 0045f530 vy__7FVectorFv 1.000
+00431420 0045f550 vx__7FVectorFv 0.950
+00431550 0045f670 Hide__9SavePointFv 1.000
+004316b0 0045f7d0 cbOff_1__9SavePointFv 1.000
+004316f0 0045f810 cbOff_2__9SavePointFv 1.000
+00431810 0045f930 cbOn__9SavePointFv 1.000
+00431850 0045f970 Polling__9SavePointFv 0.818
+00431f90 00460100 isPaused__6CPauseFv 1.000
+00431fc0 00460130 __as__7FVectorFRC7FVector 0.950
+00431fe0 00460150 GetPos__6MatrixFv 1.000
+00432000 00460170 SetAutoDelete__7CPolObjFb 1.000
+00432030 004601a0 CheckOnPoint__9SavePointFR7FVector 1.000
+00432160 004602d0 __mi__7FVectorCFRC7FVector 0.950
+004321d0 00460340 SetPos__9SavePointFR7FVector 1.000
+00432210 004603f0 __ct__8SvpLightFv 1.000
+004322f0 004604d0 __dt__8SvpLightFv 0.950
+00432370 00460550 OnCreate__8SvpLightFv 1.000
+00432400 004605e0 OnShow__8SvpLightFv 1.000
+004325b0 004607b0 __pl__7FVectorCFRC7FVector 1.000
+00432660 00460860 __ct__6MatrixFv 0.950
+00432690 00460890 UnitMatrix__6MatrixFv 1.000
+004326c0 004608c0 __ct__10DelayLightFR7FVectorR7FVector 1.000
+00432800 00460a00 __dt__10DelayLightFv 0.950
+00432880 00460a80 OnCreate__10DelayLightFv 1.000
+00432970 00460c40 __ami__7FVectorFRC7FVector 0.950
+004329c0 00460c90 OnShow__10DelayLightFv 1.000
+004329f0 0045eb00 cbWpCallback__FiP9BufMemoryiPcPv 1.000
+00432a30 00460d10 __ct__9WarpPointFv 1.000
+00432bb0 00460e90 Init__Q29WarpPoint17@class$2141WP_cppFv 0.950
+00432bd0 00460eb0 __ct__Q29WarpPoint17@class$2140WP_cppFv 1.000
+00433030 00461480 CreateDirect__9WarpPointFP9BufMemory 0.891
+00433440 004618c0 Show__9WarpPointFiib 1.000
+00433690 00461b10 Hide__9WarpPointFv 1.000
+00434a20 00462f60 __as__6MatrixFRC6Matrix 1.000
+00434a80 00462fc0 __apl__7FVectorFRC7FVector 0.950
+00434aa0 00462fe0 RotMatrix__6MatrixFRC7FVector 1.000
+00434b20 00463060 SetAlphaWeight__7ExModelFf 0.850
+00434b50 00463090 CheckOnPoint__9WarpPointFR7FVector 1.000
+00434d60 004632b0 StartHideEffect__9WarpPointFv 1.000
+00434da0 004632f0 SetAlpha__9WarpPointFf 1.000
+00434e30 00463380 WarpIn__9WarpPointFR7FVectorR7FVectorsb 1.000
+00435030 00463580 WarpOut__9WarpPointFR7FVectorR7FVectorsb 1.000
+00435220 00463800 ShowFader__9WarpPointFR7FVectorR7FVectorsb 1.000
+00435520 00463b00 SetLight__9WarpPointFv 1.000
+00435610 00463bf0 DataEvent__7CmdMenuFiPv 1.000
+00435790 00463d50 SetParameter__7CmdMenuFP8MenuTextss 1.000
+00435860 00464250 __ct__7CmdMenuFsPFiPvP7CmdMenu_iPv 1.000
+00435970 00464360 __dt__7CmdMenuFv 1.000
+00436fd0 00465fa0 MapJump__7CmdMenuFs 1.000
+00437350 00466380 DestroyBackGround__7CmdMenuFs 1.000
+00437740 00466a00 __ct__9CmdCommonFv 0.850
+004377a0 00466a60 __dt__9CmdCommonFv 1.000
+00437850 00466b10 GetReady__9CmdCommonFv 1.000
+004383d0 00467760 Release__20CmdBackGroundCaptureFv 1.000
+00438450 004677e0 __ct__13CmdBackGroundFv 0.850
+004384e0 00467870 __dt__13CmdBackGroundFv 0.850
+00438720 00467b00 Release__13CmdBackGroundFv 1.000
+00438790 00470fe0 __ct__6CmdTopFv 0.941
+00438d00 00468260 Run__6CmdTopFv 1.000
+0043a980 0046a9c0 DataAccessEvent__6CmdTopFv 1.000
+0043b380 0046b720 SetCommand__5CmdPCFc 1.000
+0043b880 0046bcd0 GetRealStatus__5CmdPCFP11CmdPCStatuscc 1.000
+0043bbd0 0046c1a0 TakeOffEquipment__5CmdPCFv 1.000
+0043bf50 0046c4a0 GetExpansionRingItem__5CmdPCFv 1.000
+0043bfe0 0046c530 CreateJudgmentRing__5CmdPCFP5JRingUc 1.000
+0043c400 0046ca20 IsExpandRing__5CmdPCFPUc 1.000
+0043c480 0046caa0 ResetExpansion__5CmdPCFPUc 1.000
+0043c4e0 0046cb90 IsSetComboKey__5CmdPCFP15SHORTCUTCommandcs 1.000
+0043c750 0046cdc0 ResetComboKey__5CmdPCFP15SHORTCUTCommandcs 1.000
+0043cb20 0046d890 __dt__8CmdPartyFv 1.000
+0043cf10 004f0510 FlushData__8CmdPartyFv 1.000
+0043d0c0 0046ddc0 SortPC__8CmdPartyFPc 1.000
+0043dc80 0046e890 GetComboKeyCount__8CmdPartyFss 1.000
+0043ddb0 0046e9c0 ConvertComboKey__8CmdPartyFi 1.000
+0043edb0 0046f530 GetReady__10CmdExplainFv 1.000
+0043ef70 0046f4d0 DelayDelete__10CmdExplainFv 1.000
+0043efd0 0046f780 SetInfo__10CmdExplainFP4MenusUcUc 1.000
+00440180 00470e70 SendPage__10CmdExplainFv 1.000
+00440240 00470f30 SetExplanation__10CmdExplainFPc 1.000
+00440890 00471850 Run__7CmdItemFv 0.850
+00441cb0 00472c90 EnterExplain__7CmdItemFv 0.838
+00441fd0 00472fb0 ExecExplain__7CmdItemFv 0.805
+00442310 00473350 SetExplanation__7CmdItemFv 1.000
+00442470 004735a0 __ct__11CmdTitleLogFv 0.850
+00442530 00473660 __dt__11CmdTitleLogFv 0.850
+00442b30 004b16a0 Open__11CmdTitleLogFv 1.000
+00442bd0 00473c00 __ct__15CmdSelectTargetFv 1.000
+00442dc0 00473df0 __dt__15CmdSelectTargetFv 1.000
+004430b0 004740e0 __dt__17CmdSTAllParameterFv 1.000
+004431a0 00474220 GetReady__15CmdSelectTargetFv 1.000
+00443970 004749f0 __ct__17CmdSTAllParameterFv 1.000
+00445bb0 00488c90 Polling__11MenuElementFv 1.000
+00446230 00478310 SetOwner__11MenuElementFP10MenuWindow 1.000
+00446790 00466bc0 Release__10CmdElementFv 1.000
+00446880 00478c20 SetInfo__10CmdElementFUcP11SendOnLocalP10MenuSpriteP10MenuSprite 0.907
+00446a60 00478e00 ReCreate__10CmdElementFUc 1.000
+00446af0 00478e90 Open__10CmdElementFv 1.000
+00446b50 00478ef0 Close__10CmdElementFv 1.000
+00446be0 00479060 __ct__9CmdOptionFv 1.000
+00446e60 00479220 __dt__9CmdOptionFv 0.900
+00447b50 00479e40 Run__9CmdOptionFv 0.850
+00448f70 0047b370 Run__10CmdPrivateFv 0.850
+004492d0 0047b6d0 Exit__10CmdPrivateFv 0.868
+00449a40 0047be60 EnterSubScene__10CmdPrivateFv 1.000
+00449b60 0047bf80 ExitSubScene__10CmdPrivateFv 1.000
+00449ca0 0047c0c0 ExecSubScene__10CmdPrivateFv 1.000
+0044a8b0 0047ce30 Update__10CmdPrivateFs 1.000
+0044a980 0047cf00 SetCursor__10CmdPrivateFc 0.824
+0044aa50 0047cfd0 SetButtonReport__10CmdPrivateFv 1.000
+0044aab0 0047d030 __ct__9CmdStatusFv 1.000
+0044ac40 0047d1c0 __ct__12CmdParameterFv 0.950
+0044ac80 0047d200 __dt__9CmdStatusFv 1.000
+0044b150 004b1dc0 Close__9CmdStatusFv 1.000
+0044b750 0047dd20 __dt__15CmdPrivateSceneFv 0.900
+0044c380 0047eb80 UpdateStatus__12CmdEquipmentFsP11CmdPCStatus 1.000
+0044ca90 0047f350 GetPropertyMax__12CmdEquipmentFv 1.000
+0044cd60 0047f8a0 StartExplain__12CmdEquipmentFs 1.000
+0044d160 0047fca0 SetExplanation__12CmdEquipmentFv 1.000
+0044e7d0 00481740 ShiftExplain__12CmdEquipmentFv 1.000
+0044ed20 00481c70 __ct__14CmdPrivateMenuFv 0.850
+0044edc0 00481d10 __dt__14CmdPrivateMenuFv 0.850
+0044ee90 00481de0 CreateScene__14CmdPrivateMenuFP10CmdPrivate 1.000
+0044ef80 00481ed0 UpdateScene__14CmdPrivateMenuFP10CmdPrivate 0.961
+0044f2d0 00482220 __ct__9CmdWindowFv 1.000
+0044f330 00482280 __dt__9CmdWindowFv 1.000
+0044f3d0 00482320 DelayDelete__9CmdWindowFv 1.000
+0044f410 00482360 Select__9CmdWindowFP7CmdNoteP9MenuSceneP8MenuTextP8MenuText 1.000
+0044f520 00482470 SetClutGoods__9CmdWindowFP8CmdGoodss 0.902
+0044f6d0 00482620 __ct__16CmdEquipmentSlotFv 1.000
+0044f7e0 00482730 __dt__15CmdPropertySlotFv 0.950
+0044f870 004827c0 __ct__15CmdPropertySlotFv 0.950
+0044f8c0 00482810 __dt__16CmdEquipmentSlotFv 1.000
+0044fa40 00482990 CreateScene__16CmdEquipmentSlotFP12CmdEquipment 1.000
+0044fd30 00482c80 UpdateScene__16CmdEquipmentSlotFP12CmdEquipment 1.000
+00450170 00483040 __ct__17CmdEquipmentGoodsFv 0.850
+00450200 004830d0 __dt__17CmdEquipmentGoodsFv 0.850
+004502f0 004831c0 __dt__12CmdGoodsIconFv 1.000
+004503a0 00483270 CreateScene__17CmdEquipmentGoodsFP12CmdEquipmentUs 1.000
+00450610 004834e0 __ct__12CmdGoodsIconFv 1.000
+00451460 00484800 __ct__14CmdTopPlayInfoFv 1.000
+00451530 004848d0 __dt__14CmdTopPlayInfoFv 1.000
+00451670 00484a10 CreateScene__14CmdTopPlayInfoFP6CmdTop 1.000
+00451bc0 00484f30 __ct__8CmdTopPCFv 1.000
+00451d30 004850a0 __dt__17CmdTopPCParameterFv 1.000
+00451fa0 00485310 __ct__17CmdTopPCParameterFv 1.000
+00452150 004854c0 __dt__8CmdTopPCFv 1.000
+00453080 004863f0 BlinkSelect__8CmdTopPCFv 1.000
+004531f0 00486560 SetTarget__8CmdTopPCFs 0.931
+00453430 004867a0 ClearTarget__8CmdTopPCFv 0.887
+00453590 00486920 __dt__12CmdTechniqueFv 0.950
+00453ac0 004870d0 Run__12CmdTechniqueFv 0.850
+00453d90 00487320 Enter__12CmdTechniqueFv 1.000
+004540d0 004876e0 __ct__17CmdTechniqueGoodsFv 0.850
+00454150 00487760 __dt__17CmdTechniqueGoodsFv 0.850
+00454640 00487c60 __ct__8CmdGoodsFv 0.950
+00454800 00487f20 Select__17CmdTechniqueGoodsFP7CmdNoteP10CmdElementP12PCSKILLParamP9MenuGroupP9MenuGroup 0.936
+00454b00 004882a0 GetReady__13CmdFriendshipFv 0.919
+00455010 00488750 Update__13CmdFriendshipFs 0.904
+00455360 0048b040 __dt__10CmdProfileFv 1.000
+004556b0 00488e30 BackGroundRun__10CmdProfileFv 1.000
+00456260 0048a990 Select__13CmdTarotGoodsFP8CmdTarotP9MenuGroupP9MenuGroup 0.886
+00456810 0048b140 GetReady__13CmdPhotographFv 0.824
+00456a60 004886d0 Close__13CmdPhotographFv 1.000
+00456ff0 0048b9a0 GetReady__8CmdSwordFv 0.844
+00457810 0048c2c0 __dt__13CmdSwordGoodsFv 1.000
+004578f0 0048c3a0 __dt__13CmdGoodsSwordFv 0.950
+00457990 0048c440 CreateScene__13CmdSwordGoodsFP8CmdSword 0.901
+00457e30 0048c900 Select__13CmdSwordGoodsFP8CmdSwordP9MenuGroupP9MenuGroup 0.803
+00458070 0047ac80 __ct__10CmdClothesFv 1.000
+00458140 0048cca0 GetReady__10CmdClothesFv 1.000
+00458290 0048ce90 Run__10CmdClothesFv 1.000
+00458420 0048cf00 RestoreTailor__10CmdClothesFv 1.000
+004586f0 0048d1b0 ReadyScene__10CmdClothesFv 0.933
+004589f0 0048d4c0 ReadyTailor__10CmdClothesFv 1.000
+00458bf0 0048d6e0 __ct__14CmdClothesSlotFv 0.850
+00458ca0 0048d790 __dt__14CmdClothesSlotFv 0.850
+00458db0 0048d8a0 CreateScene__14CmdClothesSlotFP10CmdClothes 1.000
+00458f80 0048da70 UpdateScene__14CmdClothesSlotFP10CmdClothes 0.872
+004590d0 0048dbc0 __ct__7CmdHelpFv 1.000
+00459170 0048dc60 __dt__7CmdHelpFv 0.850
+00459420 0048e060 Run__7CmdHelpFv 0.850
+00459480 0048e0c0 UpdateClause__7CmdHelpFs 1.000
+00459570 0048e1b0 LinkJump__7CmdHelpFs 1.000
+00459680 0048e2c0 SetButtonReport__7CmdHelpFs 1.000
+00459760 0048e3a0 GetMaxClause__7CmdHelpFv 1.000
+00459a40 0048e690 Exit__7CmdHelpFv 0.827
+0045a3a0 0048efd0 ExecExplain__7CmdHelpFv 1.000
+0045a410 0048f040 ExitExplain__7CmdHelpFv 0.843
+0045a740 0048f370 __ct__11CmdHelpMenuFv 0.850
+0045a7d0 0048f400 __dt__11CmdHelpMenuFv 0.850
+0045a8c0 0048f4f0 __dt__15CmdHelpMenuDataFv 0.950
+0045a940 0048f570 CreateScene__11CmdHelpMenuFP7CmdHelp 1.000
+0045ae50 0048fa80 __ct__15CmdHelpMenuDataFv 0.950
+0045b160 0048fcc0 GetMenu__11CmdHelpMenuFP7CmdHelp 1.000
+0045b2e0 0048fe50 __ct__13CmdHelpClauseFv 0.850
+0045b360 0048fed0 __dt__13CmdHelpClauseFv 0.850
+0045b440 0048ffb0 __dt__12CmdGoodsListFv 1.000
+0045b4c0 00490030 CreateScene__13CmdHelpClauseFP7CmdHelp 1.000
+0045b690 00490200 __ct__12CmdGoodsListFv 1.000
+0045c2b0 004910a0 SetExplanation__14CmdHelpExplainFP7CmdHelps 1.000
+0045c550 00491440 Run__14CmdHelpExplainFP7CmdHelp 0.808
+0045d540 00492470 __ct__12CmdItemGoodsFv 0.850
+0045d5d0 00492500 __dt__12CmdItemGoodsFv 0.850
+0045dbb0 00492b10 UpdateCount__12CmdItemGoodsFP7CmdItemss 1.000
+0045ddc0 00492d20 Order__12CmdItemGoodsFP7CmdItemUc 1.000
+0045e1e0 004931e0 __ct__14CmdItemMessageFv 0.850
+0045e270 00493270 __dt__14CmdItemMessageFv 0.850
+0045e340 00493340 CreateScene__14CmdItemMessageFP7CmdItem 1.000
+0045e4b0 004934b0 Run__14CmdItemMessageFUs 0.918
+0045f850 004e7890 Close__8CmdAromaFv 1.000
+0045fa20 004956e0 SetExplanation__8CmdAromaFv 1.000
+004601a0 004961f0 ShiftExplain__8CmdAromaFv 1.000
+00460e30 00496bb0 Select__15CmdAromaBaseOilFP8CmdAromaP9MenuGroupP9MenuGroup 0.849
+00460f50 00496cd0 __ct__13CmdAromaBlendFv 0.850
+00460fe0 00496d60 __dt__13CmdAromaBlendFv 0.850
+004619c0 004978d0 __ct__10CmdLibraryFv 0.944
+00461e40 00497fe0 Run__10CmdLibraryFv 0.850
+00461ea0 00498040 Create__10CmdLibraryFs 0.977
+00462d90 00499160 Find__10CmdLibraryFss 1.000
+004630a0 004994b0 FindNPC__10CmdLibraryFsss 1.000
+00463740 00499a60 SafeDestroy__10CmdLibraryFv 1.000
+00465c60 0049c550 __ct__14CmdLibraryListFv 0.850
+00466d90 0049d950 Select__7CmdSortFss 1.000
+00467450 00526150 SetPad__5JRingFP4CPad 1.000
+00467470 0049e500 Run__13CmdRingCustomFv 1.000
+00467580 0049e610 Update__13CmdRingCustomFs 1.000
+00467860 0049e880 UpdateMenu__13CmdRingCustomFv 1.000
+00467c10 0049ec10 UpdateHitArea__13CmdRingCustomFs 1.000
+00467d30 0049ed30 UpdateInfo__13CmdRingCustomFssss 1.000
+00467e60 0049ee60 UpdateFinal__13CmdRingCustomFss 1.000
+00468030 0049f130 UpdateGoods__13CmdRingCustomFs 0.850
+00468130 0049f230 UpdateCount__13CmdRingCustomFs 0.850
+00468330 0049f330 CreateContent__13CmdRingCustomFs 1.000
+00468460 0049f460 DestroyContent__13CmdRingCustomFs 1.000
+004685f0 0049f5f0 StartExplain__13CmdRingCustomFv 0.949
+004689a0 0049f9b0 SetExplain__13CmdRingCustomFv 1.000
+00468b20 0047fdf0 SetButtonReport__13CmdRingCustomFss 1.000
+00468bd0 0049fc20 ShiftMenu__13CmdRingCustomFv 1.000
+0046b1c0 004a20d0 ShiftExplain__13CmdRingCustomFv 1.000
+0046b880 004a27b0 __ct__20CmdRingCustomHitAreaFv 0.850
+0046b930 004a2860 __dt__20CmdRingCustomHitAreaFv 0.850
+0046ba10 004a2940 CreateScene__20CmdRingCustomHitAreaFP13CmdRingCustom 1.000
+0046bc60 004a2b90 UpdateScene__20CmdRingCustomHitAreaFP13CmdRingCustom 0.916
+0046c0b0 004a3000 Select__20CmdRingCustomHitAreaFP13CmdRingCustomP9MenuPlaceP9MenuPlace 1.000
+0046c390 004a32e0 Custom__20CmdRingCustomHitAreaFP13CmdRingCustomP9MenuPlaces 0.978
+0046cab0 004a3af0 __ct__17CmdRingCustomInfoFv 0.850
+0046cbf0 004a3c30 __dt__17CmdRingCustomInfoFv 0.850
+0046cd60 004a3da0 CreateScene__17CmdRingCustomInfoFP13CmdRingCustom 0.961
+0046d220 004a4270 UpdateScene__17CmdRingCustomInfoFP13CmdRingCustomsss 0.946
+0046d520 004a4570 __ct__23CmdRingCustomFinalGoodsFv 0.850
+0046d5b0 004a4600 __dt__23CmdRingCustomFinalGoodsFv 0.850
+0046d6a0 004a46f0 CreateScene__23CmdRingCustomFinalGoodsFP13CmdRingCustom 1.000
+0046dd70 004a4e20 Select__23CmdRingCustomFinalGoodsFP13CmdRingCustomP9MenuGroupP9MenuGroups 1.000
+0046e090 004a5180 __ct__22CmdRingCustomFinalSlotFv 1.000
+0046e140 004a5230 __dt__22CmdRingCustomFinalSlotFv 1.000
+0046e250 004a5340 CreateScene__22CmdRingCustomFinalSlotFP13CmdRingCustom 1.000
+0046e410 004a5500 UpdateScene__22CmdRingCustomFinalSlotFP13CmdRingCustom 1.000
+0046e610 004a5700 Select__22CmdRingCustomFinalSlotFP13CmdRingCustom 0.862
+0046f250 004a64a0 Run__9CmdFusionFv 1.000
+0046f4e0 004a65c0 Update__9CmdFusionFs 0.950
+0046f6d0 004a67e0 UpdateList__9CmdFusionFs 0.850
+0046f990 004a6b80 UpdateParameter__9CmdFusionFs 0.850
+0046fcb0 004a6c80 UpdateCharge__9CmdFusionFs 1.000
+0046fdc0 004a70d0 UpdateSoulEnergy__9CmdFusionFs 1.000
+00470440 004a7850 SetExplanation__9CmdFusionFv 0.864
+004730d0 004aaf60 ShiftExplain__9CmdFusionFv 1.000
+004735b0 004ab4b0 __ct__13CmdFusionListFv 1.000
+00473730 004ab630 __dt__14CmdGoodsFusionFv 0.950
+004737d0 004ab6d0 CreateScene__13CmdFusionListFP9CmdFusion 1.000
+004739f0 004ab8f0 __ct__14CmdGoodsFusionFv 0.950
+00474170 004ac1b0 StartTutorial__15CmdMenuTutorialFsPFiPvP7CmdMenu_iPv 1.000
+00474210 004ac250 ReadData__4MenuFiP9BufMemoryiPcPv 1.000
+00474e10 004ad1f0 Run__8CmdScoreFv 0.850
+00475f50 004aeb90 __ct__12CmdScoreDataFv 0.850
+00476010 004aec50 __dt__13CmdGoodsScoreFv 0.950
+004760b0 004aecf0 __ct__13CmdGoodsScoreFv 0.950
+00476110 004aed50 __dt__12CmdScoreDataFv 0.850
+00476200 004aee40 CreateScene__12CmdScoreDataFP8CmdScore 1.000
+00476880 004af470 __ct__12CmdScoreRankFv 1.000
+004768f0 004af4e0 __dt__12CmdScoreRankFv 0.850
+004769d0 004af5c0 __dt__17CmdGoodsScoreRankFv 0.950
+00476a60 004af650 CreateScene__12CmdScoreRankFP8CmdScore 0.922
+00476f80 004afb50 GetRank__12CmdScoreRankFP8CmdScore 0.820
+00478050 00488e90 __ct__11CmdSubTitleFv 1.000
+004780e0 004b0f30 __dt__11CmdSubTitleFv 0.900
+004781d0 004b1020 __dt__16CmdGoodsSubTitleFv 1.000
+00478270 004b10c0 DelayDelete__11CmdSubTitleFv 0.850
+004782b0 004b1100 Create__11CmdSubTitleFi 0.954
+00478510 004b1370 __ct__16CmdGoodsSubTitleFv 1.000
+00478580 004b13e0 Reset__11CmdSubTitleFv 1.000
+004785f0 004b1450 SetTitle__11CmdSubTitleFii 1.000
+00478840 004b1740 __ct__12CmdKeyCustomFv 1.000
+00478930 0047d140 __dt__17CmdGoodsKeyCustomFv 1.000
+00478e70 004b1ea0 SetButton__12CmdKeyCustomFi 1.000
+00479100 004b2150 Select__12CmdKeyCustomFP9MenuPlaceP9MenuPlaces 1.000
+004795e0 004b2640 Exit__12CmdKeyCustomFv 0.809
+00479e50 004b2ec0 __ct__15CmdKeyCustomPadFv 0.850
+00479f60 004b2fd0 __dt__11CmdGoodsPadFv 1.000
+0047a010 004b3080 __ct__11CmdGoodsPadFv 1.000
+0047a090 004b3100 __dt__15CmdKeyCustomPadFv 0.850
+0047a1e0 004b3250 CreateScene__15CmdKeyCustomPadFP12CmdKeyCustom 1.000
+0047a5f0 004b3660 SetLineColor__15CmdKeyCustomPadFii 0.857
+0047a720 004b3790 __ct__16CmdKeyCustomMenuFv 0.900
+0047a7f0 00483540 __dt__15CmdGoodsPadMenuFv 1.000
+0047a9d0 004b3a40 CreateScene__16CmdKeyCustomMenuFP12CmdKeyCustom 0.965
+0047ad00 004b3d70 __ct__10CmdSubMenuFv 0.900
+0047ad70 00488160 __dt__10CmdSubMenuFv 1.000
+0047ae80 004b3ef0 CreateScene__10CmdSubMenuFsP9MSDSystem 1.000
+0047afd0 004b4040 UpdateScene__10CmdSubMenuFs 1.000
+0047b220 004b4290 Select__10CmdSubMenuFP7CmdNoteP9MenuPlaceP9MenuPlace 1.000
+0047b690 004b48b0 UpdateScene__14CmdLibraryInfoFP10CmdLibrarys 1.000
+0047b7c0 004b4ab0 __ct__15CmdLibraryTitleFv 1.000
+0047b810 004b4b00 __dt__15CmdLibraryTitleFv 1.000
+0047b8a0 004b4b90 CreateNumber__15CmdLibraryTitleFv 1.000
+0047b920 004b4c10 SetNumber__15CmdLibraryTitleFv 1.000
+0047b980 004b4c70 __ct__18CmdFusionParameterFv 0.850
+0047ba90 004b4d80 __dt__18CmdFusionParameterFv 0.850
+0047bbe0 004b4ed0 CreateScene__18CmdFusionParameterFP9CmdFusion 1.000
+0047bf20 004b5210 UpdateScene__18CmdFusionParameterFP9CmdFusion 0.900
+0047c370 004b5670 __ct__15CmdFusionStatusFv 0.850
+0047c440 004b5740 __dt__15CmdFusionStatusFv 0.850
+0047c540 004b5840 CreateScene__15CmdFusionStatusFP9CmdFusion 1.000
+0047cc70 004b6060 CreateScene__18CmdFusionSkillListFP9CmdFusion 0.824
+0047dd70 0049ce70 __ct__12CmdFormationFv 1.000
+0047f6b0 004b94f0 __dt__21CmdFormationParameterFv 1.000
+004802f0 004ba140 __ct__21CmdFormationParameterFv 1.000
+00480790 004ba550 Select__18CmdFormationMemberFP9MenuPlaceP9MenuPlace 1.000
+00481c00 004bb830 UpdateName__16CmdFormationTeamFP12CmdFormation 1.000
+00482d70 004bc6c0 ScaleSprite__16CmdFormationTeamFP9MenuGroupP10MenuSpritefs 1.000
+00483150 004bcf30 __ct__14CmdNoteMessageFv 0.850
+004831f0 004bcfd0 __dt__14CmdNoteMessageFv 0.850
+004832e0 004bd0c0 CreateScene__14CmdNoteMessageFP9MenuScenePci 1.000
+004834e0 004bd2c0 Run__14CmdNoteMessageFUs 1.000
+00483620 0048cb40 __ct__11CmdWolfBoutFv 1.000
+00483970 00495440 Run__11CmdWolfBoutFv 1.000
+00483d00 004bdd50 UpdateStamp__11CmdWolfBoutFss 1.000
+004842e0 004be530 SetButtonReport__11CmdWolfBoutFi 1.000
+00484380 004be5d0 Enter__11CmdWolfBoutFv 1.000
+00485250 004bf6d0 __ct__16CmdWolfBoutStampFv 1.000
+00485320 004bf7a0 __dt__16CmdWolfBoutStampFv 1.000
+00485460 004bf8e0 CreateScene__16CmdWolfBoutStampFP11CmdWolfBouts 0.974
+00485b20 004bff90 __ct__18CmdWolfBoutProfileFv 0.850
+00485bb0 004c0020 __dt__18CmdWolfBoutProfileFv 0.850
+00485c80 004c00f0 CreateScene__18CmdWolfBoutProfileFP11CmdWolfBout 1.000
+00485ef0 004c0310 __ct__11CmdComboKeyFv 1.000
+00486340 004c09f0 Run__11CmdComboKeyFv 0.850
+00486610 004c0d00 UpdateCommand__11CmdComboKeyFs 1.000
+00486720 004c0e10 UpdateCharacter__11CmdComboKeyFs 1.000
+00486820 004c0f10 UpdateGoods__11CmdComboKeyFss 1.000
+00486d50 004c1450 StartButtonReport__11CmdComboKeyFv 1.000
+004870a0 004c18a0 SelectSlot__11CmdComboKeyFsP9MenuPlaceP9MenuPlace 1.000
+00487b40 004c22d0 SelectCharacter__11CmdComboKeyFv 0.858
+00488610 004c2d70 __ct__15CmdComboKeySlotFv 0.850
+00488700 004c2e60 __dt__16CmdGoodsComboKeyFv 0.950
+004887a0 004c2f00 __ct__16CmdGoodsComboKeyFv 0.950
+00488800 004c2f60 __dt__15CmdComboKeySlotFv 0.850
+00488930 004c3090 CreateScene__15CmdComboKeySlotFP11CmdComboKey 1.000
+00489210 004c3a20 __ct__18CmdComboKeyCommandFv 0.850
+004892b0 004c3ac0 __dt__18CmdComboKeyCommandFv 0.850
+00489380 004c3b90 CreateScene__18CmdComboKeyCommandFP11CmdComboKey 1.000
+004898b0 004c4170 __ct__20CmdComboKeyCharacterFv 0.850
+00489930 004c41f0 __dt__20CmdComboKeyCharacterFv 0.850
+00489a10 004c42d0 CreateScene__20CmdComboKeyCharacterFP11CmdComboKey 1.000
+00489f90 004c48e0 __ct__16CmdComboKeyGoodsFv 0.900
+0048a020 004ab540 __dt__16CmdComboKeyGoodsFv 1.000
+0048a110 004c4a60 CreateScene__16CmdComboKeyGoodsFP11CmdComboKey 1.000
+0048a7e0 004c5190 Select__16CmdComboKeyGoodsFP11CmdComboKeyP9MenuPlaceP9MenuPlace 0.910
+0048a930 004c52e0 __ct__9CmdPCInfoFv 0.850
+0048aa80 004c5430 __dt__9CmdPCInfoFv 0.850
+0048ac00 004c55f0 GetReady__9CmdPCInfoFv 1.000
+0048b160 00488b10 DelayDelete__9CmdPCInfoFv 1.000
+0048b590 004c5fc0 __dt__10CmdPCSceneFv 1.000
+0048b630 004c6060 Update__10CmdPCSceneFs 0.950
+0048b640 004c6070 CreatePCInfo__10CmdPCSceneFPUc 1.000
+0048b7e0 004c6210 UpdatePCInfo__10CmdPCSceneFsP11CmdPCStatus 1.000
+0048bbd0 004c6640 SetChengePCMode__10CmdPCSceneFUc 1.000
+0048bc80 004c66f0 GetLayerCount__10CmdPCSceneFs 0.833
+0048bee0 004c6950 CreateScene__14CmdTopMenuDataFP6CmdTop 0.824
+0048d2b0 004880f0 __ct__8CmdMagicFv 1.000
+0048e9e0 0048c240 __ct__13CmdMagicGoodsFv 1.000
+0048ea60 0049c5d0 __dt__13CmdMagicGoodsFv 1.000
+0048eb40 004c9960 CreateScene__13CmdMagicGoodsFP8CmdMagic 1.000
+0048f160 004c9f40 Select__13CmdMagicGoodsFP8CmdMagicP9MenuGroupP9MenuGroups 0.924
+0048f350 004ca130 __ct__18CmdEquipmentStatusFv 0.850
+0048f400 004ca1e0 __dt__18CmdEquipmentStatusFv 0.850
+0048f4e0 004ca2c0 CreateScene__18CmdEquipmentStatusFP12CmdEquipment 1.000
+0048f820 004ca600 UpdateScene__18CmdEquipmentStatusFP12CmdEquipmentP11CmdPCStatus 0.960
+0048faf0 004ca8d0 __ct__18CmdRingCustomGoodsFv 0.850
+0048fb90 004ca970 __dt__18CmdRingCustomGoodsFv 0.850
+0048fc60 004caa40 CreateScene__18CmdRingCustomGoodsFP13CmdRingCustom 1.000
+0048fda0 004cab80 UpdateScene__18CmdRingCustomGoodsFP13CmdRingCustom 1.000
+0048ff90 004cad70 Select__18CmdRingCustomGoodsFP13CmdRingCustomP8MenuTextP8MenuTexts 0.897
+004900e0 004caec0 __ct__14CmdCrestPCInfoFv 0.850
+00490230 004cb010 __dt__14CmdCrestPCInfoFv 0.850
+004903e0 004cb1c0 CreateScene__14CmdCrestPCInfoFP8CmdCrest 1.000
+00490730 004cb510 UpdateScene__14CmdCrestPCInfoFP8CmdCrests 0.838
+00491390 004cc400 Run__8CmdCrestFv 1.000
+004917c0 004cc860 UpdateSlot__8CmdCrestFs 1.000
+00492520 004cd710 SetMenu__8CmdCrestFcs 1.000
+00492d40 004ce070 Exit__8CmdCrestFv 0.854
+00492fc0 004ce2f0 ShiftMenu__8CmdCrestFv 0.827
+004932a0 004ce5e0 SelectMenu__8CmdCrestFv 0.817
+00494560 004cfbf0 EnterDetail__8CmdCrestFv 1.000
+00494b50 004d0220 ExecDetail__8CmdCrestFv 0.849
+00495170 004d0870 __dt__13CmdGoodsCrestFv 1.000
+00495300 004d0a00 __dt__17CmdGoodsCrestDataFv 1.000
+00495430 004d0b30 CreateScene__13CmdGoodsCrestFP9MenuScenesss 1.000
+004958c0 004d0fc0 __ct__17CmdGoodsCrestDataFv 1.000
+004959b0 004d10b0 CreateImage__13CmdGoodsCrestFP11MenuTexture 1.000
+00495cb0 004d1470 Start__13CmdGoodsCrestFv 1.000
+004967e0 004d2200 Run__13CmdWhiteMagicFv 1.000
+00498440 004d3fc0 __dt__14CmdCrestDetailFv 1.000
+004985f0 004d4170 CreateScene__14CmdCrestDetailFP9MenuSceneP11MenuTexture 0.949
+00499190 004d4df0 __dt__21MenuModelAuraRegisterFv 1.000
+00499220 004d4e80 getPacket__21MenuModelAuraRegisterFv 0.950
+00499240 004d4ea0 __ct__19MenuModelAuraPacketFv 1.000
+00499290 004d4ef0 __dt__19MenuModelAuraPacketFv 1.000
+00499330 004d4f90 Create__19MenuModelAuraPacketFsUc 0.950
+004996f0 004d5360 SetAura__19MenuModelAuraPacketFP4_QWDii 1.000
+004997d0 004d5440 Run__19MenuModelAuraPacketFv 1.000
+00499820 004d5490 getPacket__19MenuModelAuraPacketFv 1.000
+004999f0 004d5660 __ct__13MenuModelAuraFv 1.000
+00499b10 004d5780 __dt__13MenuModelAuraFv 0.850
+0049a750 004d63a0 Close__13MenuModelAuraFv 1.000
+0049a790 004d63e0 CloseEffect__13MenuModelAuraFv 1.000
+0049ae70 004d6bd0 Event__13MenuModelAuraFP9MenuModelPCcPCc 1.000
+0049af80 004d6ce0 __ct__8CmdFenceFv 0.850
+0049b030 004d6d90 __dt__8CmdFenceFv 1.000
+0049b1a0 004d6f00 CreateFence__8CmdFenceFP9MenuScenePUc 1.000
+0049b6f0 004d7450 SetTitle__8CmdFenceFP9MenuScenes 0.898
+0049c120 004b1e40 Run__15CmdPropertyListFv 1.000
+0049d760 004bee00 ShiftExplain__15CmdPropertyListFv 1.000
+0049dae0 004da400 EnterDetail__15CmdPropertyListFv 0.933
+0049dfd0 004da980 ExecDetail__15CmdPropertyListFv 0.824
+0049e200 0048a3c0 __ct__16CmdPropertyGoodsFv 1.000
+0049e290 004dac40 __dt__16CmdPropertyGoodsFv 1.000
+0049e380 004dad30 CreateScene__16CmdPropertyGoodsFP15CmdPropertyLists 1.000
+0049f210 004dbd50 __ct__18CmdRingCustomCountFv 0.850
+0049f2b0 004dbdf0 __dt__18CmdRingCustomCountFv 0.850
+0049f380 004dbec0 CreateScene__18CmdRingCustomCountFP13CmdRingCustom 0.947
+0049f4d0 004dc000 UpdateScene__18CmdRingCustomCountFP13CmdRingCustom 0.956
+0049f910 004dc440 Select__18CmdRingCustomCountFP13CmdRingCustomP9MenuPlaceP9MenuPlaces 1.000
+0049fb50 004dc680 SetClut__18CmdRingCustomCountFs 0.840
+0049fcd0 0048b470 __dt__21CmdRingCustomAutoRingFv 1.000
+0049fda0 004dc8d0 CreateScene__21CmdRingCustomAutoRingFP13CmdRingCustom 1.000
+0049ffe0 004dcb10 UpdateScene__21CmdRingCustomAutoRingFP13CmdRingCustom 1.000
+004a02d0 00478430 __dt__17DelayDeleteObjectFv 1.000
+004a0550 004ed6b0 __dt__9FaceImageFv 1.000
+004a06d0 004ed850 Release__9FaceImageFv 1.000
+004a0d80 004ee0b0 __ct__12FieldMessageFv 0.950
+004a0dd0 004ee100 __dt__12FieldMessageFv 1.000
+004a1250 004ee7f0 ChengeLayer__12FieldMessageFi 0.829
+004a31b0 004ee550 SetData__13FldTeamChangeFP9BufMemory 1.000
+004a3360 004ef560 SetPriority__4CPadFRCQ24CPad8Priority 1.000
+004a3390 00460c60 closeInquiry__6CFieldFv 1.000
+004a5470 004ef2b0 Unpause__4SdrvFv 1.000
+004a5950 004f0570 GetReal__4CPadCFv 0.850
+004a6110 004efcd0 GetDegree__12CAnalogStickCFv 0.850
+004a6130 004ef670 GetGauge__12CAnalogStickCFv 0.850
+004a6220 004f05f0 GetPress__4CPadCFv 1.000
+004a80a0 004eddc0 GetAt__6MatrixFv 1.000
+004a80f0 004eefd0 ClrAlerm__8FldTimerFv 1.000
+004b61b0 004ee4d0 SetCancel__6CursorFUc 1.000
+004beee0 00460820 RotZMatrix__6MatrixFf 1.000
+004cc530 004e36c0 __ct__8CXFModelFv 1.000
+004cc7c0 0048afe0 __ct__8CBalIconFv 1.000
+004cc840 0047de90 __dt__8CBalIconFv 1.000
+004ccdd0 00463020 SetFilter__9FldSpriteFi 1.000
+004cf0a0 004eea10 OnChangeState__10PutiObjectFi 1.000
+004dd110 0046add0 __dt__6P2FontFv 1.000
+004ded30 005222e0 CMN__4shopFiPvP7CmdMenu 1.000
+004df240 00522890 start__4shopFv 0.839
+004df320 00522980 mShopInit__4shopFv 1.000
+004e5100 0052bdc0 mCheckEndMessage__4shopFv 1.000
+004e8490 00530e30 __ct__8shopCashFv 1.000
+004e8530 00530f10 initialize__8shopCashFP7primTex 1.000
+004e8570 00530f50 setCash__8shopCashFi 1.000
+004e89a0 00531500 __ct__14shopScrollMarkFv 0.950
+004e8aa0 00531640 initialize__14shopScrollMarkFP7primTexiii 1.000
+004e8fc0 00531ca0 __ct__11shopCaptureFi 0.928
+004e92f0 00531ff0 __dt__11shopCaptureFv 1.000
+004e9410 00532110 DelayDeleteRequest__11shopCaptureFv 1.000
+004e94b0 005321c0 changeLayer__11shopCaptureFi 1.000
+004e9620 00532340 getPacket__11shopCaptureFv 0.992
+004eb090 00533e40 __ct__6tailorFv 0.972
+004eb510 00534350 start__6tailorFv 1.000
+004eb530 00534370 Polling__6tailorFv 1.000
+004f0860 0053b010 mReadModel__6tailorFi 1.000
+004f0dd0 0053b670 mIsPageMotion__6tailorFv 1.000
+004f0f00 0053b7a0 mMoveStars__6tailorFv 1.000
+004f10b0 0053b950 mFadeFieldBGM__6tailorFi 1.000
+004f1240 0053bae0 __ct__14bookScrollMarkFv 0.950
+004f1340 0053bc20 initialize__14bookScrollMarkFP7primTexii 1.000
+004f18c0 0053c300 __ct__5dRollFv 1.000
+004f1970 0053c3b0 __dt__5dRollFv 1.000
+004f1aa0 0053c4e0 start__5dRollFv 1.000
+004f1ca0 0053c6e0 stop__5dRollFv 1.000
+004f2420 0053cee0 initialize__7solomonFPFiPv_vPv 1.000
+004f2580 0053d040 start__7solomonFv 0.850
+004f9d10 005468b0 mReleaseBG__7solomonFv 0.947
+004fa510 00547060 mSetWorldDest__7solomonFv 1.000
+004fa640 00547190 mSetWorldPos__7solomonFb 1.000
+004fa7e0 00547330 mSetWorldScroll__7solomonFv 1.000
+004faa20 00547570 mWorldScroll__7solomonFv 1.000
+004fabc0 00547710 mCheckArea__7solomonFi 1.000
+004fac90 005477e0 mFixArea__7solomonFi 1.000
+004fada0 005478f0 mCheckNewMagic__7solomonFv 0.900
+004fda40 0054a920 mSetDemon__7solomonFi 1.000
+004fdb00 0054a9e0 mBackDemon__7solomonFi 1.000
+004fdba0 0054aa80 mSetSlotScroll__7solomonFi 1.000
+004fdc80 0054ab60 mSetFreeSlotScroll__7solomonFi 1.000
+004fdd00 0054abe0 mCheckMapView__7solomonFiP12CAnalogStick 1.000
+004fe7e0 0054b4e0 mWinPolling__7solomonFv 1.000
+004fea20 0054b930 __ct__13solomonEffectFv 0.941
+004feac0 0054b9d0 __dt__13solomonEffectFv 0.805
+004febf0 0054bb20 DelayDeleteRequest__13solomonEffectFv 1.000
+004fec50 0054bb80 fadein__13solomonEffectFv 1.000
+004fed70 0054bca0 start__13solomonEffectFb 1.000
+004fedd0 0054dd00 isFinish__13solomonEffectFv 1.000
+004ffa00 0054cbe0 __ct__15solomonTutorialFv 0.917
+005005e0 0054dd20 __ct__10floatDemonFv 1.000
+005006e0 0054de20 initialize__10floatDemonFP6MatrixffP9primLayer 1.000
+00500860 0054dfa0 setRGBA__10floatDemonFiiii 1.000
+005008e0 0054e020 setCurrentDemon__10floatDemonFi 0.833
+00500a30 0054e170 Polling__10floatDemonFv 0.880
+00500d90 0054e4e0 setCursor__10floatDemonFP10primCursor 1.000
+00500dc0 0054e510 removeCursor__10floatDemonFv 1.000
+00500de0 0054e530 setSlot__10floatDemonFv 1.000
+00500e40 0054e590 eraseSlot__10floatDemonFff 1.000
+00500f20 0047dcd0 __ct__14pageScrollMarkFv 1.000
+00500f70 0054dd70 __dt__14pageScrollMarkFv 1.000
+00501020 00556c20 initialize__14pageScrollMarkFP7primTexiii 1.000
+00501720 0054f120 __ct__13solomonCursorFv 1.000
+00501b40 00467b70 fadeout__13solomonCursorFv 1.000
+00501b80 0054f5f0 setRGBA__13solomonCursorFiiii 1.000
+00501be0 0054f650 setCurrentDemon__13solomonCursorFi 1.000
+00501dc0 0054f8e0 Polling__13solomonCursorFv 1.000
+00502220 0054fd90 __ct__11solomonSlotFP9primLayer 1.000
+00502290 0054fe00 __dt__11solomonSlotFv 1.000
+00502390 0054ff00 initialize__11solomonSlotFP6Matrixffb 0.878
+00502730 00550310 setAlpha__11solomonSlotFi 1.000
+005030f0 00550d40 isDemon__11solomonSlotFv 0.950
+00503110 00550d60 __ct__11solomonAreaFv 1.000
+005031e0 00550e30 __dt__11solomonAreaFv 1.000
+00503340 00550f90 initialize__11solomonAreaFP6MatrixP9primLayerib 1.000
+005033e0 00551030 setArea__11solomonAreaFibb 1.000
+00503480 005510d0 Polling__11solomonAreaFv 1.000
+00504480 00551d60 setTitle__10solomonThmFi 1.000
+00506ca0 00557820 CMN__8worldMapFiPvP7CmdMenu 1.000
+005070d0 00557e30 start__8worldMapFv 1.000
+00507150 00557eb0 mReadDataRequest__8worldMapFv 1.000
+00508620 00559b60 mWorldMapPolling__8worldMapFv 1.000
+00508e30 0055a470 mIsMenuFade__8worldMapFv 1.000
+00509480 0055af40 mSetupFont__8worldMapFv 1.000
+005094f0 0055afb0 mReleaseFont__8worldMapFv 1.000
+0050b0c0 0055d2a0 __ct__12worldMapFadeFv 1.000
+0050b1c0 0055d3e0 initialize__12worldMapFadeFv 1.000
+0050b810 0055dba0 __ct__11worldMapThmFv 0.950
+0050b840 0055dbd0 __dt__11worldMapThmFv 1.000
+0050b8a0 0055dc30 initialize__11worldMapThmFP7primTex 1.000
+0050b8d0 0055dc60 dispThm__11worldMapThmFiPUcPUc 1.000
+0050b9b0 0055dd80 kill__11worldMapThmFv 0.950
+0050bef0 0055e440 __dt__13worldMapLightFv 1.000
+0050bf90 0055e4e0 initialize__13worldMapLightFP9primLayerii 1.000
+0050c270 0055e800 select__13worldMapLightFv 1.000
+0050c750 0055ece0 unselect__13worldMapLightFv 1.000
+0050c7b0 0055ed40 mReleasePoint__13worldMapLightFv 1.000
+0050c8a0 0055ee30 Polling__13worldMapLightFv 0.923
+0050cc90 0055f240 __ct__13worldMapPointFv 1.000
+0050ccf0 0055f2a0 __dt__13worldMapPointFv 1.000
+0050cdb0 0055f360 initialize__13worldMapPointFP9primLayeriPQ28worldMap11SUBMAP_DATAi 0.942
+
+# CANDIDATES (NOT renamed; failed size / order / decompile verification): jp_addr us_addr name score jp_size us_size
+00431440 0045f570 Show__9SavePointFii 0.906 272 256
+00432430 00460610 OnUpdate__8SvpLightFv 0.790 380 412
+00432c10 00460ef0 __dt__9WarpPointFv 0.747 580 620
+00432e60 00461160 Create__9WarpPointFs 0.701 456 584
+00433810 00461c90 Polling__9WarpPointFv 0.646 4620 4804
+00436390 00465310 Ready__7CmdMenuFsss 0.818 1764 1876
+00436a80 00465a70 Initialize__7CmdMenuFsPFiPvP7CmdMenu_iPv 0.471 384 424
+00436c00 00465c20 Release__7CmdMenuFv 0.450 368 252
+00436d70 00465d20 CreateScene__7CmdMenuFv 0.743 420 352
+00437040 00466010 CreateBackGround__7CmdMenuFs 0.689 772 876
+00437970 00466c10 __ct__7CmdNoteFv 0.805 156 172
+00437a10 00466cc0 __dt__7CmdNoteFv 0.726 236 252
+00437b00 00466dc0 GetReady__7CmdNoteFv 0.876 360 408
+00437e50 00467090 __ct__20CmdBackGroundCaptureFP11MenuCapture 0.815 196 236
+00437f20 00467180 __dt__20CmdBackGroundCaptureFv 0.787 244 276
+00438960 00467e30 GetReady__6CmdTopFv 0.770 916 1064
+00438e30 004686c0 Enter__6CmdTopFv 0.695 968 984
+00439200 00468aa0 Exit__6CmdTopFv 0.645 1352 1584
+00439da0 00469bf0 SelectCharacter__6CmdTopFv 0.661 656 680
+0043a030 00469ea0 SelectData__6CmdTopFv 0.664 936 1008
+0043a3e0 0046a290 ShiftMenu__6CmdTopFv 0.647 1040 1424
+0043a7f0 0046a820 ShiftDataAccess__6CmdTopFv 0.802 392 412
+0043ab60 0046aba0 DisplayMessage__6CmdTopFv 0.721 440 440
+0043b3f0 0046b790 GetRealStatus__5CmdPCFP11CmdPCStatus 0.759 1156 1340
+0043be80 0046c3d0 GetRestCrestSlot__5CmdPCFv 0.528 204 204
+0043cad0 0046d840 __ct__8CmdPartyFv 0.500 72 80
+0043cf40 0046dc40 FindPC__8CmdPartyFUs 0.630 196 196
+0043d170 0046de70 SetCommand__8CmdPartyFc 0.688 128 128
+0043d6b0 0046e270 GetComboKeyData__8CmdPartyFsP15SHORTCUTCommandPcP15CmdComboKeyData 0.673 1476 1556
+0043ea00 0046f060 __ct__10CmdExplainFv 0.820 440 488
+0043ebc0 0046f250 __dt__10CmdExplainFv 0.696 492 640
+0043f0d0 0046f880 SetIcon__10CmdExplainFP11MenuTexture 0.500 328 272
+0043f3e0 0046fb40 DestroyImage__10CmdExplainFv 0.652 172 172
+0043f490 0046ff50 Exec__10CmdExplainFUs 0.636 2036 2140
+0043fc90 004707b0 Open__10CmdExplainFv 0.697 972 1132
+00440060 00470c20 Close__10CmdExplainFv 0.450 68 68
+00440460 00471250 GetReady__7CmdItemFv 0.868 1072 1120
+004408f0 004718b0 Enter__7CmdItemFv 0.605 652 768
+00440e00 00471dd0 Exec__7CmdItemFv 0.780 1640 1696
+00441470 00472470 ExecMessage__7CmdItemFv 0.653 344 344
+00441a70 00472a50 ExecSort__7CmdItemFv 0.619 564 564
+00442630 00473760 GetReady__11CmdTitleLogFv 0.905 272 248
+00442800 00473900 SetTitle__11CmdTitleLogFPUci 0.644 812 596
+00443a10 00474b10 Run__15CmdSelectTargetFv 0.713 1764 1900
+00444100 00475280 SetParameter__15CmdSelectTargetFi 0.495 2656 2816
+004450b0 00476400 __dt__11MenuElementFv 0.648 348 404
+004483c0 0047a5d0 Exec__9CmdOptionFv 0.680 1496 1320
+004489a0 0047ab00 SetNote__9CmdOptionFv 0.640 412 376
+00448c60 0047add0 GetReady__10CmdPrivateFv 0.661 780 948
+00448fd0 0047b3d0 Enter__10CmdPrivateFv 0.730 760 768
+00449590 0047b990 Exec__10CmdPrivateFv 0.783 1188 1220
+00449e70 0047c290 CreateScene__10CmdPrivateFs 0.893 1116 1188
+0044a2d0 0049f030 UpdateMenu__10CmdPrivateFs 0.667 268 252
+0044a3e0 0047c840 UpdateModel__10CmdPrivateFv 0.504 852 1104
+0044ade0 0047d3b0 GetReady__9CmdStatusFv 0.899 796 756
+0044b1d0 0047d730 Update__9CmdStatusFs 0.822 1300 1436
+0044b700 004c5f70 __ct__15CmdPrivateSceneFv 0.771 68 76
+0044b820 0047ddf0 __ct__12CmdEquipmentFv 0.818 132 148
+0044b8b0 00467cd0 __dt__12CmdEquipmentFv 0.624 396 352
+0044ba40 0047e080 GetReady__12CmdEquipmentFv 0.865 1020 1064
+0044c120 0047e940 UpdateSlot__12CmdEquipmentFss 0.825 600 564
+0044c4c0 0047ecc0 UpdateGoods__12CmdEquipmentFscc 0.638 436 436
+0044cb60 0047f420 GetPropertyCount__12CmdEquipmentFc 0.450 508 408
+0044d8e0 00480730 SelectMenu__12CmdEquipmentFv 0.745 1676 1812
+0044df70 00480e50 SelectSlot__12CmdEquipmentFv 0.682 1168 1160
+0044e400 004812e0 SelectEquipment__12CmdEquipmentFv 0.709 976 1108
+0044e970 004818e0 ExecExplain__12CmdEquipmentFv 0.892 944 912
+00450700 004835d0 UpdateScene__17CmdEquipmentGoodsFP12CmdEquipments 0.767 1224 1488
+00450bd0 00483ba0 Select__17CmdEquipmentGoodsFP12CmdEquipmentP9MenuGroupP9MenuGroup 0.450 540 444
+00451a30 00484dd0 UpdateScene__14CmdTopPlayInfoFP6CmdTop 0.526 364 312
+004522e0 00485650 CreateScene__8CmdTopPCFP6CmdTop 0.745 2844 2960
+00452e00 004861e0 Select__8CmdTopPCFP6CmdTopP9MenuGroupP9MenuGroup 0.725 628 516
+00453610 00486a70 GetReady__12CmdTechniqueFv 0.728 1192 1336
+00454230 00487840 CreateScene__17CmdTechniqueGoodsFP9MenuScenesP5CmdPCP12PCSKILLParam 0.737 1040 1056
+00454690 00487cb0 UpdateScene__17CmdTechniqueGoodsFP12PCSKILLParamss 0.690 364 352
+004553f0 00488b50 GetReady__10CmdProfileFv 0.870 300 316
+00455ef0 0048a5d0 CreateScene__13CmdTarotGoodsFP8CmdTarot 0.829 792 872
+00456c50 0048b540 CreateScene__18CmdPhotographGoodsFP13CmdPhotograph 0.600 700 648
+00458560 0048d040 UpdateClothes__10CmdClothesFv 0.695 396 356
+00459220 0048dd90 GetReady__7CmdHelpFv 0.923 512 528
+00459800 0048e440 Enter__7CmdHelpFv 0.681 568 588
+00459c50 0048e8a0 SelectMenu__7CmdHelpFv 0.770 648 624
+00459ee0 0048eb10 SelectClause__7CmdHelpFv 0.765 624 616
+0045a150 0048ed80 EnterExplain__7CmdHelpFv 0.785 584 584
+0045b6d0 00490240 UpdateScene__13CmdHelpClauseFP7CmdHelps 0.450 800 576
+0045b9f0 00490480 Select__13CmdHelpClauseFP7CmdHelpP9MenuGroupP9MenuGroup 0.480 332 404
+0045bb60 00490640 __ct__14CmdHelpExplainFv 0.592 220 324
+0045d6c0 004925f0 CreateScene__12CmdItemGoodsFP7CmdItem 0.795 1260 1308
+0045e060 00492fc0 Select__12CmdItemGoodsFP7CmdNoteP9MenuGroupP9MenuGroup 0.450 348 500
+0045eb20 004d2620 Exit__12CmdGraveyardFv 0.636 412 420
+00460310 00496360 ExecExplain__8CmdAromaFv 0.758 608 768
+00461a60 004ed470 __dt__10CmdLibraryFv 0.667 200 240
+00461b30 00497b40 GetReady__10CmdLibraryFv 0.908 780 748
+00462720 00498a40 UpdateData__10CmdLibraryFv 0.771 588 564
+00462970 00498c80 UpdateTitle__10CmdLibraryFs 0.869 428 412
+00462b20 00498f50 ChengeMenu__10CmdLibraryFP8MenuTextP8MenuTextb 0.677 612 528
+00462f40 00499310 FindMonster__10CmdLibraryFsss 0.692 340 404
+00463620 00499900 SetNPC__10CmdLibraryFs 0.644 288 344
+00463860 00499b80 Enter__10CmdLibraryFv 0.737 632 652
+00463ae0 00499e10 Exit__10CmdLibraryFv 0.673 552 492
+00464550 0049a930 SelectList__10CmdLibraryFv 0.678 784 880
+00464860 0049aca0 CloseList__10CmdLibraryFv 0.900 308 340
+004649a0 0049ae00 __ct__16CmdLibraryDetailFv 0.867 436 452
+00464b60 0049afd0 __dt__16CmdLibraryDetailFv 0.814 484 508
+00464d50 0049b240 CreateScene__16CmdLibraryDetailFP10CmdLibrary 0.641 1096 1032
+004651a0 0049b650 UpdateScene__16CmdLibraryDetailFP10CmdLibrarysUc 0.715 2716 2852
+00465dc0 0049c6b0 CreateScene__14CmdLibraryListFP10CmdLibrarys 0.610 1360 1488
+00466500 0049cef0 __dt__7CmdSortFv 0.704 204 228
+004665d0 0049d030 GetReady__7CmdSortFv 0.671 940 1132
+00466980 0049d520 Run__7CmdSortFv 0.798 1036 1068
+00466e30 0049d9f0 __ct__13CmdRingCustomFv 0.857 168 184
+00466ee0 0049db40 __dt__13CmdRingCustomFv 0.645 540 500
+00467100 0049dd40 GetReady__13CmdRingCustomFv 0.616 844 676
+00467930 0049e950 UpdateTitle__13CmdRingCustomFss 0.808 292 276
+00467a60 0049ea70 UpdateFence__13CmdRingCustomFss 0.709 424 416
+00468cf0 0049fd40 StartMessage__13CmdRingCustomFPc 0.663 288 304
+00469550 004a0360 SelectMenu__13CmdRingCustomFv 0.706 1376 1448
+00469cd0 004a0bb0 SelectFinalSlot__13CmdRingCustomFv 0.759 832 784
+0046a010 004a0ec0 SelectFinalGoods__13CmdRingCustomFv 0.680 800 860
+0046a330 004a1220 SelectGoods__13CmdRingCustomFv 0.699 1132 1116
+0046a7a0 004a1680 SelectCount__13CmdRingCustomFv 0.766 1044 1052
+0046abc0 004a1aa0 SelectAutoRing__13CmdRingCustomFv 0.672 1524 1572
+0046b3f0 004a2300 ExecExplain__13CmdRingCustomFv 0.778 1160 1192
+0046d9f0 004a4a40 UpdateScene__23CmdRingCustomFinalGoodsFP13CmdRingCustoms 0.728 884 988
+0046df00 004a4fb0 SetMessage__23CmdRingCustomFinalGoodsFP13CmdRingCustomsP12CmdGoodsIcon 0.655 368 420
+0046ee40 004868b0 __ct__9CmdFusionFv 0.667 140 100
+0046ff50 004a7260 SetFusionMonster__9CmdFusionFs 0.771 1260 1508
+004705a0 004a79b0 SetButtonReport__9CmdFusionFi 0.609 272 328
+004706b0 004a7b00 GetNextExp__9CmdFusionFs 0.670 312 336
+004707f0 004a7c50 IsMaxLevel__9CmdFusionFv 0.698 196 204
+00470a50 004a80b0 Exit__9CmdFusionFv 0.709 572 596
+00470c90 004a8310 SelectList__9CmdFusionFv 0.732 1552 1440
+004712a0 004a88b0 SelectMenu__9CmdFusionFv 0.619 2832 2888
+00472b80 004aa990 ShiftList__9CmdFusionFv 0.675 928 1048
+00473240 004ab0d0 ExecExplain__9CmdFusionFv 0.761 880 984
+00473d50 004abd90 Select__13CmdFusionListFP9CmdFusionP9MenuGroupP9MenuGroupi 0.752 468 476
+00474080 004ac0b0 __dt__15CmdMenuTutorialFv 0.671 228 252
+00474250 004ac290 Create__15CmdMenuTutorialFP9BufMemory 0.946 652 672
+004744e0 004ac530 Polling__15CmdMenuTutorialFv 0.682 1800 1812
+00474c10 004e06b0 __ct__8CmdScoreFv 0.882 156 140
+00475020 004ad4b0 UpdateData__8CmdScoreFs 0.694 204 256
+00475450 004ade00 GetScore__8CmdScoreFsPcPc 0.485 964 1156
+00475820 004ae290 GetComment__8CmdScoreFsi 0.530 216 180
+004763f0 004af030 UpdateScene__12CmdScoreDataFP8CmdScoress 0.494 1124 1044
+00477e90 004b0af0 CreateScene__13CmdScoreTitleFP8CmdScore 0.660 156 216
+00478b00 004b1a60 GetReady__12CmdKeyCustomFv 0.827 780 860
+004793f0 004b2440 Enter__12CmdKeyCustomFv 0.637 484 512
+004797c0 004b2820 SelectButton__12CmdKeyCustomFv 0.735 944 984
+00479b70 004b2c00 SwapButton__12CmdKeyCustomFv 0.707 736 704
+0047b2e0 004b4350 __ct__14CmdLibraryInfoFv 0.714 204 252
+0047b3b0 004b4450 __dt__14CmdLibraryInfoFv 0.667 284 348
+0047c6f0 004b59f0 UpdateScene__15CmdFusionStatusFP9CmdFusion 0.619 1004 1248
+0047d3e0 004dce90 __dt__15CmdFusionChargeFv 0.885 400 424
+0047dc40 004b6930 CreateScene__16CmdFusionLevelupFP9CmdFusion 0.720 272 332
+0047e150 004b73b0 CreateMessage__12CmdFormationFi 0.606 344 396
+0047e2b0 004b7540 SetButtonReport__12CmdFormationFi 0.491 244 272
+0047e3b0 004b7ae0 Enter__12CmdFormationFv 0.695 596 624
+0047e610 004b7d50 Exit__12CmdFormationFv 0.788 272 240
+0047f290 004b8a80 DisplayMessage__12CmdFormationFv 0.683 424 424
+00480950 004ba710 Blackout__18CmdFormationMemberFP12CmdFormationiPcPc 0.605 872 836
+00480ce0 004baa80 __ct__16CmdFormationTeamFv 0.705 292 340
+00481000 004bad90 __dt__20CmdFormationTeamDataFv 0.857 244 212
+00481b20 004bb770 __ct__20CmdFormationTeamDataFv 0.720 220 180
+00482390 004bbdf0 ChoiceMember__16CmdFormationTeamFP12CmdFormation 0.771 692 708
+00482650 004bc0c0 Select__16CmdFormationTeamFP12CmdFormationP9MenuPlaceP9MenuPlace 0.729 764 804
+00483700 004bd5f0 GetReady__11CmdWolfBoutFv 0.715 624 692
+00483ab0 004bdb00 ReadyScene__11CmdWolfBoutFv 0.772 580 580
+00484440 004be690 Exit__11CmdWolfBoutFv 0.871 236 268
+00484530 004be7a0 SelectStamp__11CmdWolfBoutFv 0.733 1480 1624
+00484c40 004bef40 ExecExplain__11CmdWolfBoutFv 0.663 1136 1512
+004850b0 004bf530 DisplayMessage__11CmdWolfBoutFv 0.699 404 404
+00486140 004c05b0 GetReady__11CmdComboKeyFv 0.783 508 552
+00486450 004c0b00 Update__11CmdComboKeyFs 0.640 440 512
+00486930 004c1020 UpdateFence__11CmdComboKeyFP8CmdFencesss 0.670 368 440
+00487210 004c1a10 Enter__11CmdComboKeyFv 0.631 640 620
+00487720 004c1e80 SelectSlot__11CmdComboKeyFv 0.699 1056 1104
+00487dd0 004c2550 SelectCommand__11CmdComboKeyFv 0.761 1044 996
+00488c70 004c33d0 UpdateScene__15CmdComboKeySlotFP11CmdComboKeyss 0.536 900 1068
+00489000 004c3800 Select__15CmdComboKeySlotFP11CmdComboKeyP9MenuPlaceP9MenuPlace 0.803 488 504
+004894d0 004c3ce0 UpdateScene__18CmdComboKeyCommandFP11CmdComboKeyss 0.778 688 732
+00489c00 004c44c0 UpdateScene__20CmdComboKeyCharacterFP11CmdComboKey 0.477 572 692
+00489e40 004c4780 Select__20CmdComboKeyCharacterFP11CmdComboKeyP9MenuPlaceP9MenuPlace 0.681 304 320
+0048a3d0 004c4d20 UpdateScene__16CmdComboKeyGoodsFP11CmdComboKeys 0.636 1036 1124
+0048b1a0 004c5b50 UpdateScene__9CmdPCInfoFP5CmdPCP11CmdPCStatus 0.729 924 1052
+0048b910 004c6340 ChengePC__10CmdPCSceneFv 0.737 700 764
+0048cf10 004c78e0 Exec__13CmdComboMagicFv 0.705 320 320
+0048d050 004c7a20 SelectGoods__13CmdComboMagicFP9MenuGroupP9MenuGroupb 0.711 600 720
+0048d410 004c7f20 GetReady__8CmdMagicFv 0.833 776 804
+0048df40 004c8c30 SelectGoods__8CmdMagicFv 0.747 1536 1648
+0048e7c0 004c9580 ExecSort__8CmdMagicFv 0.691 536 640
+0048ed40 004c9b60 UpdateScene__13CmdMagicGoodsFP8CmdMagicPc 0.678 1052 988
+00490ca0 004cba90 __ct__8CmdCrestFv 0.891 216 240
+00490f90 004cbdc0 GetReady__8CmdCrestFv 0.878 1024 1112
+004914a0 004cc510 Update__8CmdCrestFs 0.672 796 836
+00491a40 004ccae0 UpdateGoods__8CmdCrestFsss 0.524 964 988
+00492210 004cd420 Recommend__8CmdCrestFv 0.683 780 748
+004925d0 004cd7c0 StartDetail__8CmdCrestFv 0.785 824 908
+00492910 004cdb50 SetButtonReport__8CmdCrestFv 0.475 396 420
+00492aa0 004cdd00 UpdateComboKeyMagic__8CmdCrestFv 0.474 192 184
+004938d0 004ceec0 SelectSlot__8CmdCrestFv 0.692 1200 1392
+00493d80 004cf430 SelectGoods__8CmdCrestFv 0.755 2012 1980
+00494780 004cfe10 ExitDetail__8CmdCrestFv 0.850 976 1040
+00494de0 004d04b0 ExecSort__8CmdCrestFv 0.737 712 752
+004950b0 004d07a0 __ct__13CmdGoodsCrestFv 0.747 188 196
+00495bc0 004d1380 SetClut__13CmdGoodsCrestFP9MenuGroupUc 0.677 228 228
+00495d30 004d14f0 Reset__13CmdGoodsCrestFv 0.471 84 84
+00495d90 004d1550 SetCrest__13CmdGoodsCrestFP9MenuScenesii 0.747 1404 1420
+00496390 004d1b80 __dt__13CmdWhiteMagicFv 0.649 180 156
+00496450 004d1cf0 GetReady__13CmdWhiteMagicFv 0.840 904 932
+00496df0 004d27d0 SelectGoods__13CmdWhiteMagicFv 0.776 1048 1152
+00497490 004d2f10 __ct__13CmdCrestMagicFv 0.764 348 380
+004975f0 004d3090 __dt__13CmdCrestMagicFv 0.794 396 412
+00497780 004d3230 CreateScene__13CmdCrestMagicFP8CmdCrestP11MenuTexture 0.727 1284 1408
+00497c90 004d37b0 UpdateScene__13CmdCrestMagicFP8CmdCrestsc 0.450 1204 1260
+00498170 004d3cc0 __ct__14CmdCrestDetailFv 0.927 328 344
+004982c0 004d3e20 __dt__18CmdCrestDetailDataFv 0.707 212 228
+004983a0 004d3f10 __ct__18CmdCrestDetailDataFv 0.800 148 164
+0049a3c0 004d5f70 Boot__13MenuModelAuraFv 0.616 564 704
+0049a880 004d65e0 Polling__13MenuModelAuraFv 0.605 1520 1512
+0049c5c0 004d89a0 Enter__15CmdPropertyListFv 0.721 704 720
+0049c880 004d8c70 Exit__15CmdPropertyListFv 0.681 464 544
+0049ca50 004d8e90 SelectMenu__15CmdPropertyListFv 0.634 888 1048
+0049d500 004d9bd0 ExecSort__15CmdPropertyListFv 0.634 600 728
+0049dd30 004da660 ExitDetail__15CmdPropertyListFv 0.616 664 792
+0049e660 004db010 UpdateScene__16CmdPropertyGoodsFP15CmdPropertyListss 0.612 2592 2624
+004a00d0 004dcc00 Select__21CmdRingCustomAutoRingFP13CmdRingCustomP8MenuTextP8MenuTexts 0.600 348 324
+004a0250 00478390 __ct__13FaceImageDataFv 0.667 128 152
+004a0440 004ed560 __ct__9FaceImageFv 0.684 268 284
+004a07f0 004ed9d0 Close__9FaceImageFUci 0.600 188 172
+004a0c50 004edf90 __dt__16FieldMessageDataFv 0.704 304 288
+004a1190 004ee6f0 DestroyWindow__12FieldMessageFv 0.630 188 204
+004dee30 005223e0 __ct__4shopFv 0.941 276 292
+004def50 00522510 __dt__4shopFv 0.669 444 564
+004df110 00522750 initialize__4shopFiPFiPv_vPv 0.870 296 320
+004e7870 0052fba0 mCalcPoint__4shopFb 0.783 312 320
+004e7aa0 0052ffb0 mMakeBuyList__4shopFv 0.714 340 468
+004e8320 005305a0 mCalcCurrentMax__4shopFv 0.673 344 392
+004e9470 00532170 startCapture__11shopCaptureFv 0.450 64 72
+004e9510 00532220 setDisp__11shopCaptureFiffff 0.727 132 136
+004e95a0 005322b0 setRGBA__11shopCaptureFiiii 0.647 120 144
+004ea900 00533630 calcPos__11shopCaptureFv 0.851 1220 1360
+004eadd0 00533b80 mSetCenterPos__11shopCaptureFv 0.718 508 508
+004eb1c0 00533f70 __dt__6tailorFv 0.762 480 568
+004eb3a0 005341b0 initialize__6tailorFPFiPv_vPvi 0.679 368 404
+004ed380 00536ee0 mMenuPolling__6tailorFUs 0.450 4724 5752
+004ee600 00538560 mSetupSelectWin__6tailorFv 0.807 2596 2908
+004f06f0 0053ae70 mMakeSketchBook__6tailorFv 0.767 364 404
+004f09a0 0053b180 mSetPage__6tailorFi 0.675 1072 1260
+004f1d20 0053c760 Polling__5dRollFv 0.799 896 896
+004f2180 0053cbc0 __ct__7solomonFv 0.738 316 308
+004f8870 005455e0 mSetupBG__7solomonFv 0.638 4928 4736
+004fa140 00546cc0 mCheckKey__7solomonFi 0.812 968 920
+004fecd0 0054bbc0 initialize__13solomonEffectFP6Matrix 0.450 148 220
+004fee10 0054bd40 Polling__13solomonEffectFv 0.755 3052 3740
+00501860 0054f2a0 initialize__13solomonCursorFP6MatrixffP9primLayer 0.638 724 836
+00502ed0 00550b20 setDemon__11solomonSlotFi 0.769 536 544
+00503da0 005519f0 __ct__10solomonThmFv 0.794 156 140
+00506be0 00522320 DVD_CBFunc__8worldMapFiP9BufMemoryiPcPv 0.804 184 188
+00506ce0 00557860 __ct__8worldMapFv 0.896 296 328
+00506e10 005579b0 __dt__8worldMapFv 0.755 316 412
+00508c80 0055a310 mReleaseWorldMap__8worldMapFv 0.611 276 344
+0050a360 0055c240 mSetWorldDest__8worldMapFv 0.814 548 508
+0050a7a0 0055c680 mNewPointDemo__8worldMapFv 0.611 1996 2252
+0050b210 0055d430 fadeIn__12worldMapFadeFi 0.606 128 124
+0050b290 0055d4b0 fadeOut__12worldMapFadeFi 0.618 132 128
+0050b9e0 0055ddb0 mSetupThmWin__11worldMapThmFv 0.450 1020 1244
+0050be50 0055e390 __ct__13worldMapLightFv 0.732 156 168
+0050c020 0055e570 setDest__13worldMapLightFff 0.633 172 188
+0050c0d0 0055e630 setPos__13worldMapLightFff 0.793 416 456
+
+# main executable (SLPM_602.19 -> SLUS_210.41): CFieldSocket/CSTGDB/CSndBufCache/LayerMan/ChrPosSave code was REWRITTEN in the retail build (best opcode-skeleton similarity < 0.3); only MPSServerHandler/MPSModel match
+0038e0b0 003cf3b0 Open__16MPSServerHandlerFP10RingBuffer 0.760  (main, candidate only: size 0x130 vs 0x100, not renamed)
+0038e1e0 003cf4b0 Read__16MPSServerHandlerFP10_LSDHANDLEP10RingBuffer 0.600  (main, candidate only: size 0x100 vs 0x14c, not renamed)
+0038e2e0 003cf600 Event__16MPSServerHandlerFP10_LSDHANDLEiff 1.000  (main)
+0038e3b0 003cf6d0 Close__16MPSServerHandlerFP10_LSDHANDLE 1.000  (main)
+0038e3e0 003cf700 __ct__8MPSModelFv 1.000  (main)
+0038e430 003cf750 __dt__8MPSModelFv 1.000  (main)
+0038e4e0 003cff80 __ct__12SmoothFilterFv 1.000  (main)

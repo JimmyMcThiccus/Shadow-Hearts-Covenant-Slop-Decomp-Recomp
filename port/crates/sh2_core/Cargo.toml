@@ -1,0 +1,18 @@
+[package]
+name = "sh2_core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+# The Bevy glue (Resource/Component derives, `SshSysPlugin`) is optional so that the pure system layer
+# (fileio, bufmem, pad state machines, ...) can be used by tools and data crates without building Bevy.
+default = ["bevy"]
+bevy = ["dep:bevy"]
+
+[dependencies]
+glam.workspace = true
+bytemuck.workspace = true
+thiserror.workspace = true
+log.workspace = true
+bevy = { workspace = true, optional = true }

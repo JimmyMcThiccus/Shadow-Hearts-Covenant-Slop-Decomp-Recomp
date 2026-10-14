@@ -1,0 +1,34 @@
+# duplicates between this pass and the earlier shape-matched names: keep the positionally consistent one, rename the other
+!SH2US_FIELD.BIN 00521140 Retail_FldTeamChange_Sub521140 DUP | PrevTeam/MakePacket combo; earlier Dispose__13FldTeamChange is at 0x5210f0
+!SH2US_FIELD.BIN 004ae7a0 Retail_CmdScore_ExitAndClear DUP | earlier Exit__8CmdScore is at 0x4ae5c0
+!SH2US_FIELD.BIN 004d8220 Retail_CmdPropertyList_CreateFenceScene DUP | earlier GetReady__15CmdPropertyList is at 0x4d78d0
+!SH2US_FIELD.BIN 00521270 Retail_FldTeamChange_EaseStep DUP | earlier PrevTeam__13FldTeamChange is at 0x521220
+!SH2US_FIELD.BIN 0049fb30 Retail_CmdRingCustom_FillExplainList DUP | earlier SetExplain__13CmdRingCustom is at 0x49f9b0
+!SH2US_FIELD.BIN 004ef810 Retail_FieldMessage_SetSubPosition DUP | earlier SetPosition__12FieldMessage is at 0x4ef5d0
+!SH2US_FIELD.BIN 004ef7d0 Retail_FieldMessage_SetSubSize DUP | earlier SetSize__12FieldMessage is at 0x4ef690
+!SH2US_FIELD.BIN 004ef8a0 Retail_MenuWindow_StartKeyWaitState DUP | earlier StartKeyWait__12FieldMessage is at 0x4ef850
+!SH2US_FIELD.BIN 00521610 Retail_FldTeamChange_UpdateIfNotPaused DUP | earlier Update__13FldTeamChange is at 0x521380
+!SH2US_FIELD.BIN 0054e670 Retail_floatDemonHelper_Ct DUP | earlier __ct__10floatDemon is at 0x54dd20
+!SH2US_FIELD.BIN 0054e6c0 Retail_floatDemonHelper_Dt DUP | CPolObj subclass dtor next to the helper ctor
+!SH2US_FIELD.BIN 004ed400 Retail_FaceImageData_Ct2 DUP | earlier __ct__13FaceImageData is at 0x4ed390
+!SH2US_FIELD.BIN 00556ae0 Retail_worldMapObjA_Ct DUP | earlier __ct__14pageScrollMark is at 0x47dcd0 (a CmdXXX member ctor); this is the CPolObj ctor of the pageScrollMark-like class after worldMapPanel
+!SH2US_FIELD.BIN 00556b30 Retail_worldMapObjA_Dt DUP | earlier __dt__14pageScrollMark is at 0x54dd70
+!SH2US_FIELD.BIN 0055f6b0 Retail_worldMapObjB_Ct DUP | earlier __ct__13worldMapPoint is at 0x55f240
+!SH2US_FIELD.BIN 0055f700 Retail_worldMapObjB_Dt DUP | earlier __dt__13worldMapPoint is at 0x55f2a0
+!SH2US_FIELD.BIN 004dabb0 Retail_CmdPropertyGoods_Ct2 DUP | earlier __ct__16CmdPropertyGoods is at 0x48a3c0 (which is really CmdTarotGoods::ct, see below)
+!SH2US_FIELD.BIN 004b3de0 __dt__10CmdSubMenuFv DUP | earlier __dt__10CmdSubMenu is at 0x488160
+# positional fixes of earlier ct/dt names (class taken from the neighbouring CreateScene/dt of the same block)
+!SH2US_FIELD.BIN 0048c240 __ct__13CmdSwordGoodsFv FIX | was __ct__13CmdMagicGoods; followed by __dt__13CmdSwordGoods and CreateScene__13CmdSwordGoods
+!SH2US_FIELD.BIN 0049c5d0 __dt__14CmdLibraryListFv FIX | was __dt__13CmdMagicGoods; follows __ct__14CmdLibraryList
+!SH2US_FIELD.BIN 0048a3c0 __ct__13CmdTarotGoodsFv FIX | was __ct__16CmdPropertyGoods; followed by __dt__13CmdTarotGoods
+!SH2US_FIELD.BIN 00470fe0 __ct__7CmdItemFv FIX | was __ct__6CmdTop; followed by __dt__7CmdItem
+!SH2US_FIELD.BIN 0049ce70 __ct__7CmdSortFv FIX | was __ct__12CmdFormation; followed by __dt__7CmdSort
+!SH2US_FIELD.BIN 004880f0 __ct__10CmdSubMenuFv FIX | was __ct__8CmdMagic; followed by __dt__10CmdSubMenu
+!SH2US_FIELD.BIN 00488e90 __ct__8CmdTarotFv FIX | was __ct__11CmdSubTitle; followed by __dt__8CmdTarot
+!SH2US_FIELD.BIN 0048b040 __dt__13CmdPhotographFv FIX | was __dt__10CmdProfile; follows __ct__13CmdPhotograph
+!SH2US_FIELD.BIN 0048cb40 __ct__10CmdClothesFv FIX | was __ct__11CmdWolfBout; followed by __dt__10CmdClothes
+!SH2US_FIELD.BIN 0047dcd0 __ct__15CmdPrivateSceneFv FIX | was __ct__14pageScrollMark; followed by __dt__15CmdPrivateScene
+!SH2US_FIELD.BIN 0047ac80 __ct__10CmdPrivateFv FIX | was __ct__10CmdClothes; followed by __dt__10CmdPrivate
+!SH2US_FIELD.BIN 004ab540 __dt__13CmdFusionListFv FIX | was __dt__16CmdComboKeyGoods; follows __ct__13CmdFusionList
+!SH2US_FIELD.BIN 004b3940 __dt__15CmdGoodsPadMenuFv FIX | was __dt__16CmdKeyCustomMenu; follows __ct__15CmdGoodsPadMenu
+!SH2US_FIELD.BIN 00483540 __dt__12CmdGoodsIconFv FIX | was __dt__15CmdGoodsPadMenu; follows __ct__12CmdGoodsIcon

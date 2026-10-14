@@ -1,0 +1,12 @@
+[package]
+name = "sh2_pine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "PINE (PCSX2 IPC) client and typed readers for Shadow Hearts: Covenant runtime validation. No Bevy."
+
+[dependencies]
+thiserror.workspace = true
+
+[dev-dependencies]
+sh2_field.workspace = true

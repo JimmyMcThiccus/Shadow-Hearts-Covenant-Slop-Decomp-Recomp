@@ -1,0 +1,34 @@
+/* SECTION G  FIELD.BIN overlay (JP Furokuban, load 0x00430a00)
+ * class: CmdGoodsIcon   functions: 2
+ * Source: Ghidra decompile (SH2JP_FIELD.BIN) with main-exe symbols and gp-relative globals resolved
+ * (gp = 0x00412870). Types are still Ghidra-inferred unless a struct was recovered (see notes/G/CmdGoodsIcon.md).
+ */
+
+/* JP: 0x004502f0  CmdGoodsIcon::~CmdGoodsIcon()   [__dt__12CmdGoodsIconFv]  size=0xac */
+int __dt__12CmdGoodsIconFv(int param_1,short param_2)
+
+{
+  if (param_1 != 0) {
+    __dt__10MenuSpriteFv(param_1 + 0x150,0xffffffffffffffff);
+    if (param_1 != 0) {
+      __dt__8MenuTextFv(param_1 + 0xd0,0xffffffffffffffff);
+      __dt__8MenuTextFv(param_1 + 0x50,0xffffffffffffffff);
+      __dt__9MenuGroupFv(param_1,0xffffffffffffffff);
+    }
+    if (0 < param_2) {
+      __dl__FPv(param_1);
+    }
+  }
+  return param_1;
+}
+
+/* JP: 0x00450610  CmdGoodsIcon::CmdGoodsIcon()   [__ct__12CmdGoodsIconFv]  size=0x60 */
+int __ct__12CmdGoodsIconFv(int param_1)
+
+{
+  __ct__9MenuGroupFv(param_1);
+  __ct__8MenuTextFv(param_1 + 0x50);
+  __ct__8MenuTextFv(param_1 + 0xd0);
+  __ct__10MenuSpriteFv(param_1 + 0x150);
+  return param_1;
+}

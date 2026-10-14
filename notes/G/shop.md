@@ -1,0 +1,8 @@
+# shop (JP 0x004ded30 … 0x004e8480, 39 methods; + shopCash, shopCapture, shopScrollMark)
+
+In-field item shop UI (`primWin`/`primCursor`/`primSound`/`primFade` toolkit = section F `prim*`). Launched from the field script (`CField::cbShop` JP 0x004b0a20 -> `shop::initialize(shopId, cb, user)`; `shop::CMN` is the menu callback), data from `SHOP.PKB` (`DVD_CBFunc`).
+
+Tables (overlay data, JP addresses): `shopTbl` (0x5540b8: 3 pointers to the item tables), `shop00/01/02_itemTbl` (0x55a650/70/90: sequences of `{u8 kind, u8 item}`; kind 1 = consumables, kind 4 = weapons/equipment; terminated by 0), `shopPointTbl` (0x55a600: rank thresholds 5, 12, 25, 99999, 999999 — "shop points" grow with purchases and set the discount rank E..A), `shopJRingTbl` (0x55a620: 5 x {u16,u16,u16,u16=10} judgement-ring parameters of the discount challenge per rank), and ~30 `shopMess_*_J` string tables (menu text: Buy/Sell/Equip/Leave, ranks "E..A rank", "max 10..50% OFF" / "5..25% UP", queries, warnings).
+
+Flow (`shop::Polling` JP 0x004df420, state switch): 0 `mShopInit` -> 2 `mSetupBG` (shopCapture of the field), main menu cursor -> 3 main menu: buy (`mSetupBuySellWin`, 0x5..0x9), sell (`mMakeSellList`), equip, leave (0x1b..0x1c) -> select item -> 0xa/0xd `mSetupBuyQueryWin` (challenge discount / buy at list price / cancel) -> 0xb `mSetupBuySelectDiscWin` (choose 10..50%) -> 0xe disc display -> 0x11..0x13 **judgement ring** discount game (`JRing::AutoLoadSet/SetPad/SetRingPos/SetRotSpeed/RingSleepCheck/Destruct`) -> 0x14 `mSetupBuyResultWin` -> 0x16 refresh lists. `mCalcPoint`, `mCalcCurrentMax`, `mCheckSellItem` (sell only owned, non-key), `mSetWeaponIcon`.
+Selling uses the "price up" ring (5..25% more).

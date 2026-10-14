@@ -1,0 +1,18 @@
+[package]
+name = "sh2_app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+bevy.workspace = true
+anyhow.workspace = true
+log.workspace = true
+sh2_core = { workspace = true, features = ["bevy"] }
+sh2_formats.workspace = true
+sh2_gfx.workspace = true
+sh2_script.workspace = true
+sh2_menu.workspace = true
+sh2_field.workspace = true
+sh2_battle.workspace = true
+sh2_audio = { workspace = true, features = ["bevy", "playback"] }

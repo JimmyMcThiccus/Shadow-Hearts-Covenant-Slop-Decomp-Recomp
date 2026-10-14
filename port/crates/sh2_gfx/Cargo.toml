@@ -1,0 +1,16 @@
+[package]
+name = "sh2_gfx"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+glam.workspace = true
+bytemuck.workspace = true
+thiserror.workspace = true
+log.workspace = true
+bevy.workspace = true
+sh2_core = { workspace = true, features = ["bevy"] }
+sh2_formats.workspace = true
+# VEC system-call table (single source of truth: sh2_script::opcodes::VEC_FUNC_TABLE)
+sh2_script.workspace = true
