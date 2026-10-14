@@ -1,0 +1,14 @@
+LSD/G04A.LSD	ok			secs=233.3;tracks=119;models=41;events=305;lscr_ops=c0.00x2,c0.05x1,c0.06x7,c0.07x1,c0.08x2,c0.0fx1;efd=3;maps=2;disc=disc 2;via_disc2_fallback=1
+LSD/M05.LSD	ok			secs=24.0;tracks=5;models=0;events=11;lscr_ops=c0.00x2;efd=0;maps=0;movie=1;pictures=60;size=512x448;disc=disc 1
+LSD/MOVIE_D.LSD	ok			secs=20.0;tracks=6;models=0;events=13;lscr_ops=c0.00x2,c0.06x1,c0.08x2,c0.0fx1;efd=0;maps=0;dlby=1;movie=1;pictures=60;size=512x448;disc=disc 1
+LSD/N009.LSD	ok			secs=344.1;tracks=95;models=34;events=445;lscr_ops=c0.00x4,c0.05x1,c0.06x7,c0.08x3,c0.0fx1;efd=8;maps=1;disc=disc 1
+LSD/N021.LSD	ok			secs=28.3;tracks=21;models=5;events=50;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=0;maps=1;disc=disc 1
+LSD/N034.LSD	ok			secs=32.1;tracks=26;models=5;events=62;lscr_ops=c0.00x6,c0.05x1,c0.06x2,c0.0fx1;efd=3;maps=1;disc=disc 1
+LSD/N048.LSD	ok			secs=213.3;tracks=28;models=8;events=108;lscr_ops=c0.00x4,c0.05x1,c0.0fx1;efd=0;maps=1;disc=disc 1
+LSD/N060.LSD	ok			secs=216.0;tracks=54;models=15;events=218;lscr_ops=c0.00x28,c0.05x1,c0.09x6,c0.0ax6,c0.0fx1;efd=0;maps=1;movie=1;pictures=60;size=512x448;disc=disc 1
+LSD/N071.LSD	ok			secs=340.0;tracks=29;models=7;events=167;lscr_ops=c0.00x12,c0.05x1,c0.09x3,c0.0ax3,c0.0fx1;efd=1;maps=1;disc=disc 1
+LSD/N083.LSD	ok			secs=97.4;tracks=49;models=16;events=130;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=0;maps=1;disc=disc 2;via_disc2_fallback=1
+LSD/N094.LSD	stub	effect tracks: fx fef	FX	secs=120.5;tracks=89;models=26;events=212;lscr_ops=c0.00x4,c0.05x1,c0.06x10,c0.07x9,c0.0fx1;efd=6;maps=1;missing=fx fef;disc=disc 2;via_disc2_fallback=1
+LSD/N105.LSD	ok			secs=111.0;tracks=70;models=25;events=203;lscr_ops=c0.00x2,c0.05x1,c0.06x1,c0.07x1,c0.08x2,c0.0fx1;efd=0;maps=3;disc=disc 2;via_disc2_fallback=1
+LSD/N116.LSD	ok			secs=100.2;tracks=39;models=13;events=90;lscr_ops=c0.00x2,c0.05x1,c0.07x1;efd=0;maps=1;disc=disc 2;via_disc2_fallback=1
+LSD/N128.LSD	ok			secs=12.3;tracks=14;models=2;events=30;lscr_ops=c0.00x2,c0.05x1;efd=1;maps=1;disc=disc 2;via_disc2_fallback=1

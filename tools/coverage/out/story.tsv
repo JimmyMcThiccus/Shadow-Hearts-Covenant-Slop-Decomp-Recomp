@@ -1,0 +1,1672 @@
+story graph	ok	369 of 559 maps reachable from OP_00_U through jumps the headless scripts made (+154 more through static references)		maps=559;runtime_reachable=369;static_reachable=523;runtime_edges=1055;disc2_only_scenes=75;maps_needing_disc2=25
+jump AD_00_DB -> :3	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump AD_00_DB -> AD_16_U:0	ok			entries=3
+jump AD_00_U -> AD_02_U:0	ok			entries=9
+jump AD_00_U -> AD_09_U:1	ok			entries=3
+jump AD_00_U -> AD_16_U:1	ok			entries=3
+jump AD_01_U -> AD_04_U:2	ok			entries=4
+jump AD_02_U -> AD_00_U:1	ok			entries=5
+jump AD_03_U -> AD_07_U:1	ok			entries=3
+jump AD_04_U -> AD_01_U:0	ok			entries=4
+jump AD_04_U -> AD_09_U:0	ok			entries=3
+jump AD_04_U -> AD_11_U:0	ok			entries=3
+jump AD_05_U -> AD_12_U:2	ok			entries=4
+jump AD_05_U -> FI_00_U:0	ok			entries=12
+jump AD_06_U -> AD_07_U:2	ok			entries=3
+jump AD_07_U -> AD_03_U:0	ok			entries=6
+jump AD_07_U -> AD_06_U:0	ok			entries=3
+jump AD_07_U -> AD_08_U:0	ok			entries=2
+jump AD_08_U -> AD_00_U:2	ok			entries=5
+jump AD_08_U -> AD_07_U:0	ok			entries=3
+jump AD_09_U -> AD_00_U:3	ok			entries=5
+jump AD_09_U -> AD_04_U:0	ok			entries=4
+jump AD_10_U -> AD_03_U:1	ok			entries=6
+jump AD_11_U -> AD_04_U:1	ok			entries=4
+jump AD_12_U -> AD_05_U:0	ok			entries=3
+jump AD_13_U -> AD_02_U:1	ok			entries=9
+jump AD_14_U -> AD_02_U:2	ok			entries=9
+jump AD_14_U -> AD_12_U:1	ok			entries=4
+jump AD_15_U -> AD_02_U:3	ok			entries=9
+jump AD_15_U -> AD_12_U:0	ok			entries=4
+jump AD_16_U -> AD_00_U:0	ok			entries=5
+jump AI_00_U -> :0	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump AI_00_U -> GY_05_F:0	ok			entries=4
+jump AI_04_U -> AI_06_U:2	ok			entries=30
+jump AI_04_U -> ED_00_U:-1	ok			
+jump AI_05_U -> AI_00_U:0	ok			entries=67
+jump AI_05_U -> AI_05_U:0	ok			entries=4
+jump AI_06_U -> :0	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump AI_06_U -> GY_00_D:0	ok			entries=8
+jump AP_00_DB -> :3	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump AP_00_DB -> AP_02_U:0	ok			entries=4
+jump AP_00_N -> AP_09_U:1	ok			entries=2
+jump AP_00_U -> AP_02_A:0	ok			entries=3
+jump AP_00_U -> AP_02_U:0	ok			entries=4
+jump AP_02_A -> AP_00_U:1	ok			entries=6
+jump AP_02_A -> AP_09_U:0	ok			entries=2
+jump AP_02_A -> AP_10_A:0	ok			entries=2
+jump AP_02_U -> AP_10_U:0	ok			entries=2
+jump AP_03_A -> AP_04_A:0	ok			entries=3
+jump AP_03_A -> AP_10_A:1	ok			entries=2
+jump AP_03_U -> AP_04_U:0	ok			entries=3
+jump AP_03_U -> AP_10_U:1	ok			entries=2
+jump AP_04_A -> AP_03_A:1	ok			entries=2
+jump AP_04_A -> AP_08_U:0	ok			entries=9
+jump AP_04_U -> AP_03_U:1	ok			entries=10
+jump AP_04_U -> AP_05_U:2	ok			entries=3
+jump AP_05_A -> AP_06_U:0	ok			entries=1
+jump AP_05_A -> AP_07_U:1	ok			entries=8
+jump AP_05_U -> AP_04_U:2	ok			entries=3
+jump AP_05_U -> AP_06_U:0	ok			entries=1
+jump AP_07_U -> AP_05_A:0	ok			entries=2
+jump AP_07_U -> AP_08_U:1	ok			entries=9
+jump AP_08_U -> AP_04_A:1	ok			entries=3
+jump AP_08_U -> AP_07_U:0	ok			entries=8
+jump AP_09_U -> AP_00_N:0	ok			entries=5
+jump AP_09_U -> AP_02_U:2	ok			entries=4
+jump AP_10_A -> AP_02_A:1	ok			entries=3
+jump AP_10_A -> AP_03_A:0	ok			entries=2
+jump AP_10_U -> AP_02_U:1	ok			entries=4
+jump AP_10_U -> AP_03_U:0	ok			entries=10
+jump AR_00_U -> AR_01_U:0	ok			entries=3
+jump AR_01_U -> AR_00_U:1	ok			entries=17
+jump AR_01_U -> AR_02_U:0	ok			entries=2
+jump AR_01_U -> AR_07_U:0	ok			entries=3
+jump AR_02_U -> AR_01_U:1	ok			entries=3
+jump AR_02_U -> AR_03_U:0	ok			entries=3
+jump AR_03_U -> AR_02_U:1	ok			entries=2
+jump AR_03_U -> AR_04_U:0	ok			entries=2
+jump AR_03_U -> AR_09_U:1	ok			entries=3
+jump AR_04_U -> AR_03_U:1	ok			entries=3
+jump AR_04_U -> AR_05_U:0	ok			entries=2
+jump AR_05_U -> AR_04_U:1	ok			entries=2
+jump AR_05_U -> AR_06_U:0	ok			entries=4
+jump AR_06_U -> AR_05_U:1	ok			entries=2
+jump AR_06_U -> AR_15_U:1	ok			entries=11
+jump AR_07_U -> AR_01_U:2	ok			entries=3
+jump AR_07_U -> AR_08_U:0	ok			entries=3
+jump AR_07_U -> AR_09_U:0	ok			entries=3
+jump AR_08_U -> AR_07_U:2	ok			entries=3
+jump AR_08_U -> AR_09_U:2	ok			entries=3
+jump AR_08_U -> AR_10_U:0	ok			entries=2
+jump AR_09_U -> AR_03_U:2	ok			entries=3
+jump AR_09_U -> AR_07_U:1	ok			entries=3
+jump AR_09_U -> AR_08_U:1	ok			entries=3
+jump AR_10_U -> AR_08_U:2	ok			entries=3
+jump AR_10_U -> AR_11_U:0	ok			entries=2
+jump AR_11_U -> AR_10_U:1	ok			entries=2
+jump AR_11_U -> AR_12_U:0	ok			entries=2
+jump AR_12_U -> AR_11_U:1	ok			entries=2
+jump AR_13_U -> AR_12_U:1	ok			entries=2
+jump AR_14_U -> AR_15_U:2	ok			entries=11
+jump AR_15_U -> AR_00_U:0	ok			entries=17
+jump AR_15_U -> AR_06_U:1	ok			entries=4
+jump AR_15_U -> AR_14_U:1	ok			entries=2
+jump AR_15_U -> GY_00_D:0	ok			entries=8
+jump AZ_00_U -> AZ_01_U:0	ok			entries=5
+jump AZ_00_U -> AZ_10_N:1	ok			entries=3
+jump AZ_01_U -> AZ_00_U:1	ok			entries=4
+jump AZ_02_U -> AZ_01_U:1	ok			entries=5
+jump AZ_02_U -> AZ_03_U:0	ok			entries=4
+jump AZ_02_U -> AZ_04_U:0	ok			entries=2
+jump AZ_02_U -> AZ_05_U:0	ok			entries=3
+jump AZ_03_U -> AZ_02_U:0	ok			entries=7
+jump AZ_03_U -> AZ_02_U:1	ok			entries=7
+jump AZ_04_U -> AZ_02_U:2	ok			entries=7
+jump AZ_05_U -> AZ_02_U:3	ok			entries=7
+jump AZ_05_U -> AZ_06_U:0	ok			entries=3
+jump AZ_06_U -> AZ_05_U:1	ok			entries=3
+jump AZ_07_U -> AZ_02_U:0	ok			entries=7
+jump AZ_07_U -> AZ_08_U:0	ok			entries=4
+jump AZ_08_U -> AZ_07_U:0	ok			entries=3
+jump AZ_08_U -> AZ_09_U:0	ok			entries=14
+jump AZ_09_D -> AZ_08_U:1	ok			entries=4
+jump AZ_09_U -> AZ_08_U:1	ok			entries=4
+jump AZ_10_N -> AZ_00_U:0	ok			entries=4
+jump BO_01_U -> BO_02_U:0	ok			entries=17
+jump BO_01_U -> SU_30_U:0	ok			entries=3
+jump BO_02_DB -> BO_02_U:0	ok			entries=17
+jump BO_02_U -> BO_01_U:0	ok			entries=4
+jump BO_02_U -> BO_03_U:0	ok			entries=1
+jump BO_02_U -> GY_00_D:0	ok			entries=8
+jump BO_03_U -> BO_02_U:1	ok			entries=17
+jump CA_00_U -> CA_01_U:0	ok			entries=12
+jump CA_01_U -> CA_00_U:1	ok			entries=9
+jump CA_01_U -> CA_02_U:0	ok			entries=33
+jump CA_01_U -> CA_03_U:0	ok			entries=16
+jump CA_02_U -> CA_01_U:2	ok			entries=12
+jump CA_03_U -> CA_01_U:1	ok			entries=12
+jump DB_00_U -> GY_00_DB:0	fails	target map GY_00_DB is not on the disc	FS	
+jump DC_01_U -> :0	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump DC_01_U -> OP_01_U:0	ok			entries=1
+jump DH_00_DB -> DH_02_U:0	ok			entries=23
+jump DH_00_U -> DH_01_U:1	ok			entries=24
+jump DH_00_U -> DH_07_U:0	ok			entries=1
+jump DH_01_U -> DH_02_U:1	ok			entries=23
+jump DH_02_U -> DH_01_U:0	ok			entries=24
+jump DH_02_U -> DH_02_U:0	ok			entries=23
+jump DH_02_U -> DH_03_U:0	ok			entries=6
+jump DH_02_U -> DH_06_U:1	ok			entries=6
+jump DH_03_U -> DH_02_U:2	ok			entries=23
+jump DH_03_U -> DH_04_U:0	ok			entries=22
+jump DH_03_U -> DH_05_U:0	ok			entries=24
+jump DH_04_U -> DH_03_U:1	ok			entries=6
+jump DH_05_U -> DH_03_U:2	ok			entries=6
+jump DH_06_U -> DH_02_U:0	ok			entries=23
+jump DH_07_U -> DH_00_U:0	ok			entries=54
+jump DO_00_U -> DO_01_U:0	ok			entries=11
+jump DO_00_U -> DO_05_U:1	ok			entries=6
+jump DO_01_U -> DO_00_U:1	ok			entries=9
+jump DO_01_U -> DO_02_U:0	ok			entries=18
+jump DO_02_U -> DO_01_U:1	ok			entries=11
+jump DO_02_U -> DO_06_U:0	ok			entries=8
+jump DO_04_U -> DO_05_U:0	ok			entries=6
+jump DO_05_U -> DO_00_U:0	ok			entries=9
+jump DO_05_U -> DO_04_U:1	ok			entries=13
+jump DO_06_U -> AR_15_U:0	ok			entries=11
+jump DO_06_U -> DO_02_U:5	ok			entries=18
+jump FI_00_DB -> :3	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump FI_00_DB -> FI_00_U:0	ok			entries=12
+jump FI_00_U -> FI_01_U:1	ok			entries=10
+jump FI_01_U -> FI_00_U:0	ok			entries=12
+jump FU_00_U -> FU_01_U:0	ok			entries=3
+jump FU_01_U -> FU_00_U:1	ok			entries=2
+jump FU_02_U -> FU_01_U:1	ok			entries=3
+jump FU_03_U -> FU_02_U:1	ok			entries=6
+jump FU_03_U -> FU_02_U:2	ok			entries=6
+jump FU_04_U -> FU_02_U:1	ok			entries=6
+jump FU_05_U -> FU_04_U:1	ok			entries=3
+jump FU_06_U -> FU_02_U:2	ok			entries=6
+jump FU_08_U -> FU_07_U:2	ok			entries=4
+jump FU_11_U -> FU_08_U:1	ok			entries=3
+jump FU_12_U -> FU_06_U:0	ok			entries=4
+jump FU_12_U -> FU_13_U:0	ok			entries=1
+jump FU_12_U -> FU_14_U:0	ok			entries=1
+jump FU_12_U -> FU_15_U:0	ok			entries=2
+jump FU_13_U -> FU_12_U:1	ok			entries=4
+jump FU_14_U -> FU_12_U:2	ok			entries=4
+jump FU_15_U -> FU_12_U:3	ok			entries=4
+jump FU_15_U -> FU_16_U:0	ok			entries=2
+jump FU_16_U -> FU_15_U:1	ok			entries=2
+jump FU_16_U -> FU_17_U:0	ok			entries=18
+jump FU_17_A -> FU_16_U:1	ok			entries=2
+jump FU_17_A -> FU_18_U:0	ok			entries=2
+jump FU_17_U -> :232	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump FU_17_U -> :3	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump FU_17_U -> FU_17_A:0	ok			entries=18
+jump FU_18_U -> :0	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump FU_18_U -> :1	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump GB_00_U -> :0	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump GB_00_U -> GB_01_U:0	ok			entries=10
+jump GB_01_U -> IK_00_U:0	ok			entries=7
+jump GB_DB_U -> GB_00_U:0	ok			entries=21
+jump GI_00_N -> :0	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump GI_00_N -> GI_00_U:0	ok			entries=17
+jump GI_00_U -> GI_01_U:0	ok			entries=24
+jump GI_00_U -> GI_02_U:0	ok			entries=3
+jump GI_01_N -> GI_00_N:1	ok			entries=17
+jump GI_01_U -> GI_00_U:1	ok			entries=17
+jump GI_02_N -> GI_00_N:2	ok			entries=17
+jump GI_02_N -> HUB_NA:0	ok			entries=1
+jump GI_02_U -> GI_00_U:2	ok			entries=17
+jump GI_03_N -> GI_00_N:1	ok			entries=17
+jump GI_03_N -> GI_03_R:0	ok			entries=37
+jump GI_04_R -> GI_03_N:1	ok			entries=24
+jump GT_00_DB -> %i45:1496347685	fails	target map %i45 is not on the disc	FS	
+jump GT_00_DB -> GT_10_U:0	ok			entries=5
+jump GT_01_U -> GT_02_U:0	ok			entries=2
+jump GT_01_U -> GT_03_U:0	ok			entries=10
+jump GT_01_U -> GT_04_U:0	ok			entries=17
+jump GT_01_U -> GT_07_U:0	ok			entries=3
+jump GT_01_U -> GT_08_U:0	ok			entries=3
+jump GT_01_U -> GT_09_U:0	ok			entries=3
+jump GT_01_U -> GT_10_U:1	ok			entries=5
+jump GT_02_U -> GT_01_U:3	ok			entries=9
+jump GT_03_U -> GT_01_U:2	ok			entries=9
+jump GT_04_U -> GT_01_U:1	ok			entries=9
+jump GT_04_U -> GT_04_U:0	ok			entries=17
+jump GT_04_U -> GT_05_U:0	ok			entries=3
+jump GT_04_U -> GT_06_U:0	ok			entries=2
+jump GT_05_U -> GT_04_U:2	ok			entries=17
+jump GT_06_U -> GT_04_U:1	ok			entries=17
+jump GT_07_U -> GT_01_U:4	ok			entries=9
+jump GT_08_U -> GT_01_U:5	ok			entries=9
+jump GT_09_U -> GT_01_U:6	ok			entries=9
+jump GT_10_U -> GT_01_U:0	ok			entries=9
+jump GY_00_D -> GY_01_U:0	ok			entries=4
+jump GY_00_D -> GY_02_U:0	ok			entries=4
+jump GY_00_D -> GY_03_U:0	ok			entries=5
+jump GY_01_U -> GY_00_D:3	ok			entries=8
+jump GY_01_U -> GY_08_U:0	ok			entries=2
+jump GY_01_U -> GY_09_U:0	ok			entries=2
+jump GY_01_U -> GY_10_U:0	ok			entries=2
+jump GY_02_U -> GY_00_D:1	ok			entries=8
+jump GY_02_U -> GY_11_U:0	ok			entries=2
+jump GY_02_U -> GY_12_U:0	ok			entries=2
+jump GY_02_U -> GY_13_U:0	ok			entries=2
+jump GY_03_U -> GY_00_D:2	ok			entries=8
+jump GY_04_U -> GY_03_U:1	ok			entries=5
+jump GY_04_U -> GY_05_U:0	ok			entries=3
+jump GY_05_F -> GY_04_U:1	ok			entries=3
+jump GY_05_U -> GY_04_U:1	ok			entries=3
+jump GY_06_U -> IN_00_U:0	ok			entries=84
+jump GY_07_U -> GY_06_U:1	ok			entries=2
+jump GY_08_U -> GY_01_U:1	ok			entries=4
+jump GY_09_U -> GY_01_U:2	ok			entries=4
+jump GY_10_U -> GY_01_U:3	ok			entries=4
+jump GY_11_U -> GY_02_U:1	ok			entries=4
+jump GY_12_U -> GY_02_U:2	ok			entries=4
+jump GY_13_U -> GY_02_U:3	ok			entries=4
+jump HE_00_N -> HE_04_N:0	ok			entries=11
+jump HE_00_N -> HE_06_N:0	ok			entries=13
+jump HE_00_N -> HE_28_N:0	ok			entries=3
+jump HE_00_N -> PE_00_N:4	ok			entries=38
+jump HE_00_U -> HE_04_U:0	ok			entries=9
+jump HE_00_U -> HE_06_U:0	ok			entries=10
+jump HE_01_N -> HE_02_N:4	ok			entries=14
+jump HE_01_N -> HE_03_N:0	ok			entries=7
+jump HE_01_N -> HE_04_N:4	ok			entries=11
+jump HE_01_N -> HE_05_N:0	ok			entries=8
+jump HE_01_N -> HE_12_N:0	ok			entries=2
+jump HE_02_N -> HE_01_N:0	ok			entries=12
+jump HE_02_N -> HE_17_N:0	ok			entries=7
+jump HE_02_N -> HE_18_N:0	ok			entries=8
+jump HE_02_N -> HE_19_N:0	ok			entries=8
+jump HE_02_N -> HE_28_N:1	ok			entries=3
+jump HE_03_N -> HE_01_N:1	ok			entries=12
+jump HE_03_N -> HE_13_N:0	ok			entries=8
+jump HE_03_N -> HE_13_N:1	ok			entries=8
+jump HE_04_N -> HE_00_N:2	ok			entries=18
+jump HE_04_N -> HE_01_N:3	ok			entries=12
+jump HE_04_N -> HE_16_N:0	ok			entries=18
+jump HE_04_N -> HE_20_N:0	ok			entries=2
+jump HE_04_N -> HE_21_N:0	ok			entries=4
+jump HE_04_U -> HE_00_U:2	ok			entries=11
+jump HE_04_U -> HE_16_U:0	ok			entries=9
+jump HE_04_U -> HE_20_U:0	ok			entries=3
+jump HE_04_U -> HE_21_U:0	ok			entries=4
+jump HE_05_N -> HE_01_N:4	ok			entries=12
+jump HE_05_N -> HE_07_N:1	ok			entries=13
+jump HE_05_N -> HE_09_N:0	ok			entries=16
+jump HE_06_N -> HE_00_N:3	ok			entries=18
+jump HE_06_N -> HE_07_N:0	ok			entries=13
+jump HE_06_N -> HE_25_N:0	ok			entries=6
+jump HE_06_N -> HE_26_N:0	ok			entries=5
+jump HE_06_U -> HE_00_U:3	ok			entries=11
+jump HE_06_U -> HE_07_U:0	ok			entries=17
+jump HE_06_U -> HE_25_U:0	ok			entries=5
+jump HE_06_U -> HE_26_U:0	ok			entries=4
+jump HE_07_N -> HE_05_N:2	ok			entries=8
+jump HE_07_N -> HE_06_N:4	ok			entries=13
+jump HE_07_N -> HE_15_N:0	ok			entries=4
+jump HE_07_N -> HE_22_N:0	ok			entries=4
+jump HE_07_N -> HE_23_N:0	ok			entries=4
+jump HE_07_U -> HE_06_U:4	ok			entries=10
+jump HE_07_U -> HE_07_U:6	ok			entries=17
+jump HE_07_U -> HE_23_U:0	ok			entries=4
+jump HE_08_N -> HE_07_N:5	ok			entries=13
+jump HE_08_N -> HE_10_N:0	ok			entries=1
+jump HE_09_N -> HE_05_N:1	ok			entries=8
+jump HE_09_N -> HE_11_N:0	ok			entries=13
+jump HE_09_N -> HE_11_N:3	ok			entries=13
+jump HE_10_N -> HE_08_N:1	ok			entries=4
+jump HE_10_N -> PE_03_U:0	ok			entries=17
+jump HE_11_M -> HE_11_N:0	ok			entries=13
+jump HE_11_N -> HE_09_N:1	ok			entries=16
+jump HE_11_N -> HE_09_N:6	ok			entries=16
+jump HE_12_N -> HE_01_N:2	ok			entries=12
+jump HE_12_O -> HE_01_N:2	ok			entries=12
+jump HE_12_O -> SK_09_U:1	ok			entries=2
+jump HE_13_N -> HE_03_N:1	ok			entries=7
+jump HE_13_N -> HE_03_N:2	ok			entries=7
+jump HE_13_N -> HE_14_N:0	ok			entries=12
+jump HE_14_N -> :0	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump HE_14_N -> :1	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump HE_15_N -> HE_07_N:4	ok			entries=13
+jump HE_16_N -> HE_04_N:1	ok			entries=11
+jump HE_16_U -> HE_04_U:1	ok			entries=9
+jump HE_17_N -> HE_02_N:3	ok			entries=14
+jump HE_18_N -> HE_02_N:2	ok			entries=14
+jump HE_19_N -> HE_02_N:1	ok			entries=14
+jump HE_20_N -> HE_04_N:3	ok			entries=11
+jump HE_20_U -> HE_04_U:3	ok			entries=9
+jump HE_21_N -> HE_04_N:2	ok			entries=11
+jump HE_21_U -> HE_04_U:2	ok			entries=9
+jump HE_22_N -> HE_07_N:3	ok			entries=13
+jump HE_23_N -> HE_07_N:2	ok			entries=13
+jump HE_23_U -> HE_07_U:2	ok			entries=17
+jump HE_24_N -> HE_06_N:3	ok			entries=13
+jump HE_25_N -> HE_06_N:2	ok			entries=13
+jump HE_25_U -> HE_06_U:2	ok			entries=10
+jump HE_26_N -> HE_06_N:1	ok			entries=13
+jump HE_26_U -> HE_06_U:1	ok			entries=10
+jump HE_28_N -> HE_00_N:1	ok			entries=18
+jump HE_28_N -> HE_02_N:0	ok			entries=14
+jump HUB_NA -> WE_04_U:10	ok			entries=11
+jump IF_00_U -> IF_01_U:0	ok			entries=3
+jump IF_00_U -> IF_03_U:0	ok			entries=10
+jump IF_00_U -> IF_04_U:0	ok			entries=5
+jump IF_00_U -> IF_06_U:0	ok			entries=4
+jump IF_00_U -> IF_22_U:3	ok			entries=9
+jump IF_01_U -> IF_00_U:1	ok			entries=5
+jump IF_01_U -> IF_02_U:0	ok			entries=6
+jump IF_02_U -> IF_01_U:1	ok			entries=3
+jump IF_02_U -> IF_03_U:0	ok			entries=10
+jump IF_02_U -> IF_03_U:1	ok			entries=10
+jump IF_03_U -> IF_00_U:2	ok			entries=5
+jump IF_03_U -> IF_02_U:1	ok			entries=6
+jump IF_03_U -> IF_04_U:2	ok			entries=5
+jump IF_03_U -> IF_23_U:0	ok			entries=8
+jump IF_04_U -> IF_00_U:3	ok			entries=5
+jump IF_04_U -> IF_03_U:0	ok			entries=10
+jump IF_04_U -> IF_03_U:2	ok			entries=10
+jump IF_04_U -> IF_05_U:0	ok			entries=5
+jump IF_05_U -> IF_04_U:0	ok			entries=5
+jump IF_05_U -> IF_04_U:1	ok			entries=5
+jump IF_06_U -> IF_00_U:0	ok			entries=5
+jump IF_06_U -> IF_00_U:4	ok			entries=5
+jump IF_11_U -> IF_11_U:0	ok			entries=24
+jump IF_11_U -> IF_12_U:0	ok			entries=3
+jump IF_11_U -> IF_14_U:0	ok			entries=3
+jump IF_11_U -> IF_16_U:0	ok			entries=4
+jump IF_12_U -> IF_11_U:3	ok			entries=24
+jump IF_12_U -> IF_13_U:0	ok			entries=3
+jump IF_12_U -> IF_18_U:1	ok			entries=3
+jump IF_13_U -> IF_12_U:2	ok			entries=3
+jump IF_13_U -> IF_19_U:1	ok			entries=4
+jump IF_13_U -> IF_22_U:0	ok			entries=9
+jump IF_14_U -> IF_11_U:1	ok			entries=24
+jump IF_14_U -> IF_15_U:0	ok			entries=7
+jump IF_14_U -> IF_20_U:1	ok			entries=5
+jump IF_15_U -> IF_14_U:2	ok			entries=3
+jump IF_15_U -> IF_21_U:1	ok			entries=4
+jump IF_15_U -> IF_22_U:2	ok			entries=9
+jump IF_16_U -> IF_11_U:2	ok			entries=24
+jump IF_16_U -> IF_17_U:0	ok			entries=5
+jump IF_16_U -> IF_18_U:0	ok			entries=3
+jump IF_16_U -> IF_20_U:0	ok			entries=5
+jump IF_17_U -> IF_16_U:3	ok			entries=4
+jump IF_17_U -> IF_19_U:0	ok			entries=4
+jump IF_17_U -> IF_20_U:2	ok			entries=5
+jump IF_17_U -> IF_21_U:2	ok			entries=4
+jump IF_17_U -> IF_22_U:1	ok			entries=9
+jump IF_18_U -> IF_12_U:1	ok			entries=3
+jump IF_18_U -> IF_16_U:2	ok			entries=4
+jump IF_19_U -> IF_13_U:1	ok			entries=3
+jump IF_19_U -> IF_17_U:2	ok			entries=5
+jump IF_20_U -> IF_14_U:1	ok			entries=3
+jump IF_20_U -> IF_16_U:1	ok			entries=4
+jump IF_20_U -> IF_17_U:1	ok			entries=5
+jump IF_20_U -> IF_21_U:0	ok			entries=4
+jump IF_21_U -> IF_15_U:1	ok			entries=7
+jump IF_21_U -> IF_17_U:3	ok			entries=5
+jump IF_21_U -> IF_20_U:3	ok			entries=5
+jump IF_22_U -> IF_00_U:0	ok			entries=5
+jump IF_22_U -> IF_13_U:2	ok			entries=3
+jump IF_22_U -> IF_15_U:2	ok			entries=7
+jump IF_22_U -> IF_17_U:4	ok			entries=5
+jump IF_23_D -> IF_03_U:3	ok			entries=10
+jump IF_23_D -> IF_24_U:0	ok			entries=3
+jump IF_24_U -> IF_23_D:1	ok			entries=8
+jump IF_24_U -> IF_25_U:0	ok			entries=1
+jump IF_25_U -> :1	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump IK_00_U -> IK_00_U:0	ok			entries=7
+jump IK_00_U -> IK_01_U:0	ok			entries=7
+jump IK_00_U -> IK_02_U:0	ok			entries=6
+jump IK_01_U -> IK_00_U:0	ok			entries=7
+jump IK_01_U -> IK_00_U:2	ok			entries=7
+jump IK_01_U -> IK_03_U:0	ok			entries=1
+jump IK_02_U -> IK_00_U:1	ok			entries=7
+jump IK_03_U -> :0	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump IK_DB_U -> IK_00_U:0	ok			entries=7
+jump IN_00_DB -> :0	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump IN_00_DB -> :1	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump IN_00_DB -> IN_06_U:0	ok			entries=74
+jump IN_00_U -> IN_00_U:7	ok			entries=84
+jump IN_00_U -> IN_01_U:0	ok			entries=61
+jump IN_00_U -> IN_02_U:0	ok			entries=38
+jump IN_01_U -> IN_00_U:1	ok			entries=84
+jump IN_02_U -> IN_00_U:2	ok			entries=84
+jump IN_02_U -> IN_02_U:37	ok			entries=38
+jump IN_02_U -> IN_03_U:0	ok			entries=23
+jump IN_03_U -> :0	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump IN_03_U -> :1	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump IN_04_U -> IN_01_U:1	ok			entries=61
+jump IN_04_U -> IN_05_U:0	ok			entries=61
+jump IN_04_U -> IN_06_U:0	ok			entries=74
+jump IN_05_U -> IN_04_U:2	ok			entries=60
+jump IN_05_U -> IN_06_U:1	ok			entries=74
+jump IN_06_U -> IN_04_U:1	ok			entries=60
+jump IN_06_U -> IN_06_U:5	ok			entries=74
+jump KA_00_U -> KA_05_U:1	ok			entries=19
+jump KA_01_U -> :1	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump KA_01_U -> IN_02_U:0	ok			entries=38
+jump KA_02_U -> KA_02_U:13	ok			entries=20
+jump KA_02_U -> KA_03_U:2	ok			entries=30
+jump KA_03_U -> KA_02_U:0	ok			entries=20
+jump KA_03_U -> KA_04_U:0	ok			entries=23
+jump KA_03_U -> KA_07_U:0	ok			entries=26
+jump KA_03_U -> KA_09_U:1	ok			entries=22
+jump KA_04_U -> KA_03_U:3	ok			entries=30
+jump KA_04_U -> KA_05_U:0	ok			entries=19
+jump KA_04_U -> KA_06_U:0	ok			entries=31
+jump KA_05_U -> KA_00_U:0	ok			entries=26
+jump KA_05_U -> KA_04_U:1	ok			entries=23
+jump KA_05_U -> KA_06_U:0	ok			entries=31
+jump KA_05_U -> KA_08_U:0	ok			entries=22
+jump KA_06_U -> KA_01_U:0	ok			entries=1
+jump KA_06_U -> KA_03_U:0	ok			entries=30
+jump KA_06_U -> KA_04_U:0	ok			entries=23
+jump KA_06_U -> KA_05_U:3	ok			entries=19
+jump KA_07_U -> KA_03_U:1	ok			entries=30
+jump KA_08_U -> KA_05_U:2	ok			entries=19
+jump KA_09_U -> KA_03_U:0	ok			entries=30
+jump KA_09_U -> KA_06_U:0	ok			entries=31
+jump KT_00_DB -> KT_00_U:0	ok			entries=2
+jump KT_00_U -> KT_01_U:0	ok			entries=23
+jump KT_01_U -> KT_00_U:1	ok			entries=2
+jump KT_01_U -> KT_02_U:0	ok			entries=11
+jump KT_02_U -> KT_01_U:1	ok			entries=23
+jump KT_02_U -> KT_03_U:0	ok			entries=23
+jump KT_02_U -> ZI_00_U:0	ok			entries=64
+jump KT_03_U -> KT_02_U:1	ok			entries=11
+jump MI_00_U -> MI_01_U:0	ok			entries=4
+jump MI_01_U -> MI_00_U:1	ok			entries=5
+jump MI_01_U -> MI_02_U:0	ok			entries=30
+jump MI_02_U -> MI_01_U:1	ok			entries=4
+jump MI_02_U -> MI_02_U:0	ok			entries=30
+jump MI_02_U -> MI_03_U:0	ok			entries=6
+jump MI_02_U -> MI_11_U:0	ok			entries=8
+jump MI_03_U -> MI_02_U:2	ok			entries=30
+jump MI_03_U -> MI_04_U:0	ok			entries=5
+jump MI_03_U -> MI_05_U:0	ok			entries=8
+jump MI_04_U -> MI_03_U:1	ok			entries=6
+jump MI_04_U -> MI_06_U:0	ok			entries=6
+jump MI_05_U -> MI_03_U:2	ok			entries=6
+jump MI_05_U -> MI_14_U:1	ok			entries=9
+jump MI_06_U -> MI_04_U:1	ok			entries=5
+jump MI_06_U -> MI_07_U:0	ok			entries=7
+jump MI_07_U -> MI_06_U:2	ok			entries=6
+jump MI_09_U -> MI_10_U:0	ok			entries=6
+jump MI_10_U -> MI_09_U:0	ok			entries=4
+jump MI_10_U -> MI_11_U:1	ok			entries=8
+jump MI_10_U -> MI_12_U:0	ok			entries=4
+jump MI_11_U -> MI_10_U:1	ok			entries=6
+jump MI_11_U -> MI_13_U:0	ok			entries=4
+jump MI_12_U -> MI_10_U:2	ok			entries=6
+jump MI_13_U -> MI_11_U:2	ok			entries=8
+jump MI_13_U -> MI_14_U:0	ok			entries=9
+jump MI_14_U -> MI_05_U:2	ok			entries=8
+jump MI_14_U -> MI_13_U:2	ok			entries=4
+jump MI_14_U -> MI_15_U:25	ok			entries=30
+jump MI_15_U -> MI_14_U:2	ok			entries=9
+jump MI_15_U -> MI_15_U:1	ok			entries=30
+jump MI_15_U -> MI_16_U:0	ok			entries=13
+jump MI_16_U -> MI_15_U:2	ok			entries=30
+jump MI_17_U -> MI_11_U:3	ok			entries=8
+jump MS_00_DB -> :3	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump MS_00_DB -> MS_00_U:0	ok			entries=2
+jump MS_00_U -> MS_01_U:0	ok			entries=4
+jump MS_01_U -> MS_00_U:0	ok			entries=2
+jump MS_01_U -> MS_02_U:0	ok			entries=4
+jump MS_02_U -> MS_01_U:1	ok			entries=4
+jump MS_02_U -> MS_03_U:1	ok			entries=3
+jump MS_03_U -> MS_02_U:1	ok			entries=4
+jump MS_03_U -> MS_04_U:0	ok			entries=3
+jump MS_04_U -> MS_03_U:0	ok			entries=3
+jump MS_05_U -> MS_04_U:1	ok			entries=3
+jump MS_06_U -> MS_07_U:0	ok			entries=3
+jump MS_07_U -> MS_06_U:0	ok			entries=2
+jump MS_07_U -> MS_08_U:0	ok			entries=3
+jump MS_08_U -> MS_07_U:1	ok			entries=3
+jump MS_08_U -> MS_09_U:1	ok			entries=4
+jump MS_09_U -> MS_08_U:1	ok			entries=3
+jump MS_09_U -> MS_10_U:0	ok			entries=2
+jump MS_10_U -> MS_09_U:0	ok			entries=4
+jump MS_24_U -> MS_49_U:0	ok			entries=5
+jump MS_25_U -> MS_26_U:0	ok			entries=3
+jump MS_26_U -> MS_25_U:1	ok			entries=2
+jump MS_26_U -> MS_27_U:0	ok			entries=6
+jump MS_27_U -> MS_26_U:1	ok			entries=3
+jump MS_27_U -> MS_29_U:0	ok			entries=7
+jump MS_29_U -> MS_27_U:1	ok			entries=6
+jump MS_29_U -> MS_30_U:0	ok			entries=4
+jump MS_30_U -> MS_29_U:1	ok			entries=7
+jump MS_30_U -> MS_31_U:0	ok			entries=4
+jump MS_31_U -> MS_24_U:0	ok			entries=6
+jump MS_31_U -> MS_30_U:1	ok			entries=4
+jump MS_35_U -> MS_29_U:2	ok			entries=7
+jump MS_35_U -> MS_36_U:1	ok			entries=3
+jump MS_35_U -> MS_46_U:2	ok			entries=6
+jump MS_36_U -> MS_35_U:0	ok			entries=6
+jump MS_36_U -> MS_37_U:0	ok			entries=5
+jump MS_37_D -> MS_36_U:0	ok			entries=3
+jump MS_37_D -> MS_38_U:1	ok			entries=2
+jump MS_37_U -> MS_36_U:0	ok			entries=3
+jump MS_38_U -> MS_37_U:1	ok			entries=5
+jump MS_38_U -> MS_39_U:0	ok			entries=2
+jump MS_39_U -> MS_38_U:0	ok			entries=2
+jump MS_42_U -> MS_43_U:1	ok			entries=3
+jump MS_43_U -> MS_42_U:0	ok			entries=4
+jump MS_43_U -> MS_46_U:1	ok			entries=6
+jump MS_46_U -> MS_43_U:0	ok			entries=3
+jump MS_46_U -> MS_47_U:1	ok			entries=4
+jump MS_47_U -> MS_46_U:0	ok			entries=6
+jump MS_47_U -> MS_48_U:0	ok			entries=7
+jump MS_48_U -> MS_37_U:2	ok			entries=5
+jump MS_49_U -> MS_48_U:2	ok			entries=7
+jump MU_00_DB -> :3	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump MU_00_DB -> MU_00_U:0	ok			entries=6
+jump ND_00_U -> ND_01_U:0	ok			entries=5
+jump ND_00_U -> WE_00_U:2	ok			entries=23
+jump ND_01_U -> ND_00_U:1	ok			entries=2
+jump ND_01_U -> ND_02_U:0	ok			entries=2
+jump ND_02_U -> ND_01_U:1	ok			entries=5
+jump ND_02_U -> ND_03_U:0	ok			entries=2
+jump ND_03_U -> ND_02_U:1	ok			entries=2
+jump ND_03_U -> ND_04_U:0	ok			entries=4
+jump ND_04_A -> ND_03_U:1	ok			entries=2
+jump ND_04_A -> ND_05_U:0	ok			entries=4
+jump ND_04_A -> ND_20_U:0	ok			entries=5
+jump ND_04_U -> ND_03_U:1	ok			entries=2
+jump ND_04_U -> ND_05_U:0	ok			entries=4
+jump ND_05_U -> ND_04_U:1	ok			entries=4
+jump ND_05_U -> ND_06_U:0	ok			entries=2
+jump ND_06_U -> ND_05_U:1	ok			entries=4
+jump ND_06_U -> ND_07_U:0	ok			entries=2
+jump ND_07_U -> ND_06_U:1	ok			entries=2
+jump ND_07_U -> ND_09_U:0	ok			entries=7
+jump ND_08_U -> ND_09_U:0	ok			entries=7
+jump ND_08_U -> ND_09_U:1	ok			entries=7
+jump ND_08_U -> ND_14_U:0	ok			entries=10
+jump ND_09_U -> ND_07_U:1	ok			entries=2
+jump ND_09_U -> ND_08_U:0	ok			entries=7
+jump ND_14_U -> ND_08_U:1	ok			entries=7
+jump ND_20_U -> ND_04_A:2	ok			entries=4
+jump ND_20_U -> ND_21_U:0	ok			entries=4
+jump ND_20_U -> ND_21_U:1	ok			entries=4
+jump ND_20_U -> ND_21_U:2	ok			entries=4
+jump ND_21_U -> ND_20_U:1	ok			entries=5
+jump ND_21_U -> ND_20_U:2	ok			entries=5
+jump ND_21_U -> ND_20_U:3	ok			entries=5
+jump ND_21_U -> ND_22_U:0	ok			entries=16
+jump ND_22_U -> ND_21_U:3	ok			entries=4
+jump PA_00_DB -> BO_02_U:0	ok			entries=17
+jump PA_00_DB -> PA_05_U:0	ok			entries=1
+jump PA_01_U -> PA_04_U:0	ok			entries=12
+jump PA_01_U -> SU_20_U:2	ok			entries=6
+jump PA_02_A -> PA_05_U:0	ok			entries=1
+jump PA_02_A -> SU_11_U:1	ok			entries=3
+jump PA_02_U -> PA_05_U:0	ok			entries=1
+jump PA_02_U -> SU_11_U:1	ok			entries=3
+jump PA_03_U -> PA_06_U:0	ok			entries=3
+jump PA_03_U -> SM_20_U:0	ok			entries=30
+jump PA_03_U -> SU_22_U:1	ok			entries=24
+jump PA_04_U -> PA_01_U:1	ok			entries=44
+jump PA_05_U -> PA_02_U:1	ok			entries=6
+jump PA_06_U -> PA_03_U:1	ok			entries=37
+jump PA_06_U -> PA_07_U:0	ok			entries=2
+jump PA_06_U -> PA_08_U:0	ok			entries=13
+jump PA_07_U -> PA_06_U:1	ok			entries=3
+jump PA_08_U -> PA_06_U:2	ok			entries=3
+jump PE_00_N -> :0	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump PE_00_N -> :1	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump PE_00_N -> HE_07_U:0	ok			entries=17
+jump PE_01_N -> PE_00_N:0	ok			entries=38
+jump PE_01_N -> PE_02_N:0	ok			entries=36
+jump PE_01_N -> PE_03_U:0	ok			entries=17
+jump PE_02_N -> GY_00_D:0	ok			entries=8
+jump PE_02_N -> PE_01_N:0	ok			entries=31
+jump PE_02_N -> PE_01_N:1	ok			entries=31
+jump PE_02_N -> PE_05_N:0	ok			entries=10
+jump PE_02_N -> PE_05_N:2	ok			entries=10
+jump PE_03_U -> PE_01_N:0	ok			entries=31
+jump PE_03_U -> PE_03_U:0	ok			entries=17
+jump PE_03_U -> PE_04_N:0	ok			entries=3
+jump PE_04_N -> PE_03_U:5	ok			entries=17
+jump PE_05_N -> PE_02_N:11	ok			entries=36
+jump QG_00_U -> QG_01_U:0	ok			entries=4
+jump QG_00_U -> QG_02_U:1	ok			entries=3
+jump QG_00_U -> QG_10_U:0	ok			entries=2
+jump QG_00_U -> QG_14_U:1	ok			entries=41
+jump QG_01_U -> QG_00_U:2	ok			entries=8
+jump QG_02_U -> QG_00_U:3	ok			entries=8
+jump QG_02_U -> QG_04_U:0	ok			entries=3
+jump QG_03_U -> QG_13_U:3	ok			entries=4
+jump QG_04_U -> QG_02_U:0	ok			entries=3
+jump QG_04_U -> QG_06_U:1	ok			entries=2
+jump QG_05_U -> QG_04_U:1	ok			entries=3
+jump QG_06_U -> QG_04_U:2	ok			entries=3
+jump QG_06_U -> QG_13_U:2	ok			entries=4
+jump QG_07_U -> QG_08_U:1	ok			entries=4
+jump QG_07_U -> QG_13_U:1	ok			entries=4
+jump QG_08_U -> QG_07_U:0	ok			entries=2
+jump QG_08_U -> QG_09_U:0	ok			entries=9
+jump QG_08_U -> QG_10_U:1	ok			entries=2
+jump QG_09_U -> QG_08_U:0	ok			entries=4
+jump QG_10_U -> QG_00_U:1	ok			entries=8
+jump QG_10_U -> QG_08_U:2	ok			entries=4
+jump QG_11_U -> QG_11_U:2	ok			entries=4
+jump QG_11_U -> QG_12_U:0	ok			entries=13
+jump QG_11_U -> QG_13_U:0	ok			entries=4
+jump QG_12_U -> QG_11_U:1	ok			entries=4
+jump QG_13_U -> QG_06_U:0	ok			entries=2
+jump QG_13_U -> QG_07_U:1	ok			entries=2
+jump QG_13_U -> QG_11_U:0	ok			entries=4
+jump QG_14_U -> GY_00_D:0	ok			entries=8
+jump QG_14_U -> QG_00_U:0	ok			entries=8
+jump QG_DB_U -> QG_00_U:0	ok			entries=8
+jump RE_00_U -> RE_03_N:3	ok			entries=36
+jump RE_01_U -> RE_03_N:2	ok			entries=36
+jump RE_02_U -> RE_03_N:1	ok			entries=36
+jump RE_03_N -> RE_00_U:0	ok			entries=16
+jump RE_03_N -> RE_01_U:0	ok			entries=13
+jump RE_03_N -> RE_02_U:0	ok			entries=6
+jump RE_03_N -> RE_03_N:4	ok			entries=36
+jump RE_03_U -> :0	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump RE_03_U -> :1	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump RE_03_U -> RE_00_U:10	ok			entries=16
+jump RO_00_U -> RO_01_U:0	ok			entries=3
+jump RO_00_U -> RO_02_U:0	ok			entries=2
+jump RO_01_U -> RO_00_U:1	ok			entries=3
+jump RO_01_U -> RO_03_U:0	ok			entries=1
+jump RO_02_U -> RO_00_U:2	ok			entries=3
+jump RO_02_U -> RO_04_U:0	ok			entries=2
+jump RO_03_U -> RO_01_U:1	ok			entries=3
+jump RO_04_U -> RO_02_U:1	ok			entries=2
+jump RO_04_U -> RO_05_U:0	ok			entries=4
+jump RO_05_U -> RO_04_U:1	ok			entries=2
+jump RO_05_U -> RO_06_U:0	ok			entries=2
+jump RO_05_U -> RO_06_U:1	ok			entries=2
+jump RO_05_U -> RO_07_U:0	ok			entries=2
+jump RO_06_U -> RO_05_U:1	ok			entries=4
+jump RO_06_U -> RO_05_U:2	ok			entries=4
+jump RO_07_U -> RO_05_U:3	ok			entries=4
+jump RO_07_U -> RO_08_U:1	ok			entries=3
+jump RO_08_U -> RO_07_U:1	ok			entries=2
+jump RO_08_U -> RO_09_U:0	ok			entries=3
+jump RO_09_U -> RO_08_U:0	ok			entries=3
+jump RO_09_U -> RO_10_U:0	ok			entries=1
+jump RO_09_U -> RO_11_U:0	ok			entries=3
+jump RO_10_U -> :1	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump RO_10_U -> RO_09_U:1	ok			entries=3
+jump RO_11_U -> RO_09_U:2	ok			entries=3
+jump RO_11_U -> RO_12_U:0	ok			entries=1
+jump RO_11_U -> RO_13_U:0	ok			entries=3
+jump RO_12_U -> RO_11_U:1	ok			entries=3
+jump RO_13_U -> :1	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump RO_13_U -> RO_11_U:2	ok			entries=3
+jump RO_14_U -> RO_13_U:1	ok			entries=3
+jump RO_14_U -> RO_15_U:0	ok			entries=2
+jump RO_15_U -> RO_14_U:1	ok			entries=2
+jump RO_15_U -> RO_16_U:0	ok			entries=3
+jump RO_16_U -> RO_15_U:1	ok			entries=2
+jump RO_16_U -> RO_17_U:0	ok			entries=3
+jump RO_16_U -> RO_21_U:1	ok			entries=3
+jump RO_17_U -> RO_16_U:1	ok			entries=3
+jump RO_17_U -> RO_18_U:0	ok			entries=3
+jump RO_17_U -> RO_19_U:1	ok			entries=2
+jump RO_18_U -> RO_17_U:1	ok			entries=3
+jump RO_19_U -> RO_17_U:2	ok			entries=3
+jump RO_19_U -> RO_20_U:1	ok			entries=6
+jump RO_20_U -> RO_19_U:0	ok			entries=2
+jump RO_21_U -> RO_13_U:2	ok			entries=3
+jump RO_21_U -> RO_16_U:2	ok			entries=3
+jump RU_00_DB -> RU_04_N:0	ok			entries=9
+jump RU_00_U -> RU_04_U:1	ok			entries=47
+jump RU_01_U -> RU_05_U:1	ok			entries=20
+jump RU_02_U -> RU_05_U:2	ok			entries=20
+jump RU_03_N -> RU_04_N:0	ok			entries=9
+jump RU_03_N -> RU_05_N:0	ok			entries=35
+jump RU_03_U -> RU_04_U:0	ok			entries=47
+jump RU_03_U -> RU_05_U:0	ok			entries=20
+jump RU_04_N -> RU_03_N:1	ok			entries=7
+jump RU_04_U -> RU_00_U:0	ok			entries=32
+jump RU_04_U -> RU_03_U:1	ok			entries=8
+jump RU_05_N -> RU_01_U:0	ok			entries=27
+jump RU_05_N -> RU_02_U:0	ok			entries=1
+jump RU_05_N -> RU_03_N:2	ok			entries=7
+jump RU_05_U -> RU_01_U:0	ok			entries=27
+jump RU_05_U -> RU_02_U:0	ok			entries=1
+jump RU_05_U -> RU_03_U:2	ok			entries=8
+jump RU_05_U -> RU_05_U:17	ok			entries=20
+jump RU_05_U -> RU_06_U:0	ok			entries=3
+jump RU_06_N -> :0	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump RU_06_N -> :1	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump RU_06_U -> RU_05_U:3	ok			entries=20
+jump SA_00_U -> GY_00_D:0	ok			entries=8
+jump SA_00_U -> SA_03_U:0	ok			entries=3
+jump SA_00_U -> SA_05_U:0	ok			entries=6
+jump SA_01_N -> SA_00_U:0	ok			entries=20
+jump SA_01_U -> :0	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump SA_01_U -> SA_01_N:0	ok			entries=5
+jump SA_02_U -> SA_01_U:2	ok			entries=23
+jump SA_03_U -> SA_00_U:1	ok			entries=20
+jump SA_03_U -> SA_04_U:0	ok			entries=2
+jump SA_03_U -> SA_05_U:0	ok			entries=6
+jump SA_04_U -> SA_03_U:1	ok			entries=3
+jump SA_05_U -> SA_00_U:0	ok			entries=20
+jump SA_05_U -> SA_03_U:2	ok			entries=3
+jump SE_01_9 -> SE_15_U:1	ok			entries=2
+jump SE_09_U -> SE_09_U:0	ok			entries=4
+jump SE_10_U -> SE_11_U:1	ok			entries=2
+jump SE_11_U -> SE_10_U:1	ok			entries=2
+jump SE_15_U -> SE_01_9:0	ok			entries=3
+jump SH_00_U -> SH_01_U:0	ok			entries=3
+jump SH_01_U -> SH_00_U:0	ok			entries=9
+jump SH_01_U -> SH_00_U:1	ok			entries=9
+jump SH_02_U -> SH_00_U:0	ok			entries=9
+jump SH_02_U -> SH_00_U:1	ok			entries=9
+jump SH_03_U -> SH_00_U:1	ok			entries=9
+jump SH_03_U -> SH_04_U:0	ok			entries=15
+jump SH_04_U -> FI_00_U:0	ok			entries=12
+jump SH_04_U -> SH_00_U:1	ok			entries=9
+jump SK_00_U -> PE_05_N:0	ok			entries=10
+jump SK_00_U -> SK_00_U:0	ok			entries=12
+jump SK_00_U -> SK_01_U:0	ok			entries=7
+jump SK_01_U -> SK_00_U:1	ok			entries=12
+jump SK_01_U -> SK_02_U:0	ok			entries=3
+jump SK_01_U -> SK_06_U:0	ok			entries=8
+jump SK_02_U -> SK_01_U:1	ok			entries=7
+jump SK_02_U -> SK_11_U:2	ok			entries=4
+jump SK_03_U -> SK_11_U:0	ok			entries=4
+jump SK_04_U -> SK_05_U:1	ok			entries=3
+jump SK_04_U -> SK_06_U:1	ok			entries=8
+jump SK_04_U -> SK_09_U:0	ok			entries=2
+jump SK_05_U -> SK_04_U:1	ok			entries=8
+jump SK_05_U -> SK_11_U:1	ok			entries=4
+jump SK_06_U -> SK_01_U:3	ok			entries=7
+jump SK_06_U -> SK_04_U:2	ok			entries=8
+jump SK_06_U -> SK_10_U:2	ok			entries=5
+jump SK_07_U -> SK_08_U:0	ok			entries=3
+jump SK_07_U -> SK_10_U:0	ok			entries=5
+jump SK_08_U -> SK_07_U:2	ok			entries=4
+jump SK_08_U -> SK_10_U:1	ok			entries=5
+jump SK_09_U -> HE_12_O:0	ok			entries=4
+jump SK_09_U -> SK_04_U:0	ok			entries=8
+jump SK_10_U -> SK_06_U:2	ok			entries=8
+jump SK_10_U -> SK_07_U:0	ok			entries=4
+jump SK_10_U -> SK_08_U:1	ok			entries=3
+jump SK_11_U -> SK_02_U:1	ok			entries=3
+jump SK_11_U -> SK_03_U:0	ok			entries=6
+jump SK_11_U -> SK_05_U:0	ok			entries=3
+jump SK_DB_U -> SK_00_U:0	ok			entries=12
+jump SM_00_U -> SM_01_U:0	ok			entries=2
+jump SM_01_U -> SM_00_U:1	ok			entries=19
+jump SM_01_U -> SM_02_U:0	ok			entries=2
+jump SM_02_U -> SM_01_U:1	ok			entries=2
+jump SM_02_U -> SM_03_U:0	ok			entries=4
+jump SM_03_U -> SM_02_U:1	ok			entries=2
+jump SM_03_U -> SM_04_U:0	ok			entries=6
+jump SM_03_U -> SM_05_U:0	ok			entries=2
+jump SM_04_O -> SM_03_U:1	ok			entries=4
+jump SM_04_O -> SM_30_U:0	ok			entries=9
+jump SM_04_U -> SM_03_U:1	ok			entries=4
+jump SM_05_U -> SM_03_U:2	ok			entries=4
+jump SM_06_U -> SM_07_U:11	ok			entries=12
+jump SM_06_U -> SM_17_U:0	ok			entries=24
+jump SM_06_U -> SM_24_U:1	ok			entries=2
+jump SM_07_U -> SM_06_U:1	ok			entries=5
+jump SM_07_U -> SM_23_U:1	ok			entries=3
+jump SM_08_U -> SM_09_U:0	ok			entries=3
+jump SM_09_B -> SM_10_U:1	ok			entries=7
+jump SM_09_B -> SM_19_U:0	ok			entries=3
+jump SM_09_U -> SM_08_U:1	ok			entries=8
+jump SM_09_U -> SM_10_U:1	ok			entries=7
+jump SM_09_U -> SM_19_U:0	ok			entries=3
+jump SM_10_U -> SM_09_U:1	ok			entries=3
+jump SM_10_U -> SM_11_U:2	ok			entries=33
+jump SM_11_U -> SM_03_U:3	ok			entries=4
+jump SM_11_U -> SM_10_U:2	ok			entries=7
+jump SM_11_U -> SM_12_U:0	ok			entries=90
+jump SM_11_U -> SM_15_U:0	ok			entries=9
+jump SM_11_U -> SM_22_U:0	ok			entries=2
+jump SM_11_U -> SM_23_U:0	ok			entries=3
+jump SM_12_U -> SM_11_U:3	ok			entries=33
+jump SM_12_U -> SM_13_U:0	ok			entries=3
+jump SM_13_B -> SM_14_U:0	ok			entries=115
+jump SM_13_U -> SM_12_U:1	ok			entries=90
+jump SM_13_U -> SM_14_U:0	ok			entries=115
+jump SM_14_U -> SM_13_U:1	ok			entries=3
+jump SM_14_U -> SM_16_U:0	ok			entries=4
+jump SM_16_U -> SM_14_U:1	ok			entries=115
+jump SM_16_U -> SM_17_U:0	ok			entries=24
+jump SM_17_U -> SM_07_U:10	ok			entries=12
+jump SM_17_U -> SM_16_U:1	ok			entries=4
+jump SM_18_U -> SM_22_U:1	ok			entries=2
+jump SM_19_U -> SM_09_U:2	ok			entries=3
+jump SM_21_U -> SM_00_U:2	ok			entries=19
+jump SM_21_U -> SM_08_U:0	ok			entries=8
+jump SM_22_U -> SM_11_U:5	ok			entries=33
+jump SM_22_U -> SM_18_U:0	ok			entries=2
+jump SM_23_U -> SM_07_U:10	ok			entries=12
+jump SM_23_U -> SM_11_U:1	ok			entries=33
+jump SM_24_U -> SM_05_U:1	ok			entries=2
+jump SM_24_U -> SM_06_U:0	ok			entries=5
+jump SM_30_U -> SM_04_O:1	ok			entries=6
+jump SM_31_U -> SM_30_U:1	ok			entries=9
+jump SM_32_U -> SM_31_U:1	ok			entries=6
+jump SM_32_U -> SM_33_U:0	ok			entries=9
+jump SM_33_U -> SM_32_U:1	ok			entries=3
+jump SO_00_DB -> :3	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump SO_00_DB -> SO_00_U:0	ok			entries=1
+jump SO_00_U -> GT_10_U:0	ok			entries=5
+jump SU_00_A -> SU_01_U:0	ok			entries=5
+jump SU_00_A -> SU_31_U:1	ok			entries=2
+jump SU_00_A -> SU_40_U:0	ok			entries=9
+jump SU_00_U -> SU_01_U:0	ok			entries=5
+jump SU_00_U -> SU_31_U:1	ok			entries=2
+jump SU_01_U -> SU_00_U:1	ok			entries=7
+jump SU_01_U -> SU_02_U:0	ok			entries=2
+jump SU_01_U -> SU_04_U:0	ok			entries=4
+jump SU_01_U -> SU_06_U:0	ok			entries=1
+jump SU_01_U -> SU_08_U:0	ok			entries=4
+jump SU_02_U -> SU_01_U:3	ok			entries=5
+jump SU_02_U -> SU_04_U:2	ok			entries=4
+jump SU_03_U -> SU_05_U:0	ok			entries=1
+jump SU_03_U -> SU_10_U:1	ok			entries=3
+jump SU_04_U -> SU_01_U:2	ok			entries=5
+jump SU_04_U -> SU_02_U:1	ok			entries=2
+jump SU_04_U -> SU_07_U:0	ok			entries=3
+jump SU_05_U -> SU_03_U:1	ok			entries=2
+jump SU_06_U -> SU_01_U:1	ok			entries=5
+jump SU_07_U -> SU_04_U:1	ok			entries=4
+jump SU_07_U -> SU_10_A:0	ok			entries=1
+jump SU_08_U -> SU_01_U:4	ok			entries=5
+jump SU_08_U -> SU_09_U:0	ok			entries=1
+jump SU_08_U -> SU_10_U:0	ok			entries=3
+jump SU_08_U -> SU_10_U:2	ok			entries=3
+jump SU_09_U -> SU_08_U:1	ok			entries=4
+jump SU_10_A -> :1	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump SU_10_A -> SU_07_U:1	ok			entries=3
+jump SU_10_S -> SU_03_U:0	ok			entries=2
+jump SU_10_S -> SU_08_U:2	ok			entries=4
+jump SU_10_U -> SU_03_U:0	ok			entries=2
+jump SU_10_U -> SU_08_U:2	ok			entries=4
+jump SU_10_U -> SU_08_U:3	ok			entries=4
+jump SU_11_U -> PA_02_U:0	ok			entries=6
+jump SU_11_U -> SU_12_U:1	ok			entries=2
+jump SU_12_U -> SU_08_U:3	ok			entries=4
+jump SU_12_U -> SU_11_U:0	ok			entries=3
+jump SU_20_U -> PA_01_U:0	ok			entries=44
+jump SU_20_U -> SU_22_U:0	ok			entries=24
+jump SU_20_U -> SU_30_U:1	ok			entries=3
+jump SU_22_DB -> :0	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump SU_22_DB -> SU_22_U:0	ok			entries=24
+jump SU_22_U -> PA_03_U:0	ok			entries=37
+jump SU_22_U -> SU_00_U:0	ok			entries=7
+jump SU_22_U -> SU_20_U:1	ok			entries=6
+jump SU_22_U -> SU_31_U:0	ok			entries=2
+jump SU_30_U -> BO_01_U:1	ok			entries=4
+jump SU_30_U -> SU_20_U:0	ok			entries=6
+jump SU_31_U -> SU_22_U:0	ok			entries=24
+jump SU_31_U -> SU_22_U:2	ok			entries=24
+jump TD_00_DB -> :3	fails	MapJump with name pointer 1 = back to the saved map (`CField::MapJump`: `a0 == 1` -> `GetSavedMpsName(1)`, decomp/G/CField.c:4951); the port's host.rs 0x20 reads it as an empty map name	FS	
+jump TD_00_DB -> TD_22_U:0	ok			entries=4
+jump TD_00_U -> TD_21_U:0	ok			entries=3
+jump TD_00_U -> TD_22_U:1	ok			entries=4
+jump TD_00_U -> TD_22_U:3	ok			entries=4
+jump TD_01_U -> TD_02_U:0	ok			entries=6
+jump TD_01_U -> TD_14_U:0	ok			entries=9
+jump TD_02_U -> TD_01_U:0	ok			entries=7
+jump TD_02_U -> TD_15_U:1	ok			entries=4
+jump TD_03_U -> TD_04_U:0	ok			entries=5
+jump TD_03_U -> TD_14_U:1	ok			entries=9
+jump TD_04_U -> TD_03_U:1	ok			entries=6
+jump TD_04_U -> TD_05_U:0	ok			entries=5
+jump TD_05_U -> TD_04_U:1	ok			entries=5
+jump TD_05_U -> TD_20_U:1	ok			entries=6
+jump TD_06_U -> TD_17_U:0	ok			entries=4
+jump TD_06_U -> TD_20_U:0	ok			entries=6
+jump TD_07_U -> TD_08_U:0	ok			entries=2
+jump TD_07_U -> TD_17_U:1	ok			entries=4
+jump TD_08_U -> TD_07_U:1	ok			entries=3
+jump TD_08_U -> TD_09_U:0	ok			entries=3
+jump TD_09_U -> TD_08_U:1	ok			entries=2
+jump TD_09_U -> TD_10_U:0	ok			entries=3
+jump TD_10_U -> TD_09_U:1	ok			entries=3
+jump TD_10_U -> TD_11_U:0	ok			entries=2
+jump TD_11_U -> TD_10_U:1	ok			entries=3
+jump TD_11_U -> TD_12_U:0	ok			entries=2
+jump TD_12_U -> TD_11_U:1	ok			entries=2
+jump TD_12_U -> TD_13_U:0	ok			entries=4
+jump TD_13_U -> TD_00_U:2	ok			entries=8
+jump TD_13_U -> TD_12_U:1	ok			entries=2
+jump TD_14_U -> TD_01_U:1	ok			entries=7
+jump TD_14_U -> TD_03_U:0	ok			entries=6
+jump TD_15_U -> TD_02_U:1	ok			entries=6
+jump TD_15_U -> TD_21_U:2	ok			entries=3
+jump TD_16_U -> TD_21_U:1	ok			entries=3
+jump TD_17_U -> TD_06_U:1	ok			entries=8
+jump TD_17_U -> TD_07_U:0	ok			entries=3
+jump TD_20_U -> TD_05_U:1	ok			entries=5
+jump TD_20_U -> TD_06_U:0	ok			entries=8
+jump TD_21_U -> TD_15_U:0	ok			entries=4
+jump TD_21_U -> TD_16_U:0	ok			entries=2
+jump TD_22_U -> TD_17_U:0	ok			entries=4
+jump WE_00_U -> WE_01_U:0	ok			entries=27
+jump WE_01_U -> ND_00_U:0	ok			entries=2
+jump WE_01_U -> WE_00_U:1	ok			entries=23
+jump WE_01_U -> WE_02_U:0	ok			entries=3
+jump WE_02_U -> WE_01_U:2	ok			entries=27
+jump WE_02_U -> WE_03_U:0	ok			entries=8
+jump WE_02_U -> WE_04_U:0	ok			entries=11
+jump WE_03_U -> WE_02_U:1	ok			entries=3
+jump WE_04_U -> WE_02_U:2	ok			entries=3
+jump WI_00_U -> WI_01_U:0	ok			entries=2
+jump WI_00_U -> WI_02_U:0	ok			entries=3
+jump WI_00_U -> WI_03_U:0	ok			entries=2
+jump WI_00_U -> WI_12_U:1	ok			entries=11
+jump WI_01_U -> WI_00_U:1	ok			entries=4
+jump WI_01_U -> WI_02_U:1	ok			entries=3
+jump WI_02_U -> WI_00_U:2	ok			entries=4
+jump WI_02_U -> WI_01_U:1	ok			entries=2
+jump WI_02_U -> WI_04_U:0	ok			entries=13
+jump WI_03_U -> WI_00_U:3	ok			entries=4
+jump WI_03_U -> WI_07_U:0	ok			entries=2
+jump WI_04_U -> WI_02_U:2	ok			entries=3
+jump WI_04_U -> WI_05_U:0	ok			entries=3
+jump WI_04_U -> WI_06_U:0	ok			entries=3
+jump WI_04_U -> WI_09_U:0	ok			entries=2
+jump WI_05_U -> WI_04_U:1	ok			entries=13
+jump WI_05_U -> WI_06_U:1	ok			entries=3
+jump WI_05_U -> WI_08_U:0	ok			entries=2
+jump WI_06_U -> WI_04_U:2	ok			entries=13
+jump WI_06_U -> WI_05_U:1	ok			entries=3
+jump WI_06_U -> WI_10_U:0	ok			entries=3
+jump WI_07_U -> WI_03_U:1	ok			entries=2
+jump WI_07_U -> WI_13_U:0	ok			entries=21
+jump WI_08_U -> WI_05_U:2	ok			entries=3
+jump WI_08_U -> WI_14_U:0	ok			entries=1
+jump WI_09_U -> WI_04_U:3	ok			entries=13
+jump WI_10_U -> WI_06_U:2	ok			entries=3
+jump WI_10_U -> WI_11_U:0	ok			entries=2
+jump WI_10_U -> WI_17_U:0	ok			entries=12
+jump WI_11_U -> WI_10_U:1	ok			entries=3
+jump WI_11_U -> WI_16_U:0	ok			entries=1
+jump WI_12_U -> WI_00_U:0	ok			entries=4
+jump WI_13_U -> WI_07_U:1	ok			entries=2
+jump WI_14_U -> WI_08_U:1	ok			entries=2
+jump WI_15_U -> WI_09_U:1	ok			entries=2
+jump WI_16_U -> WI_11_U:1	ok			entries=2
+jump WI_17_U -> RU_01_U:0	ok			entries=27
+jump WI_17_U -> WI_10_U:2	ok			entries=3
+jump YO_00_U -> YO_00_U:0	ok			entries=11
+jump YO_00_U -> YO_02_U:0	ok			entries=19
+jump YO_01_U -> YO_00_U:0	ok			entries=11
+jump YO_01_U -> YO_02_U:1	ok			entries=19
+jump YO_02_U -> YO_00_U:0	ok			entries=11
+jump YO_02_U -> YO_01_U:1	ok			entries=17
+jump ZI_00_U -> ZI_00_U:0	ok			entries=64
+jump ZI_00_U -> ZI_01_U:0	ok			entries=1
+jump ZI_01_U -> ZI_00_U:2	ok			entries=64
+world map point 01 AP_00_U	ok			entry=0
+world map point 02 DO_04_U	stub	field check stub: unanswered selectors: GetFieldData sel 0x40000 (returns -1), GetFieldData sel 0x40100 (returns -1), GetFieldData sel 0x40200 (returns -1), GetFieldData sel 0x40	FS	entry=0
+world map point 03 AR_15_U	stub	field check stub: unanswered selectors: GetFieldData sel 0x100 (returns -1), GetFieldData sel 0x10000 (returns -1), GetFieldData sel 0x10100 (returns -1), GetFieldData sel 0x1020	FS	entry=0
+world map point 05 BO_01_U	ok			entry=2
+world map point 06 PA_01_U	stub	field check stub: bg effect types not drawn {200}; unanswered selectors: GetFieldData sel 0x40000 (returns -1), GetFieldData sel 0x40100 (returns -1), GetFieldData sel 0x40200 (r	FX/FS	entry=2
+world map point 07 PA_03_U	stub	field check stub: 2 stuck jobs: event 0x14(1) still running after 3000 ticks, last calls GetFieldData(c2.24)[23, 0, 0] => 0x1 | event 0x19(1) still running after 3000 ticks, last	FS	entry=2
+world map point 08 PA_02_A	stub	field check stub: 1 stuck jobs: event 0xd(1) still running after 3000 ticks, last calls GetCharacterInfo(c2.00)[5, d] => 0xffffffff	FS	entry=2
+world map point 09 RU_03_U	ok			entry=0
+world map point 10 WI_12_U	ok			entry=0
+world map point 11 SA_01_U	ok			entry=0
+world map point 12 RO_00_U	ok			entry=0
+world map point 13 WE_00_U	ok			entry=0
+world map point 14 FI_01_U	stub	field check stub: unanswered selectors: GetFieldData sel 0x40000 (returns -1), GetFieldData sel 0x40100 (returns -1), GetFieldData sel 0x40200 (returns -1), GetFieldData sel 0x40	FS	entry=0
+world map point 15 CA_00_U	ok			entry=0
+world map point 16 AD_16_U	ok			entry=0
+world map point 17 AZ_10_N	ok			entry=0
+world map point 18 SM_00_U	stub	field check stub: unanswered selectors: GetFieldData sel 0x30000 (returns -1), GetFieldData sel 0x30100 (returns -1), GetFieldData sel 0x30200 (returns -1), GetFieldData sel 0x30	FS	entry=0
+world map point 19 PE_00_N	ok			entry=0
+world map point 20 SK_00_U	ok			entry=0
+world map point 21 GT_10_U	stub	field check stub: unanswered selectors: GetFieldData sel 0x26 (returns -1), GetFieldData sel 0x40000 (returns -1), GetFieldData sel 0x40100 (returns -1), GetFieldData sel 0x40200	FS	entry=0
+world map point 23 RE_03_U	ok			entry=0
+world map point 24 YO_01_U	ok			entry=0
+world map point 25 MI_00_U	ok			entry=0
+world map point 26 GB_00_U	ok			entry=0
+world map point 28 GI_00_N	ok			entry=0
+world map point 29 MU_00_U	ok			entry=0
+world map point 30 TD_22_U	ok			entry=0
+world map point 31 KA_09_U	ok			entry=0
+world map point 32 KT_00_U	ok			entry=0
+world map point 33 IN_00_U	ok			entry=0
+world map point 34 FU_00_U	ok			entry=0
+world map point 35 QG_14_U	ok			entry=0
+world map point 36 AI_05_U	stub	field check stub: 3 stuck jobs: event 0x0(1) still running after 3000 ticks, last calls EffectControl(c2.61)[1, 0, 0, 0, 0] => 0x0 | event 0x8000(1) still running after 3000 tick	FS	entry=0
+world map point 37 AG_00_U	ok			entry=0
+world map point 38 SH_00_U	stub	field check stub: unanswered selectors: GetFieldData sel 0x30000 (returns -1), GetFieldData sel 0x30100 (returns -1), GetFieldData sel 0x30200 (returns -1), GetFieldData sel 0x30	FS	entry=0
+world map point 39 MS_25_U	ok			entry=0
+world map point 40 SE_15_U	stub	field check stub: unanswered selectors: GetFieldData sel 0x30000 (returns -1), GetFieldData sel 0x30100 (returns -1), GetFieldData sel 0x30200 (returns -1), GetFieldData sel 0x30	FS	entry=0
+world map point 41 DH_06_U	ok			entry=0
+world map point 42 BO_02_U	stub	field check stub: 7 stuck jobs: event 0x0(1) still running after 3000 ticks, last calls GetFieldData(c2.24)[23, 0, 0] => 0x1 | event 0x3(1) still running after 3000 ticks, last c	FS	entry=0
+world map point 43 DB_00_U	stub	field check stub: 11 stuck jobs: start still running after 3000 ticks, last calls SpecialMenu(c2.7f)[0, 0] < SetManual(c2.1c) < SetFader1(c2.28) < SavePoint(c2.7e) | event 0x1(1)	FS	entry=0
+world map point 44 IF_11_U	stub	field check stub: 13 stuck jobs: start still running after 3000 ticks, last calls GetCharacterInfo(c2.00)[0, d] => 0xc | event 0x0(1) still running after 3000 ticks, last calls G	FS	entry=0
+world map point 45 JU_01_U	fails	JU_01_U is not on the disc	FS	entry=0
+chapter flag 0x0008 first half: Opening	untested	no map script sets this flag with a constant (set by a cut scene / computed / debug only?)		set_by=
+chapter flag 0x0009 first half: Apoina part A	ok	set in AP_06_U (reachable, depth 8)		set_by=AP_00_DB,AP_06_U,MS_00_DB
+chapter flag 0x000a first half: Domremy	ok	set in DO_06_U (reachable, depth 7)		set_by=DO_06_U
+chapter flag 0x000b first half: Ardennes Forest	untested	set in HUB_NA: reachable only through static references, and no job of HUB_NA sets it headless with the earlier chapter flags set (needs more state)	FS	set_by=HUB_NA;needs_disc2=HUB_NA: disc-2 scenes MOVIE_F N121 N122
+chapter flag 0x000c first half: Paris	ok	set in SU_40_U (event 0x4(1)) when the map is entered with the earlier chapter flags set; the map is reachable only through static references		set_by=SU_40_U
+chapter flag 0x000d first half: Louvre 1	ok	set in RU_00_U (reachable, depth 4)		set_by=RU_00_DB,RU_00_U
+chapter flag 0x000e first half: Wine cellar	ok	set in WI_17_U (reachable, depth 8)		set_by=RU_00_DB,WI_17_U
+chapter flag 0x000f first half: Louvre 2	ok	set in RU_05_U (reachable, depth 3)		set_by=RU_05_U
+chapter flag 0x0010 first half: Southampton	untested	set in SA_02_U: reachable only through static references, and no job of SA_02_U sets it headless with the earlier chapter flags set (needs more state)	FS	set_by=SA_02_U
+chapter flag 0x0011 first half: Ronda mine	ok	set in RO_20_U (event 0x1(1)) when the map is entered with the earlier chapter flags set; the map is reachable only through static references		set_by=RO_20_U
+chapter flag 0x0012 first half: Wales 1	ok	set in WE_00_U (reachable, depth 2)		set_by=WE_00_U
+chapter flag 0x0013 first half: Firenze 1	ok	set in FI_00_U (reachable, depth 3)		set_by=FI_00_U
+chapter flag 0x0014 first half: Manmaria Island	ok	set in SK_09_U (reachable, depth 6)		set_by=AD_05_U,SK_09_U,SK_DB_U
+chapter flag 0x0015 first half: Firenze 2	ok	set in FI_00_U (reachable, depth 3)		set_by=FI_00_U
+chapter flag 0x0016 first half: SG Italy branch	untested	set in AZ_09_U: reachable only through static references, and no job of AZ_09_U sets it headless with the earlier chapter flags set (needs more state)	FS	set_by=AZ_09_U
+chapter flag 0x0017 first half: Firenze 3	ok	set in FI_00_U (reachable, depth 3)		set_by=FI_00_U
+chapter flag 0x0018 first half: Nemeton ruins	ok	set in ND_14_U (reachable, depth 14)		set_by=ND_14_U
+chapter flag 0x0019 first half: Firenze 4	untested	no map script sets this flag with a constant (set by a cut scene / computed / debug only?)		set_by=
+chapter flag 0x001a first half: Cannes	untested	no map script sets this flag with a constant (set by a cut scene / computed / debug only?)		set_by=
+chapter flag 0x001b first half: Sainte-Marguerite	ok	set in SM_20_U (reachable, depth 3)		set_by=SM_20_U
+chapter flag 0x001c first half: Cannes 2	ok	set in CA_03_U (reachable, depth 4)		set_by=CA_03_U
+chapter flag 0x001d first half: Wales 2	ok	set in WE_03_U (reachable, depth 5)		set_by=WE_03_U
+chapter flag 0x001e first half: Hermitage 1	ok	set in HE_00_U (reachable, depth 5)		set_by=HE_00_U
+chapter flag 0x001f first half: Petrograd 1	ok	set in PE_00_N (reachable, depth 2)		set_by=PE_00_N
+chapter flag 0x0020 first half: Hermitage 2	ok	set in HE_10_N (start function) when the map is entered with the earlier chapter flags set; the map is reachable only through static references		set_by=HE_10_N
+chapter flag 0x0021 first half: Petrograd 2	ok	set in PE_00_N (reachable, depth 2)		set_by=PE_00_N,PE_01_N,PE_02_N
+chapter flag 0x0022 first half: Goreme Valley	ok	set in GT_05_U (reachable, depth 5)		set_by=GT_00_DB,GT_05_U
+chapter flag 0x0023 first half: Mirror castle / Goreme Valley 2	untested	set in MS_05_U: reachable only through static references, and no job of MS_05_U sets it headless with the earlier chapter flags set (needs more state)	FS	set_by=GT_00_DB,MS_05_U
+chapter flag 0x0024 first half: Corridor of the dead	ok	set in GT_06_U (reachable, depth 5)		set_by=GT_06_U
+chapter flag 0x0025 first half: Hermitage 3	ok	set in SK_09_U (reachable, depth 6)		set_by=SK_09_U
+chapter flag 0x0026 first half: Idar Flamme	ok	set in HE_14_N (reachable, depth 11)		set_by=HE_14_N,MOVIE,PA_00_DB
+chapter flag 0x0027 first half: Apoina Tower 2	ok	set in IF_25_U (event 0x0(1)) when the map is entered with the earlier chapter flags set; the map is reachable only through static references		set_by=IF_25_U
+chapter flag 0x0028 first half: Graveyard	ok	set in AP_06_U (reachable, depth 8)		set_by=AP_06_U
+chapter flag 0x003c second half: second-half opening	ok	set in OP_01_U (start function) when the map is entered with the earlier chapter flags set; the map is reachable only through static references		set_by=OP_01_U;needs_disc2=OP_01_U: disc-2 scenes M16 OPI_J00
+chapter flag 0x003d second half: red-brick warehouse	ok	set in RE_00_U (reachable, depth 3); needs disc 2 (RE_00_U: disc-2 scenes N077)		set_by=RE_00_U;needs_disc2=RE_00_U: disc-2 scenes N077
+chapter flag 0x003e second half: Yokohama 1	ok	set in YO_00_U (reachable, depth 3)		set_by=YO_00_U
+chapter flag 0x003f second half: battleship Mikasa 1	ok	set in MI_16_U (reachable, depth 9)		set_by=MI_16_U
+chapter flag 0x0040 second half: Todo lab 1	ok	set in TD_15_U (reachable, depth 12)		set_by=TD_00_DB,TD_15_U
+chapter flag 0x0041 second half: Mikasa 2	untested	no map script sets this flag with a constant (set by a cut scene / computed / debug only?)		set_by=
+chapter flag 0x0042 second half: Yokohama 2	ok	set in YO_00_U (reachable, depth 3)		set_by=YO_00_U
+chapter flag 0x0043 second half: foreign cemetery 1	ok	set in GB_01_U (reachable, depth 3)		set_by=GB_01_U
+chapter flag 0x0044 second half: the other world	ok	set in IK_03_U (reachable, depth 6); needs disc 2 (IK_03_U: disc-2 scenes N090A)		set_by=GB_DB_U,IK_03_U;needs_disc2=IK_03_U: disc-2 scenes N090A
+chapter flag 0x0045 second half: Muhyoan 1	ok	set in MU_00_U (reachable, depth 2)		set_by=MU_00_U
+chapter flag 0x0046 second half: Nihonbashi 1	untested	set in HUB_NA: reachable only through static references, and no job of HUB_NA sets it headless with the earlier chapter flags set (needs more state)	FS	set_by=HUB_NA;needs_disc2=HUB_NA: disc-2 scenes MOVIE_F N121 N122
+chapter flag 0x0047 second half: Todo lab 2	ok	set in TD_00_U (reachable, depth 11); needs disc 2 (TD_00_U: disc-2 scenes N101)		set_by=TD_00_U;needs_disc2=TD_00_U: disc-2 scenes N101
+chapter flag 0x0048 second half: Muhyoan 2	ok	set in MU_00_U (reachable, depth 2)		set_by=MU_00_U
+chapter flag 0x0049 second half: Nihonbashi 2	untested	set in GI_01_N: reachable only through static references, and no job of GI_01_N sets it headless with the earlier chapter flags set (needs more state)	FS	set_by=GI_01_N,IN_00_DB
+chapter flag 0x0064 hidden dungeon: Sesshoseki	untested	set in SE_09_U: reachable only through static references, and no job of SE_09_U sets it headless with the earlier chapter flags set (needs more state)	FS	set_by=SE_09_U
+chapter flag 0x0065 hidden dungeon: Doll house	untested	set in DH_00_U: reachable only through static references, and no job of DH_00_U sets it headless with the earlier chapter flags set (needs more state)	FS	set_by=DH_00_U
+chapter flag 0x0066 hidden dungeon: Schwarzwald	ok	set in SH_04_U (event 0x0(1)) when the map is entered with the earlier chapter flags set; the map is reachable only through static references		set_by=FI_00_DB,SH_04_U
+chapter flag 0x0067 hidden dungeon: wakuraba (cut)	untested	no map script sets this flag with a constant (set by a cut scene / computed / debug only?)		set_by=
+chapter flag 0x0068 hidden dungeon: Nemeton deepest level	untested	set in ND_22_U: reachable only through static references, and no job of ND_22_U sets it headless with the earlier chapter flags set (needs more state)	FS	set_by=ND_22_U
+chapter flag 0x0069 hidden dungeon: Ring Tower	untested	set in HUB_NA: reachable only through static references, and no job of HUB_NA sets it headless with the earlier chapter flags set (needs more state)	FS	set_by=HUB_NA;needs_disc2=HUB_NA: disc-2 scenes MOVIE_F N121 N122
+chapter flag 0x00a0 Wolfbout: Tetsu	ok	set in PA_01_U (reachable, depth 2)		set_by=PA_01_U,SU_22_DB
+chapter flag 0x00a1 Wolfbout: Terry	ok	set in WI_17_U (reachable, depth 8)		set_by=SU_22_DB,WI_17_U
+chapter flag 0x00a2 Wolfbout: Jerome	untested	set in SU_22_DB which nothing reaches from OP_00_U	FS	set_by=SU_22_DB
+chapter flag 0x00a3 Wolfbout: Henri	untested	set in AZ_09_D: reachable only through static references, and no job of AZ_09_D sets it headless with the earlier chapter flags set (needs more state)	FS	set_by=AZ_09_D,SU_22_DB
+chapter flag 0x00a4 Wolfbout: Philip	untested	set in SM_21_U: reachable only through static references, and no job of SM_21_U sets it headless with the earlier chapter flags set (needs more state)	FS	set_by=SM_21_U,SU_22_DB
+chapter flag 0x00a5 Wolfbout: R3	ok	set in PE_01_N (reachable, depth 5)		set_by=PE_01_N,SU_22_DB
+chapter flag 0x00a6 Wolfbout: Necross	untested	set in SU_22_DB which nothing reaches from OP_00_U	FS	set_by=SU_22_DB
+chapter flag 0x00a7 Wolfbout: triple star	ok	set in DO_04_U (reachable, depth 2)		set_by=DO_04_U,SU_22_DB
+chapter flag 0x00a8 Wolfbout: Kibolin	untested	set in SU_22_DB which nothing reaches from OP_00_U	FS	set_by=SU_22_DB
+chapter flag 0x00a9 Wolfbout: Eleonore	untested	set in SU_22_DB which nothing reaches from OP_00_U	FS	set_by=SU_22_DB
+chapter flag 0x00aa Wolfbout: Matsunaga	ok	set in IN_03_U (reachable, depth 4); needs disc 2 (IN_03_U: disc-2 scenes MOVIE_E N109A)		set_by=IN_03_U,SU_22_DB;needs_disc2=IN_03_U: disc-2 scenes MOVIE_E N109A
+chapter flag 0x00ab Wolfbout: Robo	untested	no map script sets this flag with a constant (set by a cut scene / computed / debug only?)		set_by=
+chapter flag 0x00ac Wolfbout: Henri 2	untested	set in IN_00_DB which nothing reaches from OP_00_U	FS	set_by=IN_00_DB,MS_00_DB
+chapter flag 0x00ad Wolfbout: Robo 2	ok	set in KT_01_U (reachable, depth 3)		set_by=KT_01_U
+chapter flag 0x00ae Wolfbout: Phantom Wolf	ok	set in PA_01_U (reachable, depth 2)		set_by=MS_00_DB,PA_01_U
+chapter flag 0x0054 last dungeon appears	ok	set in IN_03_U (reachable, depth 4); needs disc 2 (IN_03_U: disc-2 scenes MOVIE_E N109A)		set_by=IN_00_DB,IN_03_U;needs_disc2=IN_03_U: disc-2 scenes MOVIE_E N109A
+map AD_00_DB	untested	debug map (only the debug menu reaches it)		
+map AD_00_U	ok			depth=3
+map AD_01_U	ok			depth=6
+map AD_02_U	ok			depth=4
+map AD_03_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map AD_04_U	ok			depth=5
+map AD_05_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map AD_06_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map AD_07_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map AD_08_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map AD_09_U	ok			depth=4
+map AD_10_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map AD_11_U	ok			depth=6
+map AD_12_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map AD_13_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map AD_14_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map AD_15_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map AD_16_U	ok			depth=2
+map AG_00_U	ok	needs disc 2: disc-2 scenes G03		needs_disc2=disc-2 scenes G03;depth=2
+map AI_00_U	ok			depth=3
+map AI_01_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map AI_02_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map AI_03_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map AI_04_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map AI_05_U	ok	needs disc 2: disc-2 scenes MOVIE_G		needs_disc2=disc-2 scenes MOVIE_G;depth=2
+map AI_06_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map AP_00_DB	untested	debug map (only the debug menu reaches it)		
+map AP_00_N	ok			depth=5
+map AP_00_U	ok			depth=2
+map AP_01_U	untested	no script or world map point names it (unused / debug / reached by a computed name)		
+map AP_02_A	ok			depth=3
+map AP_02_U	ok			depth=3
+map AP_03_A	ok			depth=5
+map AP_03_U	ok			depth=5
+map AP_04_A	ok			depth=6
+map AP_04_U	ok			depth=6
+map AP_05_A	ok			depth=9
+map AP_05_U	ok			depth=7
+map AP_06_U	ok			depth=8
+map AP_07_U	ok			depth=8
+map AP_08_U	ok			depth=7
+map AP_09_U	ok			depth=4
+map AP_10_A	ok			depth=4
+map AP_10_U	ok			depth=4
+map AR_00_U	ok			depth=3
+map AR_01_U	ok			depth=4
+map AR_02_U	ok			depth=5
+map AR_03_U	ok			depth=6
+map AR_04_U	ok			depth=5
+map AR_05_U	ok			depth=4
+map AR_06_U	ok			depth=3
+map AR_07_U	ok			depth=5
+map AR_08_U	ok			depth=6
+map AR_09_U	ok			depth=6
+map AR_10_U	ok			depth=7
+map AR_11_U	ok			depth=8
+map AR_12_U	ok			depth=9
+map AR_13_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map AR_14_U	ok			depth=3
+map AR_15_U	ok			depth=2
+map AZ_00_U	ok			depth=3
+map AZ_01_U	ok			depth=4
+map AZ_02_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map AZ_03_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map AZ_04_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map AZ_05_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map AZ_06_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map AZ_07_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map AZ_08_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map AZ_09_D	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map AZ_09_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map AZ_10_N	ok			depth=2
+map BO_01_U	ok			depth=2
+map BO_02_DB	untested	debug map (only the debug menu reaches it)		
+map BO_02_U	ok			depth=2
+map BO_03_U	ok			depth=3
+map CA_00_DB	untested	debug map (only the debug menu reaches it)		
+map CA_00_U	ok			depth=2
+map CA_01_U	ok			depth=3
+map CA_02_U	ok			depth=4
+map CA_03_U	ok			depth=4
+map DB_00_U	ok	needs disc 2: DiskChange		needs_disc2=DiskChange;depth=2
+map DC_01_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	needs_disc2=DiskChange
+map DH_00_DB	untested	debug map (only the debug menu reaches it)		
+map DH_00_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map DH_01_U	ok			depth=4
+map DH_02_U	ok			depth=3
+map DH_03_U	ok			depth=4
+map DH_04_U	ok			depth=5
+map DH_05_U	ok			depth=5
+map DH_06_U	ok			depth=2
+map DH_07_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map DO_00_DB	untested	debug map (only the debug menu reaches it)		
+map DO_00_U	ok			depth=4
+map DO_01_U	ok			depth=5
+map DO_02_U	ok			depth=6
+map DO_04_U	ok			depth=2
+map DO_05_U	ok			depth=3
+map DO_06_U	ok			depth=7
+map ED_00_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	needs_disc2=disc-2 scenes N129
+map FI_00_DB	untested	debug map (only the debug menu reaches it)		
+map FI_00_U	ok			depth=3
+map FI_01_U	ok			depth=2
+map FU_00_U	ok			depth=2
+map FU_01_U	ok			depth=3
+map FU_02_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map FU_03_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map FU_04_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map FU_05_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map FU_06_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map FU_07_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map FU_08_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map FU_09_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map FU_10_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map FU_11_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map FU_12_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map FU_13_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map FU_14_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map FU_15_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map FU_16_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map FU_17_A	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map FU_17_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map FU_18_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	needs_disc2=disc-2 scenes N113
+map GB_00_U	ok			depth=2
+map GB_01_U	ok			depth=3
+map GB_DB_U	untested	debug map (only the debug menu reaches it)		
+map GI_00_N	ok			depth=2
+map GI_00_U	ok			depth=3
+map GI_01_N	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map GI_01_U	ok			depth=4
+map GI_02_N	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map GI_02_U	ok			depth=4
+map GI_03_N	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map GI_03_R	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map GI_04_R	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map GI_05_N	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	needs_disc2=disc-2 scenes N095
+map GT_00_DB	untested	debug map (only the debug menu reaches it)		
+map GT_00_U	untested	no script or world map point names it (unused / debug / reached by a computed name)		
+map GT_01_U	ok			depth=3
+map GT_02_U	ok			depth=4
+map GT_03_U	ok			depth=4
+map GT_04_U	ok			depth=4
+map GT_05_U	ok			depth=5
+map GT_06_U	ok			depth=5
+map GT_07_U	ok			depth=4
+map GT_08_U	ok			depth=4
+map GT_09_U	ok			depth=4
+map GT_10_U	ok			depth=2
+map GY_00_D	ok			depth=3
+map GY_01_U	ok			depth=4
+map GY_02_U	ok			depth=4
+map GY_03_U	ok			depth=4
+map GY_04_U	ok			depth=5
+map GY_05_F	ok			depth=4
+map GY_05_U	ok			depth=6
+map GY_06_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	needs_disc2=disc-2 scenes N125
+map GY_07_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map GY_08_U	ok			depth=5
+map GY_09_U	ok			depth=5
+map GY_10_U	ok			depth=5
+map GY_11_U	ok			depth=5
+map GY_12_U	ok			depth=5
+map GY_13_U	ok			depth=5
+map HE_00_DB	untested	debug map (only the debug menu reaches it)		
+map HE_00_N	ok			depth=10
+map HE_00_U	ok			depth=5
+map HE_01_N	ok			depth=8
+map HE_02_N	ok			depth=9
+map HE_03_N	ok			depth=9
+map HE_04_N	ok			depth=9
+map HE_04_U	ok			depth=6
+map HE_05_N	ok			depth=9
+map HE_06_N	ok			depth=11
+map HE_06_U	ok			depth=4
+map HE_07_N	ok			depth=10
+map HE_07_U	ok			depth=3
+map HE_08_N	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map HE_09_N	ok			depth=10
+map HE_10_N	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map HE_11_M	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map HE_11_N	ok			depth=11
+map HE_12_N	ok			depth=9
+map HE_12_O	ok			depth=7
+map HE_13_N	ok			depth=10
+map HE_14_N	ok			depth=11
+map HE_15_N	ok			depth=11
+map HE_16_N	ok			depth=10
+map HE_16_U	ok			depth=7
+map HE_17_N	ok			depth=10
+map HE_18_N	ok			depth=10
+map HE_19_N	ok			depth=10
+map HE_20_N	ok			depth=10
+map HE_20_U	ok			depth=7
+map HE_21_N	ok			depth=10
+map HE_21_U	ok			depth=7
+map HE_22_N	ok			depth=11
+map HE_23_N	ok			depth=11
+map HE_23_U	ok			depth=4
+map HE_24_N	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map HE_25_N	ok			depth=12
+map HE_25_U	ok			depth=5
+map HE_26_N	ok			depth=12
+map HE_26_U	ok			depth=5
+map HE_28_N	ok			depth=10
+map HUB_NA	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	needs_disc2=disc-2 scenes MOVIE_F N121 N122
+map IF_00_DB	untested	debug map (only the debug menu reaches it)		
+map IF_00_U	ok			depth=6
+map IF_01_U	ok			depth=7
+map IF_02_U	ok			depth=8
+map IF_03_U	ok			depth=7
+map IF_04_U	ok			depth=7
+map IF_05_U	ok			depth=8
+map IF_06_U	ok			depth=7
+map IF_11_U	ok			depth=2
+map IF_12_U	ok			depth=3
+map IF_13_U	ok			depth=4
+map IF_14_U	ok			depth=3
+map IF_15_U	ok			depth=4
+map IF_16_U	ok			depth=3
+map IF_17_U	ok			depth=4
+map IF_18_U	ok			depth=4
+map IF_19_U	ok			depth=5
+map IF_20_U	ok			depth=4
+map IF_21_U	ok			depth=5
+map IF_22_U	ok			depth=5
+map IF_23_D	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map IF_23_U	ok			depth=8
+map IF_24_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map IF_25_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map IK_00_M	untested	no script or world map point names it (unused / debug / reached by a computed name)		
+map IK_00_U	ok	needs disc 2: disc-2 scenes N088		needs_disc2=disc-2 scenes N088;depth=4
+map IK_01_U	ok			depth=5
+map IK_02_U	ok			depth=5
+map IK_03_U	ok	needs disc 2: disc-2 scenes N090A		needs_disc2=disc-2 scenes N090A;depth=6
+map IK_DB_U	untested	debug map (only the debug menu reaches it)		
+map IN_00_DB	untested	debug map (only the debug menu reaches it)		
+map IN_00_U	ok	needs disc 2: disc-2 scenes N108		needs_disc2=disc-2 scenes N108;depth=2
+map IN_01_U	ok			depth=3
+map IN_02_U	ok			depth=3
+map IN_03_U	ok	needs disc 2: disc-2 scenes MOVIE_E N109A		needs_disc2=disc-2 scenes MOVIE_E N109A;depth=4
+map IN_04_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map IN_05_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	needs_disc2=disc-2 scenes N112
+map IN_06_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map KA_00_U	ok			depth=5
+map KA_01_U	ok	needs disc 2: disc-2 scenes N118		needs_disc2=disc-2 scenes N118;depth=4
+map KA_02_U	ok			depth=4
+map KA_03_U	ok			depth=3
+map KA_04_U	ok			depth=4
+map KA_05_U	ok			depth=4
+map KA_06_U	ok			depth=3
+map KA_07_U	ok			depth=4
+map KA_08_U	ok			depth=5
+map KA_09_U	ok			depth=2
+map KT_00_DB	untested	debug map (only the debug menu reaches it)		
+map KT_00_U	ok			depth=2
+map KT_01_U	ok			depth=3
+map KT_02_U	ok	needs disc 2: disc-2 scenes N105		needs_disc2=disc-2 scenes N105;depth=4
+map KT_03_U	ok			depth=5
+map MI_00_U	ok			depth=2
+map MI_01_U	ok			depth=3
+map MI_02_U	ok	needs disc 2: disc-2 scenes N082		needs_disc2=disc-2 scenes N082;depth=4
+map MI_03_U	ok			depth=5
+map MI_04_U	ok			depth=6
+map MI_05_U	ok			depth=6
+map MI_06_U	ok			depth=7
+map MI_07_U	ok			depth=8
+map MI_08_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map MI_09_U	ok			depth=7
+map MI_10_U	ok			depth=6
+map MI_11_U	ok			depth=5
+map MI_12_U	ok			depth=7
+map MI_13_U	ok			depth=6
+map MI_14_U	ok			depth=7
+map MI_15_U	ok			depth=8
+map MI_16_U	ok			depth=9
+map MI_17_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map MI_DB_U	untested	debug map (only the debug menu reaches it)		
+map MOVIE	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map MS_00_DB	untested	debug map (only the debug menu reaches it)		
+map MS_00_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map MS_01_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map MS_02_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map MS_03_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map MS_04_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map MS_05_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map MS_06_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map MS_07_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map MS_08_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map MS_09_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map MS_10_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map MS_24_U	ok			depth=8
+map MS_25_U	ok			depth=2
+map MS_26_U	ok			depth=3
+map MS_27_U	ok			depth=4
+map MS_29_U	ok			depth=5
+map MS_30_U	ok			depth=6
+map MS_31_U	ok			depth=7
+map MS_35_U	ok			depth=13
+map MS_36_U	ok			depth=12
+map MS_37_D	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map MS_37_U	ok			depth=11
+map MS_38_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map MS_39_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	needs_disc2=disc-2 scenes G05
+map MS_42_U	ok			depth=16
+map MS_43_U	ok			depth=15
+map MS_46_U	ok			depth=14
+map MS_47_U	ok			depth=15
+map MS_48_U	ok			depth=10
+map MS_49_U	ok			depth=9
+map MU_00_DB	untested	debug map (only the debug menu reaches it)		
+map MU_00_U	ok			depth=2
+map ND_00_U	ok			depth=4
+map ND_01_U	ok			depth=5
+map ND_02_U	ok			depth=6
+map ND_03_U	ok			depth=7
+map ND_04_A	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map ND_04_U	ok			depth=8
+map ND_05_U	ok			depth=9
+map ND_06_U	ok			depth=10
+map ND_07_U	ok			depth=11
+map ND_08_U	ok			depth=13
+map ND_09_U	ok			depth=12
+map ND_10_U	untested	no script or world map point names it (unused / debug / reached by a computed name)		
+map ND_11_U	untested	no script or world map point names it (unused / debug / reached by a computed name)		
+map ND_12_U	untested	no script or world map point names it (unused / debug / reached by a computed name)		
+map ND_13_U	untested	no script or world map point names it (unused / debug / reached by a computed name)		
+map ND_14_U	ok			depth=14
+map ND_20_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map ND_21_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map ND_22_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map OP_00_U	ok			depth=0
+map OP_01_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	needs_disc2=disc-2 scenes M16 OPI_J00
+map PA_00_DB	untested	debug map (only the debug menu reaches it)		
+map PA_01_U	ok			depth=2
+map PA_02_A	ok			depth=2
+map PA_02_U	ok			depth=4
+map PA_03_U	ok			depth=2
+map PA_04_U	ok			depth=3
+map PA_05_U	ok			depth=3
+map PA_06_U	ok			depth=3
+map PA_07_U	ok			depth=4
+map PA_08_U	ok			depth=4
+map PE_00_N	ok			depth=2
+map PE_01_N	ok			depth=5
+map PE_02_N	ok			depth=4
+map PE_03_N	untested	no script or world map point names it (unused / debug / reached by a computed name)		
+map PE_03_U	ok			depth=6
+map PE_04_N	ok			depth=7
+map PE_05_N	ok			depth=3
+map QG_00_U	ok			depth=3
+map QG_01_U	ok			depth=4
+map QG_02_U	ok			depth=4
+map QG_03_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map QG_04_U	ok			depth=5
+map QG_05_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map QG_06_U	ok			depth=6
+map QG_07_U	ok			depth=6
+map QG_08_U	ok			depth=5
+map QG_09_U	ok			depth=6
+map QG_10_U	ok			depth=4
+map QG_11_U	ok			depth=8
+map QG_12_U	ok			depth=9
+map QG_13_U	ok			depth=7
+map QG_14_U	ok			depth=2
+map QG_DB_U	untested	debug map (only the debug menu reaches it)		
+map RE_00_U	ok	needs disc 2: disc-2 scenes N077		needs_disc2=disc-2 scenes N077;depth=3
+map RE_01_U	ok			depth=5
+map RE_02_U	ok			depth=5
+map RE_03_N	ok	needs disc 2: disc-2 scenes N078		needs_disc2=disc-2 scenes N078;depth=4
+map RE_03_U	ok			depth=2
+map RO_00_U	ok			depth=2
+map RO_01_U	ok			depth=3
+map RO_02_U	ok			depth=3
+map RO_03_U	ok			depth=4
+map RO_04_U	ok			depth=4
+map RO_05_U	ok			depth=5
+map RO_06_U	ok			depth=6
+map RO_07_U	ok			depth=6
+map RO_08_U	ok			depth=7
+map RO_09_U	ok			depth=8
+map RO_10_U	ok			depth=9
+map RO_11_U	ok			depth=9
+map RO_12_U	ok			depth=10
+map RO_13_U	ok			depth=10
+map RO_14_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map RO_15_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map RO_16_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map RO_17_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map RO_18_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map RO_19_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map RO_20_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map RO_21_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map RU_00_DB	untested	debug map (only the debug menu reaches it)		
+map RU_00_U	ok			depth=4
+map RU_01_U	ok			depth=4
+map RU_02_U	ok			depth=4
+map RU_03_N	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map RU_03_U	ok			depth=2
+map RU_04_N	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map RU_04_U	ok			depth=3
+map RU_05_N	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map RU_05_U	ok			depth=3
+map RU_06_N	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map RU_06_U	ok			depth=4
+map SA_00_U	ok			depth=4
+map SA_01_N	ok			depth=3
+map SA_01_U	ok			depth=2
+map SA_02_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SA_03_U	ok			depth=5
+map SA_04_U	ok			depth=6
+map SA_05_U	ok			depth=5
+map SE_00_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SE_01_4	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SE_01_9	ok			depth=3
+map SE_01_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SE_02_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SE_03_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SE_04_2	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SE_04_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SE_05_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SE_06_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SE_07_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SE_08_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SE_09_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SE_10_4	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SE_10_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SE_11_1	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SE_11_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SE_13_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SE_14_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SE_15_U	ok			depth=2
+map SH_00_DB	untested	debug map (only the debug menu reaches it)		
+map SH_00_U	ok			depth=2
+map SH_01_U	ok			depth=3
+map SH_02_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SH_03_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SH_04_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SK_00_U	ok			depth=2
+map SK_01_U	ok			depth=3
+map SK_02_U	ok			depth=4
+map SK_03_U	ok			depth=6
+map SK_04_U	ok			depth=5
+map SK_05_U	ok			depth=6
+map SK_06_U	ok			depth=4
+map SK_07_U	ok			depth=6
+map SK_08_U	ok			depth=6
+map SK_09_U	ok			depth=6
+map SK_10_U	ok			depth=5
+map SK_11_U	ok			depth=5
+map SK_DB_U	untested	debug map (only the debug menu reaches it)		
+map SM_00_DB	untested	debug map (only the debug menu reaches it)		
+map SM_00_U	ok			depth=2
+map SM_01_U	ok			depth=3
+map SM_02_U	ok			depth=4
+map SM_03_U	ok			depth=5
+map SM_04_O	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SM_04_U	ok			depth=6
+map SM_05_U	ok			depth=6
+map SM_06_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SM_07_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SM_08_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SM_09_B	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SM_09_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SM_10_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SM_11_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SM_12_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SM_13_B	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SM_13_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SM_14_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SM_15_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SM_16_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SM_17_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SM_18_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SM_19_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SM_20_U	ok			depth=3
+map SM_21_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SM_22_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SM_23_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SM_24_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SM_30_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SM_31_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SM_32_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SM_33_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SO_00_DB	untested	debug map (only the debug menu reaches it)		
+map SO_00_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SU_00_A	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SU_00_U	ok			depth=4
+map SU_01_U	ok			depth=5
+map SU_02_U	ok			depth=6
+map SU_03_U	ok			depth=7
+map SU_04_U	ok			depth=6
+map SU_05_U	ok			depth=8
+map SU_06_U	ok			depth=6
+map SU_07_U	ok			depth=7
+map SU_08_U	ok			depth=5
+map SU_09_U	ok			depth=6
+map SU_10_A	ok			depth=8
+map SU_10_S	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SU_10_U	ok			depth=6
+map SU_11_U	ok			depth=3
+map SU_12_U	ok			depth=4
+map SU_20_U	ok			depth=3
+map SU_22_DB	untested	debug map (only the debug menu reaches it)		
+map SU_22_U	ok			depth=3
+map SU_30_U	ok			depth=3
+map SU_31_U	ok			depth=4
+map SU_40_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map TD_00_DB	untested	debug map (only the debug menu reaches it)		
+map TD_00_U	ok	needs disc 2: disc-2 scenes N101		needs_disc2=disc-2 scenes N101;depth=11
+map TD_01_U	ok			depth=10
+map TD_02_U	ok			depth=11
+map TD_03_U	ok			depth=8
+map TD_04_U	ok			depth=7
+map TD_05_U	ok			depth=6
+map TD_06_U	ok			depth=4
+map TD_07_U	ok			depth=4
+map TD_08_U	ok			depth=5
+map TD_09_U	ok			depth=6
+map TD_10_U	ok			depth=7
+map TD_11_U	ok			depth=8
+map TD_12_U	ok			depth=9
+map TD_13_U	ok			depth=10
+map TD_14_U	ok			depth=9
+map TD_15_U	ok			depth=12
+map TD_16_U	ok			depth=13
+map TD_17_U	ok			depth=3
+map TD_20_U	ok			depth=5
+map TD_21_U	ok			depth=12
+map TD_22_U	ok	needs disc 2: disc-2 scenes N084 N085		needs_disc2=disc-2 scenes N084 N085;depth=2
+map WE_00_U	ok			depth=2
+map WE_01_U	ok			depth=3
+map WE_02_U	ok			depth=4
+map WE_03_U	ok			depth=5
+map WE_04_U	ok			depth=5
+map WI_00_U	ok			depth=3
+map WI_01_U	ok			depth=4
+map WI_02_U	ok			depth=4
+map WI_03_U	ok			depth=4
+map WI_04_U	ok			depth=5
+map WI_05_U	ok			depth=6
+map WI_06_U	ok			depth=6
+map WI_07_U	ok			depth=5
+map WI_08_U	ok			depth=7
+map WI_09_U	ok			depth=6
+map WI_10_U	ok			depth=7
+map WI_11_U	ok			depth=8
+map WI_12_U	ok			depth=2
+map WI_13_U	ok			depth=6
+map WI_14_U	ok			depth=8
+map WI_15_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map WI_16_U	ok			depth=9
+map WI_17_U	ok			depth=8
+map YO_00_DB	untested	debug map (only the debug menu reaches it)		
+map YO_00_U	ok			depth=3
+map YO_01_U	ok	needs disc 2: disc-2 scenes N080 N081		needs_disc2=disc-2 scenes N080 N081;depth=2
+map YO_02_U	ok			depth=3
+map ZI_00_DB	untested	debug map (only the debug menu reaches it)		
+map ZI_00_U	ok			depth=5
+map ZI_01_U	ok	needs disc 2: disc-2 scenes N106		needs_disc2=disc-2 scenes N106;depth=6

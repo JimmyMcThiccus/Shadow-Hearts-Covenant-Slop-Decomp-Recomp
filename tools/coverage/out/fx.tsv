@@ -1,0 +1,306 @@
+EFFECT/003_00.EFD	ok			ticks=28;models=1;damage=0
+EFFECT/004_00.EFD	ok			ticks=28;models=1;damage=0
+EFFECT/005_00.EFD	ok			ticks=30;models=1;damage=0
+EFFECT/006_00.EFD	ok			ticks=30;models=1;damage=0
+EFFECT/007_00.EFD	ok			ticks=30;models=1;damage=0
+EFFECT/008_00.EFD	ok			ticks=39;models=1;damage=0
+EFFECT/009_00.EFD	ok			ticks=34;models=1;damage=0
+EFFECT/010_00.EFD	ok			ticks=34;models=1;damage=0
+EFFECT/011_00.EFD	ok			ticks=34;models=1;damage=0
+EFFECT/012_00.EFD	ok			ticks=34;models=1;damage=0
+EFFECT/013_00.EFD	ok			ticks=34;models=1;damage=0
+EFFECT/014_00.EFD	ok			ticks=34;models=1;damage=0
+EFFECT/015_00.EFD	ok			ticks=34;models=1;damage=0
+EFFECT/016_00.EFD	ok			ticks=34;models=1;damage=0
+EFFECT/017_00.EFD	ok			ticks=39;models=1;damage=0
+EFFECT/018_00.EFD	ok			ticks=39;models=1;damage=0
+EFFECT/019_00.EFD	ok			ticks=39;models=1;damage=0
+EFFECT/020_00.EFD	ok			ticks=39;models=1;damage=0
+EFFECT/021_00.EFD	ok			ticks=39;models=1;damage=0
+EFFECT/022_00.EFD	ok			ticks=39;models=1;damage=0
+EFFECT/023_00.EFD	ok			ticks=39;models=1;damage=0
+EFFECT/024_00.EFD	ok			ticks=39;models=1;damage=0
+EFFECT/025_00.EFD	ok			ticks=39;models=1;damage=0
+EFFECT/027_00.EFD	ok			ticks=34;models=1;damage=0
+EFFECT/028_00.EFD	ok			ticks=32;models=1;damage=0
+EFFECT/029_00.EFD	ok			ticks=34;models=1;damage=0
+EFFECT/030_00.EFD	ok			ticks=34;models=1;damage=0
+EFFECT/031_00.EFD	ok			ticks=39;models=1;damage=0
+EFFECT/032_00.EFD	ok			ticks=39;models=1;damage=0
+EFFECT/033_00.EFD	ok			ticks=34;models=1;damage=0
+EFFECT/034_00.EFD	ok			ticks=32;models=1;damage=0
+EFFECT/035_00.EFD	ok			ticks=34;models=1;damage=0
+EFFECT/036_00.EFD	ok			ticks=42;models=1;damage=0
+EFFECT/037_00.EFD	ok			ticks=34;models=1;damage=0
+EFFECT/038_00.EFD	ok			ticks=32;models=1;damage=0
+EFFECT/039_00.EFD	ok			ticks=34;models=1;damage=0
+EFFECT/040_00.EFD	ok			ticks=32;models=1;damage=0
+EFFECT/041_00.EFD	ok			ticks=34;models=1;damage=0
+EFFECT/042_00.EFD	ok			ticks=32;models=1;damage=0
+EFFECT/043_00.EFD	ok			ticks=34;models=2;damage=0
+EFFECT/044_00.EFD	ok			ticks=32;models=2;damage=0
+EFFECT/045_00.EFD	ok			ticks=34;models=1;damage=0
+EFFECT/046_00.EFD	ok			ticks=32;models=1;damage=0
+EFFECT/047_00.EFD	ok			ticks=34;models=1;damage=0
+EFFECT/048_00.EFD	ok			ticks=34;models=1;damage=0
+EFFECT/049_00.EFD	ok			ticks=34;models=1;damage=0
+EFFECT/050_00.EFD	ok			ticks=34;models=1;damage=0
+EFFECT/051_00.EFD	ok			ticks=34;models=1;damage=0
+EFFECT/052_00.EFD	ok			ticks=34;models=1;damage=0
+EFFECT/053_00.EFD	ok			ticks=23;models=3;damage=1
+EFFECT/054_00.EFD	ok			ticks=45;models=2;damage=2
+EFFECT/055_00.EFD	ok			ticks=54;models=8;damage=1
+EFFECT/056_00.EFD	ok			ticks=70;models=10;damage=1
+EFFECT/057_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=4;damage=1;noend=1
+EFFECT/058_00.EFD	ok			ticks=71;models=4;damage=1
+EFFECT/059_00.EFD	ok			ticks=67;models=5;damage=3
+EFFECT/060_00.EFD	ok			ticks=46;models=2;damage=2
+EFFECT/061_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=17;damage=5;noend=1
+EFFECT/062_00.EFD	ok			ticks=48;models=2;damage=3
+EFFECT/063_00.EFD	ok			ticks=75;models=1;damage=5
+EFFECT/064_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=3;damage=2;noend=1
+EFFECT/065_00.EFD	ok			ticks=49;models=2;damage=2
+EFFECT/066_00.EFD	ok			ticks=65;models=0;damage=3
+EFFECT/067_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=7;damage=6;noend=1
+EFFECT/068_00.EFD	ok			ticks=71;models=5;damage=3
+EFFECT/069_00.EFD	ok			ticks=155;models=22;damage=6
+EFFECT/070_00.EFD	ok			ticks=54;models=4;damage=1
+EFFECT/071_00.EFD	ok			ticks=25;models=1;damage=0
+EFFECT/074_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=2;damage=0;noend=1
+EFFECT/080_00.EFD	ok			ticks=52;models=4;damage=0
+EFFECT/081_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=5;damage=1;noend=1
+EFFECT/082_00.EFD	ok			ticks=59;models=1;damage=2
+EFFECT/083_00.EFD	ok			ticks=139;models=14;damage=6
+EFFECT/084_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=5;damage=2;noend=1
+EFFECT/085_00.EFD	ok			ticks=54;models=11;damage=3
+EFFECT/086_00.EFD	ok			ticks=39;models=6;damage=1
+EFFECT/087_00.EFD	ok			ticks=42;models=1;damage=0
+EFFECT/088_00.EFD	ok			ticks=245;models=3;damage=1
+EFFECT/089_00.EFD	ok			ticks=48;models=1;damage=0
+EFFECT/090_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=1;damage=1;noend=1
+EFFECT/091_00.EFD	ok			ticks=74;models=3;damage=5
+EFFECT/092_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=7;damage=3;noend=1
+EFFECT/093_00.EFD	ok			ticks=39;models=1;damage=1
+EFFECT/094_00.EFD	ok			ticks=30;models=5;damage=1
+EFFECT/095_00.EFD	ok			ticks=42;models=1;damage=0
+EFFECT/096_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=4;damage=0;noend=1
+EFFECT/097_00.EFD	ok			ticks=47;models=4;damage=2
+EFFECT/098_00.EFD	ok			ticks=84;models=9;damage=5
+EFFECT/099_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=17;damage=6;noend=1
+EFFECT/100_00.EFD	ok			ticks=46;models=1;damage=2
+EFFECT/101_00.EFD	ok			ticks=49;models=6;damage=2
+EFFECT/102_00.EFD	ok			ticks=66;models=24;damage=1
+EFFECT/103_00.EFD	ok			ticks=42;models=1;damage=1
+EFFECT/104_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=6;damage=0;noend=1
+EFFECT/105_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=2;damage=1;noend=1
+EFFECT/106_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=6;damage=0;noend=1
+EFFECT/107_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=7;damage=1;noend=1
+EFFECT/108_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=5;damage=0;noend=1
+EFFECT/109_00.EFD	ok			ticks=32;models=2;damage=0
+EFFECT/110_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=16;damage=9;noend=1
+EFFECT/111_00.EFD	ok			ticks=86;models=2;damage=0
+EFFECT/112_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=7;damage=1;noend=1
+EFFECT/113_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=2;damage=0;noend=1
+EFFECT/114_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=4;damage=1;noend=1
+EFFECT/115_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=4;damage=1;noend=1
+EFFECT/116_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=4;damage=1;noend=1
+EFFECT/117_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=5;damage=7;noend=1
+EFFECT/118_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=4;damage=7;noend=1
+EFFECT/119_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=3;damage=7;noend=1
+EFFECT/120_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=95;damage=6;noend=1
+EFFECT/121_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=95;damage=10;noend=1
+EFFECT/122_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=95;damage=11;noend=1
+EFFECT/123_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=6;damage=1;noend=1
+EFFECT/126_00.EFD	ok			ticks=180;models=6;damage=1
+EFFECT/127_00.EFD	ok			ticks=259;models=2;damage=0
+EFFECT/128_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=3;damage=0;noend=1
+EFFECT/129_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=2;damage=0;noend=1
+EFFECT/130_00.EFD	ok			ticks=285;models=2;damage=1
+EFFECT/131_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=17;damage=0;noend=1
+EFFECT/132_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=15;damage=0;noend=1
+EFFECT/133_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=7;damage=0;noend=1
+EFFECT/134_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=4;damage=0;noend=1
+EFFECT/135_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=27;damage=4;noend=1
+EFFECT/136_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=31;damage=4;noend=1
+EFFECT/137_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=5;damage=0;noend=1
+EFFECT/138_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=4;damage=0;noend=1
+EFFECT/139_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=3;damage=0;noend=1
+EFFECT/142_00.EFD	ok			ticks=131;models=12;damage=0
+EFFECT/143_00.EFD	ok			ticks=34;models=2;damage=0
+EFFECT/144_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=8;damage=3;noend=1
+EFFECT/145_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=6;damage=3;noend=1
+EFFECT/146_00.EFD	ok			ticks=71;models=2;damage=0
+EFFECT/147_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=5;damage=5;noend=1
+EFFECT/148_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=9;damage=1;noend=1
+EFFECT/149_00.EFD	ok			ticks=119;models=4;damage=1
+EFFECT/150_00.EFD	ok			ticks=91;models=3;damage=1
+EFFECT/151_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=20;damage=8;noend=1
+EFFECT/152_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=23;damage=3;noend=1
+EFFECT/153_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=16;damage=1;noend=1
+EFFECT/154_00.EFD	ok			ticks=165;models=3;damage=0
+EFFECT/155_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=5;damage=0;noend=1
+EFFECT/156_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=8;damage=1;noend=1
+EFFECT/157_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=25;damage=7;noend=1
+EFFECT/158_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=4;damage=17;noend=1
+EFFECT/159_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=5;damage=0;noend=1
+EFFECT/164_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=34;damage=1;noend=1
+EFFECT/165_00.EFD	ok			ticks=60;models=2;damage=1
+EFFECT/166_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=5;damage=1;noend=1
+EFFECT/167_00.EFD	ok			ticks=34;models=1;damage=0
+EFFECT/168_00.EFD	ok			ticks=31;models=1;damage=0
+EFFECT/169_00.EFD	ok			ticks=31;models=2;damage=0
+EFFECT/170_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=1;damage=9;noend=1
+EFFECT/171_00.EFD	ok			ticks=39;models=3;damage=0
+EFFECT/172_00.EFD	ok			ticks=39;models=1;damage=0
+EFFECT/174_00.EFD	ok			ticks=45;models=3;damage=0
+EFFECT/176_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=4;damage=17;noend=1
+EFFECT/177_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=3;damage=6;noend=1
+EFFECT/178_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=3;damage=6;noend=1
+EFFECT/179_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=9;damage=1;noend=1
+EFFECT/180_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=16;damage=9;noend=1
+EFFECT/181_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=16;damage=9;noend=1
+EFFECT/182_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=8;damage=1;noend=1
+EFFECT/183_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=8;damage=1;noend=1
+EFFECT/184_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=8;damage=1;noend=1
+EFFECT/185_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=8;damage=1;noend=1
+EFFECT/186_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=8;damage=1;noend=1
+EFFECT/187_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=8;damage=1;noend=1
+EFFECT/190_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=10;damage=3;noend=1
+EFFECT/191_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=10;damage=3;noend=1
+EFFECT/192_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=2;damage=1;noend=1
+EFFECT/193_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=2;damage=1;noend=1
+EFFECT/194_00.EFD	ok			ticks=39;models=1;damage=0
+EFFECT/195_00.EFD	ok			ticks=285;models=2;damage=1
+EFFECT/196_00.EFD	ok			ticks=285;models=2;damage=1
+EFFECT/197_00.EFD	ok			ticks=285;models=2;damage=1
+EFFECT/198_00.EFD	ok			ticks=295;models=2;damage=1
+EFFECT/199_00.EFD	ok			ticks=285;models=2;damage=1
+EFFECT/201_00.EFD	ok			ticks=185;models=10;damage=1
+EFFECT/202_00.EFD	ok			ticks=190;models=14;damage=2
+EFFECT/203_00.EFD	ok			ticks=195;models=18;damage=2
+EFFECT/204_00.EFD	ok			ticks=200;models=20;damage=3
+EFFECT/205_00.EFD	ok			ticks=205;models=21;damage=3
+EFFECT/206_00.EFD	ok			ticks=210;models=22;damage=4
+EFFECT/207_00.EFD	ok			ticks=215;models=23;damage=4
+EFFECT/208_00.EFD	ok			ticks=220;models=23;damage=5
+EFFECT/209_00.EFD	ok			ticks=225;models=23;damage=5
+EFFECT/210_00.EFD	ok			ticks=230;models=23;damage=6
+EFFECT/211_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=23;damage=6;noend=1
+EFFECT/212_00.EFD	ok			ticks=25;models=1;damage=0
+EFFECT/213_00.EFD	ok			ticks=25;models=1;damage=0
+EFFECT/214_00.EFD	ok			ticks=25;models=1;damage=0
+EFFECT/215_00.EFD	ok			ticks=25;models=1;damage=0
+EFFECT/216_00.EFD	ok			ticks=25;models=1;damage=0
+EFFECT/217_00.EFD	ok			ticks=36;models=1;damage=0
+EFFECT/218_00.EFD	ok			ticks=36;models=1;damage=0
+EFFECT/219_00.EFD	ok			ticks=36;models=1;damage=0
+EFFECT/220_00.EFD	ok			ticks=237;models=5;damage=0
+EFFECT/221_00.EFD	ok			ticks=217;models=5;damage=0
+EFFECT/222_00.EFD	ok			ticks=217;models=5;damage=0
+EFFECT/223_00.EFD	ok			ticks=217;models=5;damage=0
+EFFECT/224_00.EFD	ok			ticks=217;models=5;damage=0
+EFFECT/225_00.EFD	ok			ticks=217;models=5;damage=0
+EFFECT/226_00.EFD	ok			ticks=277;models=5;damage=0
+EFFECT/228_00.EFD	ok			ticks=217;models=5;damage=0
+EFFECT/229_00.EFD	ok			ticks=217;models=7;damage=0
+EFFECT/230_00.EFD	ok			ticks=217;models=5;damage=0
+EFFECT/232_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=2;damage=1;noend=1
+EFFECT/233_00.EFD	ok			ticks=101;models=2;damage=1
+EFFECT/234_00.EFD	ok			ticks=141;models=2;damage=1
+EFFECT/238_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=0;damage=5;noend=1
+EFFECT/239_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=1;damage=1;noend=1
+EFFECT/240_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=27;damage=4;noend=1
+EFFECT/241_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=1;damage=1;noend=1
+EFFECT/242_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=5;damage=1;noend=1
+EFFECT/243_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=5;damage=1;noend=1
+EFFECT/244_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=5;damage=1;noend=1
+EFFECT/245_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=5;damage=1;noend=1
+EFFECT/246_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=5;damage=1;noend=1
+EFFECT/247_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=5;damage=1;noend=1
+EFFECT/248_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=0;damage=1;noend=1
+EFFECT/249_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=3;damage=0;noend=1
+EFFECT/250_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=2;damage=1;noend=1
+EFFECT/251_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=2;damage=1;noend=1
+EFFECT/252_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=27;damage=4;noend=1
+EFFECT/253_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=27;damage=4;noend=1
+EFFECT/254_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=27;damage=4;noend=1
+EFFECT/255_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=6;damage=8;noend=1
+EFFECT/256_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=27;damage=4;noend=1
+EFFECT/257_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=27;damage=4;noend=1
+EFFECT/258_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=31;damage=4;noend=1
+EFFECT/259_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=5;damage=0;noend=1
+EFFECT/260_00.EFD	ok			ticks=217;models=5;damage=0
+EFFECT/261_00.EFD	ok			ticks=217;models=7;damage=0
+EFFECT/262_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=1;damage=0;noend=1
+EFFECT/263_00.EFD	ok			ticks=34;models=1;damage=0
+EFFECT/264_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=2;damage=1;noend=1
+EFFECT/265_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=2;damage=1;noend=1
+EFFECT/266_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=3;damage=0;noend=1
+EFFECT/267_00.EFD	ok			ticks=218;models=9;damage=5
+EFFECT/268_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=4;damage=0;noend=1
+EFFECT/269_00.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=23;damage=19;noend=1
+EFFECT/270_00.EFD	ok			ticks=124;models=1;damage=0
+EFFECT/271_00.EFD	ok			ticks=119;models=3;damage=2
+EFFECT/272_00.EFD	ok			ticks=130;models=4;damage=2
+EFFECT/273_00.EFD	ok			ticks=158;models=3;damage=2
+EFFECT/274_00.EFD	ok			ticks=145;models=3;damage=2
+EFFECT/275_00.EFD	ok			ticks=165;models=4;damage=2
+EFFECT/276_00.EFD	ok			ticks=150;models=1;damage=1
+EFFECT/BD_078.EFD	ok			ticks=114;models=21;damage=0
+EFFECT/BD_176.EFD	ok			ticks=114;models=21;damage=0
+EFFECT/BD_406.EFD	ok			ticks=114;models=21;damage=0
+EFFECT/BD_409.EFD	ok			ticks=114;models=21;damage=0
+EFFECT/BD_412.EFD	ok			ticks=114;models=21;damage=0
+EFFECT/BD_413.EFD	ok			ticks=114;models=21;damage=0
+EFFECT/BD_417.EFD	ok			ticks=114;models=21;damage=0
+EFFECT/BD_420.EFD	ok			ticks=114;models=21;damage=0
+EFFECT/BD_426.EFD	ok			ticks=114;models=21;damage=0
+EFFECT/BD_429.EFD	ok			ticks=114;models=21;damage=0
+EFFECT/BD_433.EFD	ok			ticks=114;models=21;damage=0
+EFFECT/BD_448.EFD	ok			ticks=114;models=21;damage=0
+EFFECT/BD_450.EFD	ok			ticks=114;models=21;damage=0
+EFFECT/BD_454.EFD	ok			ticks=114;models=21;damage=0
+EFFECT/BD_459.EFD	ok			ticks=114;models=21;damage=0
+EFFECT/BD_464.EFD	ok			ticks=114;models=21;damage=0
+EFFECT/BD_467.EFD	ok			ticks=114;models=21;damage=0
+EFFECT/BD_471.EFD	ok			ticks=114;models=21;damage=0
+EFFECT/BD_479.EFD	ok			ticks=114;models=21;damage=0
+EFFECT/BD_484.EFD	ok			ticks=114;models=21;damage=0
+EFFECT/BD_486.EFD	ok			ticks=114;models=21;damage=0
+EFFECT/BD_489.EFD	ok			ticks=114;models=21;damage=0
+EFFECT/BD_499.EFD	ok			ticks=114;models=21;damage=0
+EFFECT/BD_505.EFD	ok			ticks=114;models=21;damage=0
+EFFECT/BD_509.EFD	ok			ticks=114;models=21;damage=0
+EFFECT/BD_512.EFD	ok			ticks=114;models=21;damage=0
+EFFECT/BD_545.EFD	ok			ticks=114;models=21;damage=0
+EFFECT/BD_549.EFD	ok			ticks=114;models=21;damage=0
+EFFECT/BD_555.EFD	ok			ticks=114;models=21;damage=0
+EFFECT/FU_FM.EFD	ok			ticks=112;models=3;damage=0
+EFFECT/FU_K1.EFD	ok			ticks=112;models=3;damage=0
+EFFECT/FU_U1.EFD	ok			ticks=112;models=3;damage=0
+EFFECT/FU_U2.EFD	ok			ticks=112;models=3;damage=0
+EFFECT/UNION.EFD	stub	still running after 300 ticks (the battle host cuts it at 10 s: waits for a motion end / battle event the host never sends?)	FX	ticks=300;models=0;damage=0;noend=1
+FIELD/EFF/APP00.EFD	ok			ticks=300;models=1;damage=0;loops=1
+FIELD/EFF/APP01.EFD	ok			ticks=300;models=1;damage=0;loops=1
+FIELD/EFF/BL_00.EFD	ok			ticks=300;models=0;damage=0;loops=1
+FIELD/EFF/CH01.EFD	ok			ticks=300;models=2;damage=0;loops=1
+FIELD/EFF/CH02.EFD	ok			ticks=300;models=2;damage=0;loops=1
+FIELD/EFF/CH03.EFD	ok			ticks=300;models=2;damage=0;loops=1
+FIELD/EFF/CH04.EFD	ok			ticks=300;models=2;damage=0;loops=1
+FIELD/EFF/CH05.EFD	ok			ticks=300;models=2;damage=0;loops=1
+FIELD/EFF/CH06.EFD	ok			ticks=300;models=2;damage=0;loops=1
+FIELD/EFF/CH07.EFD	ok			ticks=300;models=2;damage=0;loops=1
+FIELD/EFF/DWP00.EFD	ok			ticks=300;models=0;damage=0;loops=1
+FIELD/EFF/DWP01.EFD	ok			ticks=300;models=0;damage=0;loops=1
+FIELD/EFF/DWP02.EFD	ok			ticks=300;models=1;damage=0;loops=1
+FIELD/EFF/IWP00.EFD	ok			ticks=300;models=2;damage=0;loops=1
+FIELD/EFF/MATO00.EFD	ok			ticks=300;models=1;damage=0;loops=1
+FIELD/EFF/MUZZLE.EFD	ok			ticks=21;models=1;damage=0
+FIELD/EFF/M_01.EFD	ok			ticks=300;models=1;damage=0;loops=1
+FIELD/EFF/M_02.EFD	ok			ticks=300;models=1;damage=0;loops=1
+FIELD/EFF/RING00.EFD	ok			ticks=300;models=1;damage=0;loops=1
+FIELD/EFF/RING01.EFD	ok			ticks=300;models=1;damage=0;loops=1
+FIELD/EFF/SMROOM.EFD	ok			ticks=300;models=2;damage=0;loops=1
+FIELD/EFF/SMROOM2.EFD	ok			ticks=300;models=1;damage=0;loops=1
+FIELD/EFF/SYWP.EFD	ok			ticks=300;models=3;damage=0;loops=1
+FIELD/EFF/SYWPZ.EFD	ok			ticks=300;models=3;damage=0;loops=1

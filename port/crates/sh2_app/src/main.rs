@@ -64,6 +64,13 @@ impl Plugin for RetailOnly {
 fn main() {
     // Asset viewer: `--view-map <NAME>` / `--view-model [spec]` (see viewer.rs); the normal game boot below is untouched.
     if let Some(opts) = viewer::ViewerOptions::from_args(std::env::args().skip(1)) {
+        // the viewers build their own app: only the hard limit of SH2_MAX_SECONDS applies (exit code 124)
+        if let Some(secs) = MaxSeconds::from_env().0 {
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs_f64(secs));
+                std::process::exit(124);
+            });
+        }
         viewer::run(opts);
         return;
     }
@@ -83,7 +90,7 @@ fn main() {
     sh2_core::boot::set_active_region(region);
     let disc_dir = std::env::var("SH2_DISC_DIR").unwrap_or_else(|_| ".".into());
 
-    App::new()
+    let exit = App::new()
         // CApp::InitScreen(0x200, 0x1c0): 512x448 interlaced NTSC frame.
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
@@ -122,7 +129,46 @@ fn main() {
                 .chain(),
         )
         .add_systems(PostUpdate, (delay_delete_flush, frame_stats))
+        .add_plugins(MaxSeconds::from_env())
         .run();
+    // `--autoplay` reports failure (timeout / game over = 2) through `AppExit`: hand it to the shell so harness scripts can detect it
+    std::process::exit(match exit {
+        AppExit::Success => 0,
+        AppExit::Error(c) => c.get() as i32,
+    });
+}
+
+/// `SH2_MAX_SECONDS=<n>`: hard wall-clock limit of a run (scripted test runs must never leave windows behind).  After `n` seconds the app
+/// sends `AppExit::from_code(124)`; if the shutdown has not finished 5 s later the process exits with code 124 from a watchdog thread.
+struct MaxSeconds(Option<f64>);
+
+impl MaxSeconds {
+    fn from_env() -> Self {
+        MaxSeconds(std::env::var("SH2_MAX_SECONDS").ok().and_then(|v| v.parse::<f64>().ok()).filter(|v| *v > 0.0))
+    }
+}
+
+#[derive(Resource)]
+struct MaxSecondsAt(std::time::Instant, f64);
+
+impl Plugin for MaxSeconds {
+    fn build(&self, app: &mut App) {
+        let Some(secs) = self.0 else { return };
+        let start = std::time::Instant::now();
+        app.insert_resource(MaxSecondsAt(start, secs)).add_systems(Last, max_seconds);
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_secs_f64(secs + 5.0));
+            eprintln!("SH2_MAX_SECONDS: {secs} s passed and the app did not shut down; exiting");
+            std::process::exit(124);
+        });
+    }
+}
+
+fn max_seconds(at: Res<MaxSecondsAt>, mut exit: MessageWriter<AppExit>) {
+    if at.0.elapsed().as_secs_f64() > at.1 {
+        log::warn!("SH2_MAX_SECONDS: {} s reached, exiting", at.1);
+        exit.write(AppExit::from_code(124));
+    }
 }
 
 /// `CApp::InitInstance` — JP 0x003d76d0: `m_pPause = new CPause; InitMain();`
