@@ -198,7 +198,11 @@ fn menu_tick(
         match act {
             Act::Key(k) => keys |= k,
             Act::Wait(n) => menu.script.wait = n,
-            Act::Shot(n) => menu.shot = Some(n),
+            Act::Shot(n) => {
+                // the screenshot is taken a frame or two later (render pipelining): hold the script so the next key does not land in it
+                menu.shot = Some(n);
+                menu.script.wait = 4;
+            }
             Act::Goto(p, pc) => rt.goto = Some((p, pc)),
             Act::GotoData(l) => rt.goto_data = Some(l),
             Act::PopPage => rt.pop = true,
@@ -411,7 +415,7 @@ fn draw(rt: &Runtime, cache: &CmdCache, canvas: &mut UiCanvas) {
     }
     let a = (rt.fade.min(1.0) * 128.0) as u8;
     match (retail, top.report()) {
-        (Some(rf), Some(lines)) => draw_report(&mut g, rf, &sc.cmn, &lines, a),
+        (Some(rf), Some(lines)) => draw_report(&mut g, rf, &sc.cmn, &lines, top.report_shift(), a),
         _ => draw_buttons(&mut g, &sc.cmn, &top.buttons(), 6.0, a),
     }
 }

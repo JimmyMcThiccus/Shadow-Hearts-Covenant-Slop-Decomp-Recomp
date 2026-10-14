@@ -55,11 +55,21 @@ pub enum ScreenReq {
     Data { load: bool, reopen_menu: bool },
     /// the title's Options screen (retail, [`crate::title_options`])
     TitleOptions,
+    /// retail op 0x4d `InvokeCmdScene(a, b)`: the Graveyard soul charge ([`crate::soul_charge`])
+    SoulCharge { a: i32, b: i32 },
+    /// `SpecialMenu(0x400, ..)`: the retail name entry ([`crate::name_entry`], kind 1 = a name, 0 = a team name)
+    NameEntry { kind: usize, current: String },
+    /// `SpecialMenu(0x600, bout)`: the Wolf Bout stamp card ([`crate::wolf_stamp`])
+    WolfStamp { bout: i32 },
 }
 
 /// Requests a screen can make to the host besides drawing.
 #[derive(Default)]
 pub struct ScreenIo {
+    /// input: the buttons held down this tick (pad + a scripted [`ScreenAct::Hold`])
+    pub held: u16,
+    /// output: the name a name entry ended with
+    pub name: Option<String>,
     /// open the in-game command menu on this page (the shop's "Equip"); the screen sleeps until it closes
     pub open_menu: Option<CmdPage>,
     /// the screen wants the field to jump (warp list): `(map, entry)`
@@ -96,6 +106,8 @@ pub enum ScreenAct {
     Until(String),
     /// press `key` every `every` ticks until the screen leaves state `state` (at most 1500 ticks)
     Mash { key: u16, state: String, every: u32 },
+    /// hold `key` down for `ticks` ticks (the soul charge's press-and-hold)
+    Hold { key: u16, ticks: u32 },
     /// acts for the command menu the screen opens next (`ScreenIo::open_menu`): run after its `Goto`
     Menu(Vec<Act>),
 }
@@ -105,12 +117,13 @@ pub struct ScreenScript {
     pub acts: VecDeque<ScreenAct>,
     pub(crate) wait: u32,
     waited: u32,
+    hold: (u16, u32),
     pub dir: Option<PathBuf>,
 }
 
 impl ScreenScript {
     pub fn new(acts: Vec<ScreenAct>, dir: Option<PathBuf>) -> Self {
-        ScreenScript { acts: acts.into(), wait: 0, waited: 0, dir }
+        ScreenScript { acts: acts.into(), wait: 0, waited: 0, hold: (0, 0), dir }
     }
     pub fn is_empty(&self) -> bool {
         self.acts.is_empty() && self.wait == 0
@@ -139,6 +152,8 @@ pub struct FieldScreens {
     /// name of the screen that is up (diagnostics)
     pub active_name: String,
     last_state: String,
+    /// the name the last name entry ended with (`SpecialMenu(0x400)`: the field copies it into its message buffer `CField + 0x2170`)
+    pub name_result: Option<String>,
     /// how the last `dataAccess` screen ended (the title's Continue and the tests read it)
     pub data_outcome: Option<crate::data_screen::Outcome>,
     /// what the title asked for through the link (answered when the screen closes)
@@ -162,6 +177,9 @@ fn make_screen(req: &ScreenReq, env: &mut Env) -> Option<Box<dyn FieldScreen>> {
         ScreenReq::Solomon => crate::solomon::SolomonScreen::new(env).map(|s| Box::new(s) as Box<dyn FieldScreen>),
         ScreenReq::TitleOptions => crate::title_options::TitleOptionsScreen::new(env).map(|s| Box::new(s) as Box<dyn FieldScreen>),
         ScreenReq::Data { load, reopen_menu } => crate::data_screen::DataScreen::new(env, *load, *reopen_menu).map(|s| Box::new(s) as Box<dyn FieldScreen>),
+        ScreenReq::NameEntry { kind, current } => crate::name_entry::NameEntryScreen::new(env, *kind, current).map(|s| Box::new(s) as Box<dyn FieldScreen>),
+        ScreenReq::WolfStamp { bout } => crate::wolf_stamp::WolfStampScreen::new(env, *bout).map(|s| Box::new(s) as Box<dyn FieldScreen>),
+        ScreenReq::SoulCharge { a, b } => crate::soul_charge::SoulChargeScreen::new(env, *a, *b).map(|s| Box::new(s) as Box<dyn FieldScreen>),
     }
 }
 
@@ -201,6 +219,11 @@ fn screens_tick(
     }
     let mut keys = pad.menu_keys();
     let mut press = pad.press();
+    let mut held = pad.real();
+    if screens.script.hold.1 > 0 {
+        screens.script.hold.1 -= 1;
+        held |= screens.script.hold.0;
+    }
     let cur_state = screens.active.as_ref().map(|s| s.state()).unwrap_or_default();
     if cur_state != screens.last_state {
         log::info!("screens: {} -> state `{}`", screens.active_name, cur_state);
@@ -236,6 +259,12 @@ fn screens_tick(
                 press |= k;
             }
             ScreenAct::Wait(n) => screens.script.wait = n,
+            ScreenAct::Hold { key, ticks } => {
+                keys |= key;
+                press |= key;
+                held |= key;
+                screens.script.hold = (key, ticks);
+            }
             ScreenAct::Shot(n) => {
                 screens.shot = Some(n);
                 // the capture is taken a frame later: hold the script still meanwhile (several logic ticks can run per frame)
@@ -255,7 +284,7 @@ fn screens_tick(
     };
     let mut ses: Vec<MenuSe> = Vec::new();
     let mut hreq: Vec<HostReq> = Vec::new();
-    let mut io = ScreenIo::default();
+    let mut io = ScreenIo { held, ..Default::default() };
     let mut cache = std::mem::take(&mut screens.cache);
     let mut done = false;
     {
@@ -311,6 +340,10 @@ fn screens_tick(
     }
     if let Some(t) = io.toast.take() {
         session.toast = Some((t, 2.5));
+    }
+    if let Some(n) = io.name.take() {
+        log::info!("screens: name entry -> {n:?}");
+        screens.name_result = Some(n);
     }
     if let Some(j) = io.jump.take() {
         screens.jump = Some(j);

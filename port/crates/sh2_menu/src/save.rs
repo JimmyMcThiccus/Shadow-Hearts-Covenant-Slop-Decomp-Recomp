@@ -357,6 +357,8 @@ impl PcRec {
 /// `GetPCParam` 0x003c1bb0, `SetPCParam` 0x003c1d30, `FUN_003bfbe0` = `PCInit`, `FUN_003bc710` = `SetSceneInit`,
 /// `FUN_003be870` = `AddEquip`, `FUN_003bf2d0 / 5c0` = item list cache, `FUN_003c02f0` = per-scene PC init).
 pub mod retail_btl {
+    /// u16 Soul Energy pool (`*ourBtlSaveDat`; the Graveyard soul charge `CmdRetailPage01` spends it; battles add to it, capped at 9999 by `BtlResult::Polling` SLUS 0x398190)
+    pub const OFF_SOUL: usize = 0x000;
     /// u8 active bag (the retail "scenario": it also selects the cash slot, `SetCurrentCash` = `MENU[4 + bag*4]`)
     pub const OFF_BAG: usize = 0x002;
     /// u8 flags (bit0 combo menu `SetComboMenuMode`, bit1 / bit2 `FUN_003bc420 / 3f0`)

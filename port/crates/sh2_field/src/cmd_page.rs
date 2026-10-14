@@ -397,6 +397,10 @@ pub trait Page: Send + Sync {
     fn report(&self) -> Option<Vec<(Button, usize)>> {
         None
     }
+    /// `ButtonReport::Shift`: x offset of the report lines (the crest page uses 40)
+    fn report_shift(&self) -> f32 {
+        0.0
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -505,9 +509,12 @@ pub fn draw_backdrop(g: &mut dyn MenuGfx, rf: &RetailFrame, k: usize, alpha: f32
 
 /// Retail button report (`CMDMENUS.MSD` attach 1): bottom right, one line per button (icon sprite 0 at (18, 69), `: Label` text record 0
 /// at (32, 66)), the last line lowest and the others stacked 20 px above it.
-pub fn draw_report(g: &mut dyn MenuGfx, rf: &RetailFrame, cmn: &CommonScene, lines: &[(Button, usize)], alpha: u8) {
+pub fn draw_report(g: &mut dyn MenuGfx, rf: &RetailFrame, cmn: &CommonScene, lines: &[(Button, usize)], shift: f32, alpha: u8) {
+    // `ButtonReport::Shift(dx)` (US 0x293ad0) moves a line right by `dx`: the crest page shifts every line by 40
+    let w0 = rf.report.msd.window(0);
+    let Some(mut w) = w0 else { return };
+    w.x += shift;
     let m = &rf.report.msd;
-    let Some(w) = m.window(0) else { return };
     let Some(t) = m.menu_text(0) else { return };
     let icon = m.sprite(0);
     let hs = sh2_menu::gfx::TextRun::hscale_of(t.flags);

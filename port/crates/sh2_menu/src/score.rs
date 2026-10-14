@@ -37,6 +37,8 @@ pub struct ScoreTotals {
     pub ran_away: u32,
     pub berserk: u32,
     pub unconscious: u32,
+    /// sum of the members' `j = 0` words (battles joined)
+    pub joined_rows: u32,
     pub victories: u32,
     pub total_hits: u32,
     pub max_hits: u32,
@@ -50,6 +52,16 @@ pub struct ScoreTotals {
     pub combo_ring: (u32, u32),
     pub shop_ring: (u32, u32),
     pub distance_km: f32,
+    /// per party member (index = PC id < 14): `(ring success, ring total, perfect success, perfect total)` and battles joined (`j = 0`)
+    pub members: Vec<MemberScore>,
+}
+
+/// One member's part of the score blocks (`0x11 + 9 * pc + j`).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct MemberScore {
+    pub joined: u32,
+    pub ring: (u32, u32),
+    pub perfect: (u32, u32),
 }
 
 /// What `GetScore` returns for one case, ready for the `printf` formats of the score scene.
@@ -87,16 +99,26 @@ impl ScoreTotals {
             for i in 10..0x11 {
                 t.bonuses += word(blk, i);
             }
+            if t.members.is_empty() {
+                t.members = vec![MemberScore::default(); 14];
+            }
             for r in 0..14 {
                 for (j, s) in rows.iter_mut().enumerate() {
                     *s += word(blk, 0x11 + r * 9 + j);
                 }
+                let m = &mut t.members[r];
+                m.joined += word(blk, 0x11 + r * 9);
+                m.ring.1 += word(blk, 0x11 + r * 9 + 3);
+                m.ring.0 += word(blk, 0x11 + r * 9 + 5);
+                m.perfect.1 += word(blk, 0x11 + r * 9 + 4);
+                m.perfect.0 += word(blk, 0x11 + r * 9 + 6);
             }
             let m = OFF_MENU_SHOP + ch * 0x10;
             let mw = |k: usize| menu.data.get(m + k * 4..m + k * 4 + 4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]])).unwrap_or(0);
             t.shop_ring.1 += mw(0);
             t.shop_ring.0 += mw(1);
         }
+        t.joined_rows = rows[0];
         t.berserk = rows[1];
         t.unconscious = rows[2];
         t.ring = (rows[5], rows[3]);
@@ -141,6 +163,84 @@ impl ScoreTotals {
             0x13 => ScoreValue::Int(cap(self.bonuses)),
             _ => ScoreValue::Int(0),
         }
+    }
+}
+
+impl ScoreTotals {
+    /// The number `GetScore` hands to `GetComment` for case `case` (US 0x4ade00, second switch): pairs give the success rate in percent,
+    /// scaled by `0.5 + total / 400` while the successes are below 200 / 200 / 125 / 100 (ring / perfect / combo ring / shop ring); rates
+    /// the rate, the distance its kilometres, counts the count (all capped at 99999).
+    pub fn comment_value(&self, case: usize) -> i32 {
+        let pair = |p: (u32, u32), k: usize| -> i32 {
+            if p.1 == 0 {
+                return 0;
+            }
+            let mut r = p.0 as f32 / p.1 as f32 * 100.0;
+            if p.0 < [200, 200, 125, 100][k] {
+                r *= p.1 as f32 / 400.0 + 0.5;
+            }
+            r as i32
+        };
+        match case {
+            1 => pair(self.ring, 0),
+            3 => pair(self.perfect, 1),
+            5 => pair(self.combo_ring, 2),
+            7 => pair(self.shop_ring, 3),
+            _ => match self.value(case) {
+                ScoreValue::Int(v) => v as i32,
+                ScoreValue::Pair(a, _) => a as i32,
+                ScoreValue::Percent(p) => p as i32,
+                ScoreValue::Km(k) => k as i32,
+            },
+        }
+    }
+
+    /// `CmdScoreRank::GetRank` (US 0x4afb50): five weighted terms (ring, perfect, combo ring, battle bonuses per battle, shop ring), each
+    /// growing with the attempts (capped at twice the battles), the score `2 A + 3 B + 2 C + 2 D + E` -> rank `101 - min(score / 10, max hits,
+    /// 100) - (score - 1000) / 20`, worsened by 20 per run-away / berserk / unconscious per battle, and never better than `101 - ceil((battles
+    /// / 1000)^2)`; 1 (best) .. 99.
+    pub fn rank(&self) -> i32 {
+        let battles = self.battles as i32;
+        let bf = battles as f32;
+        let curve = |succ: u32, total: u32, lo: i32, hi: i32, k: f32, div: f32, last: f32, cap_by_battles: bool| -> f32 {
+            let t = total as i32;
+            let s0 = if cap_by_battles { t.min(battles * 2) } else { t };
+            let mut r = 0.0f32;
+            if t != 0 {
+                r = succ as f32 / t as f32 * 100.0;
+                r *= r;
+            }
+            let s0f = s0 as f32;
+            if s0 < lo {
+                r * s0f * s0f / 1e6
+            } else if s0 < hi {
+                r / (k - s0f / div)
+            } else {
+                r / last
+            }
+        };
+        let a = curve(self.ring.0, self.ring.1, 112, 4612, 82.12, 100.0, 36.0, true);
+        let b = curve(self.perfect.0, self.perfect.1, 200, 5400, 27.0, 300.0, 9.0, true);
+        let c = curve(self.combo_ring.0, self.combo_ring.1, 125, 3925, 64.25, 100.0, 25.0, true);
+        let per = if battles != 0 { self.bonuses as f32 / bf } else { 0.0 };
+        let d = if battles < 201 {
+            let v = 9.0 - bf * 0.03;
+            900.0 * per / (v * v)
+        } else if battles < 5201 {
+            per * (96.0 + bf * 0.02)
+        } else {
+            per * 200.0
+        };
+        let e = curve(self.shop_ring.0, self.shop_ring.1, 112, 4612, 82.12, 100.0, 36.0, false);
+        let score = (2.0 * a + 3.0 * b + 2.0 * c + 2.0 * d + e) as i32;
+        let (r10, extra) = if score < 1001 { (score / 10, 0) } else { (100, (score - 1000) / 20) };
+        let s7 = (r10 as u32).min(self.max_hits).min(100) as i32;
+        let s6 = (101 - s7 - extra).clamp(1, 99);
+        let pen = if battles != 0 { (self.ran_away as i32 * 20) / battles + (self.berserk as i32 * 20) / battles + (self.unconscious as i32 * 20) / battles } else { 0 };
+        let c4 = s6 + pen;
+        let q = (bf / 1000.0) * (bf / 1000.0);
+        let floor = (101 - q.ceil() as i32).max(1);
+        c4.min(floor).clamp(1, 99)
     }
 }
 
@@ -193,5 +293,17 @@ mod tests {
         assert_eq!(t.value(1), ScoreValue::Pair(5, 10));
         assert_eq!(t.value(2).text(), "50.00%");
         assert_eq!(ScoreValue::Pair(5, 10).text(), "5/10");
+    }
+
+    #[test]
+    fn rank_and_comment_values_match_the_live_capture() {
+        // live `score_a` (2 battles, ring 12/12, perfect 0/12): Rank 99, ring comment = "Practice Paying Off?" (40 <= 52 < 60)
+        let t = ScoreTotals { battles: 2, ring: (12, 12), perfect: (0, 12), max_hits: 3, ..Default::default() };
+        assert_eq!(t.rank(), 99);
+        assert_eq!(t.comment_value(1), 52, "f32: 100 * 0.53 truncates to 52, as the game's cvt.w.s");
+        assert_eq!(t.comment_value(0), 2);
+        // a strong record ranks near the top
+        let s = ScoreTotals { battles: 3000, ring: (9000, 9000), perfect: (6000, 9000), combo_ring: (500, 600), bonuses: 9000, max_hits: 200, ..Default::default() };
+        assert!(s.rank() < 20, "{}", s.rank());
     }
 }

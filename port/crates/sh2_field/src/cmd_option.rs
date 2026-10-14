@@ -156,7 +156,100 @@ impl OptionPage {
 
     fn cursor_to_sel(&mut self) {
         let (x, y) = self.origin();
+        if sh2_core::boot::is_retail() && !self.title_mode() {
+            self.cursor.set_target(x - 4.0, Self::retail_row_y(self.row_id()) + 10.0);
+            return;
+        }
         self.cursor.set_target(x - 4.0, y + self.sel as f32 * ROW_H + 11.0);
+    }
+
+    fn title_mode(&self) -> bool {
+        self.visible.len() != rows().len()
+    }
+
+    /// Retail label row tops (live `cs_sub`: `Button Customization` 74, then 30 px apart; `Sound` has the two-line box and sits 18 lower).
+    fn retail_row_y(row: usize) -> f32 {
+        const Y: [f32; 8] = [65.0, 95.0, 143.0, 185.0, 215.0, 245.0, 276.0, 306.0];
+        Y.get(row).copied().unwrap_or(306.0 + (row as f32 - 7.0) * 30.0)
+    }
+
+    /// Retail `CmdOption` (`OPTION.MSD`): labels at x 38, the choices in framed boxes from x 170 (fence-texture 3-slices: three 67 px boxes for
+    /// Vibration, the 206 x 58 two-line Sound box, four 50 px Message Speed boxes, two 102 px boxes for Cursor / Subtitles / Navi Map), the
+    /// chosen value cyan, the brightness bar of ten segments; the row under the cursor has a cyan label.
+    fn draw_retail(&self, g: &mut dyn MenuGfx) {
+        let m = &self.scene.msd;
+        let Some(w0) = m.window(0) else { return };
+        let (_, _, al) = self.slide.offset((w0.x, w0.y));
+        let a = slide_alpha(&self.slide, al);
+        if a == 0 {
+            return;
+        }
+        let cyan = Rgba::new(0x00, 0x80, 0x80, a);
+        let white = Rgba::new(0x80, 0x80, 0x80, a);
+        let hs = 0.8;
+        let bx = m.window(1).map(|w| w.x).unwrap_or(170.0);
+        let tex = self.sc.fence_tex;
+        let boxed = |g: &mut dyn MenuGfx, x: f32, y: f32, w: f32, h: f32| {
+            let c = Rgba::new(0x80, 0x80, 0x80, a);
+            fill(g, x + 2.0, y + 2.0, w - 4.0, h - 4.0, Rgba::new(0x0a, 0x08, 0x10, (a as u32 * 0x60 / 0x80) as u8));
+            blit(g, tex, x, y, 4.0, h, (0.0, 0.0, 4.0, 28.0), c);
+            blit(g, tex, x + 4.0, y, w - 8.0, h, (4.0, 0.0, 60.0, 28.0), c);
+            blit(g, tex, x + w - 4.0, y, 4.0, h, (60.0, 0.0, 64.0, 28.0), c);
+        };
+        let centered = |g: &mut dyn MenuGfx, x: f32, w: f32, y: f32, s: &str, c: Rgba| {
+            let (tw, _) = g.measure_text(0, &sh2_menu::sjis::encode(s));
+            text_run_h(g, x + (w - tw * hs) * 0.5, y, s, 0, c, None, hs);
+        };
+        for (k, &i) in self.visible.iter().enumerate() {
+            let row = &rows()[i];
+            let y = Self::retail_row_y(i);
+            let sel = k == self.sel;
+            text_run_h(g, w0.x, y, &m.text(row.label).map(sj).unwrap_or_default(), 0, if sel { cyan } else { white }, None, hs);
+            let cur = self.cur_opt_index(i);
+            let name = |t: usize| m.text(t).map(sj).unwrap_or_default();
+            match i {
+                3 => {
+                    // brightness: a 200 x 8 bar of ten segments (live: dark blue -> cyan across the lit part, the rest dark), thin frame
+                    let by = y + 8.0;
+                    fill(g, bx, by - 1.0, 202.0, 10.0, Rgba::new(0x30, 0x30, 0x38, a));
+                    for s in 0..10u8 {
+                        let sx = bx + 1.0 + s as f32 * 20.0;
+                        if s < self.vals[3] {
+                            let k = s as f32 / 9.0;
+                            let c = |l: f32, r: f32| (l + (r - l) * k) as u8;
+                            fill(g, sx, by, 19.0, 8.0, Rgba::new(c(12.0, 16.0), c(28.0, 92.0), c(92.0, 104.0), a));
+                        } else {
+                            fill(g, sx, by, 19.0, 8.0, Rgba::new(0x08, 0x08, 0x0c, a));
+                        }
+                    }
+                }
+                2 => {
+                    // two-line Sound box: Stereo / Mono on top, Dolby Digital 5.1 below
+                    let top = y - 29.0;
+                    for (j, (bxo, bw, byo)) in [(4.0, 98.0, 4.0), (104.0, 98.0, 4.0), (4.0, 198.0, 30.0)].iter().enumerate() {
+                        boxed(g, bx + bxo, top + byo, *bw, 24.0);
+                        if let Some(&(t, _)) = row.opts.get(j) {
+                            centered(g, bx + bxo, *bw, top + byo + 2.0, &name(t), if j == cur { cyan } else { white });
+                        }
+                    }
+                }
+                0 => {}
+                _ => {
+                    let n = row.opts.len().max(1);
+                    let (w, gap) = match n {
+                        3 => (67.0, 2.0),
+                        4 => (50.0, 2.0),
+                        _ => (102.0, 2.0),
+                    };
+                    for (j, &(t, _)) in row.opts.iter().enumerate() {
+                        let x = bx + j as f32 * (w + gap);
+                        boxed(g, x, y - 4.0, w, 28.0);
+                        centered(g, x, w, y, &name(t), if j == cur { cyan } else { white });
+                    }
+                }
+            }
+        }
+        self.cursor.draw(g, &self.sc.cmn, a);
     }
 
     fn cur_opt_index(&self, row: usize) -> usize {
@@ -233,7 +326,21 @@ impl Page for OptionPage {
         Flow::Stay
     }
 
+    fn backdrop(&self) -> Option<usize> {
+        (sh2_core::boot::is_retail() && !self.title_mode()).then_some(1)
+    }
+    fn shows_root_list(&self) -> bool {
+        sh2_core::boot::is_retail() && !self.title_mode()
+    }
+    fn report(&self) -> Option<Vec<(Button, usize)>> {
+        sh2_core::boot::is_retail().then(Vec::new)
+    }
+
     fn draw(&self, g: &mut dyn MenuGfx) {
+        if sh2_core::boot::is_retail() {
+            self.draw_retail(g);
+            return;
+        }
         let m = &self.scene.msd;
         let Some(w0) = m.window(0) else { return };
         let (dx, dy, al) = self.slide.offset((w0.x, w0.y));

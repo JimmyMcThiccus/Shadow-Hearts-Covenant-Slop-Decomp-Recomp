@@ -41,7 +41,12 @@ const VISIBLE: usize = 4;
 pub enum Mode {
     List,
     Target,
+    /// retail Crest Magic: the `CmdSort` window (square)
+    Sort,
 }
+
+/// `MENU+0x28e`: the retail Crest Magic order (`CmdMagic::ExecSort` stores the `CmdSort` row: 0 Restore, 1 Attack, 2 Support, 3 By Alphabet).
+const OFF_MAGIC_SORT: usize = 0x28e;
 
 struct Entry {
     id: usize,
@@ -77,7 +82,13 @@ const LABEL_HMS: [Rgba; 3] = [Rgba::new(0x3c, 0x48, 0x78, 0x80), Rgba::new(0x58,
 /// compounds on it; rounded up, at least 1.
 fn retail_cost(sc: &CmdScenes, rec: &ActionRec, r: &PcRec) -> i32 {
     let base = if rec.effect_id == 0x5f { ((r.mp_max as i32 + 5) / 10).max(1) } else { rec.mp };
-    let mut v = base * 100;
+    retail_cost_count(sc, base, 1, r)
+}
+
+/// `Retail_CmdPC_ApplyCostModifiers` (0x46d2f0): `cost * 100 / count` (count = equipped crests granting the spell, 1 for techniques), then
+/// each equipped accessory's MP percentage compounds on it; rounded up, at least 1.
+fn retail_cost_count(sc: &CmdScenes, base: i32, count: i32, r: &PcRec) -> i32 {
+    let mut v = base * 100 / count.max(1);
     for &acc in r.accessories.iter().filter(|&&a| a >= 0) {
         let pct = sc.mdt.mdt_rec(10, acc as usize).and_then(|b| b.get(0xc..0xe)).map(|b| i16::from_le_bytes([b[0], b[1]]) as i32).unwrap_or(0);
         if pct != 0 {
@@ -198,6 +209,9 @@ pub struct MagicPage {
     ring_art: Option<Arc<HitArt>>,
     /// retail `CmdElement` (`MENU/MSD/ELEMENT.MSD`)
     elem: Option<ElemArt>,
+    /// retail Crest Magic: `MAGIC.MSD` attach 4 (`CmdSort`: Restore / Attack / Support / By Alphabet) and its cursor row
+    sort_scene: Option<Arc<SceneTex>>,
+    sort_sel: usize,
 }
 
 impl MagicPage {
@@ -206,10 +220,12 @@ impl MagicPage {
         let file = if white { "MENU/MSD/SKILL.MSD" } else { "MENU/MSD/MAGIC.MSD" };
         let scene = env.file_scene(file)?;
         let card = env.nested_scene(file, 1);
-        let retail = sh2_core::boot::is_retail() && white;
-        // retail: the target card is `SKILL.MSD` attach 3 (the same `CmdSelectTarget` scene as `ITEM.MSD` attach 2)
+        let retail = sh2_core::boot::is_retail();
+        // retail: the target card is attach 3 of `SKILL.MSD` / `MAGIC.MSD` (the same `CmdSelectTarget` scene as `ITEM.MSD` attach 2); the
+        // `Name / MP` fence is attach 4 of `SKILL.MSD`, attach 5 of `MAGIC.MSD` (whose attach 4 is the `CmdSort` window)
         let tgt_card = if retail { env.nested_scene(file, 3) } else { env.nested_scene("MENU/MSD/ITEM.MSD", 2) };
-        let fence = if retail { env.nested_scene(file, 4) } else { None };
+        let fence = if retail { env.nested_scene(file, if white { 4 } else { 5 }) } else { None };
+        let sort_scene = if retail && !white { env.nested_scene(file, 4) } else { None };
         let banner = if retail { env.nested_scene(file, 2) } else { None };
         let ring_art = if retail { env.ring_art() } else { None };
         let elem = if retail { ElemArt::load(env) } else { None };
@@ -249,6 +265,8 @@ impl MagicPage {
             ring: None,
             ring_art,
             elem,
+            sort_scene,
+            sort_sel: 0,
         };
         p.rebuild(env);
         p.cursor_to_sel();
@@ -267,8 +285,10 @@ impl MagicPage {
         let mut entries = Vec::new();
         if let (Some(t), Some(r)) = (env.tables, env.session.save.btl.pc(pc as usize)) {
             self.caster_mp = (r.mp, r.mp_max);
-            if self.retail {
+            if self.retail && self.white {
                 entries = self.retail_entries(env, t, pc);
+            } else if self.retail {
+                entries = self.retail_crest_entries(env, t, pc);
             } else if self.white {
                 for (i, rec) in t.groups.get(pc as usize).map(|g| g.iter().enumerate().collect::<Vec<_>>()).unwrap_or_default() {
                     let v = (rec.flags & 0x1f) >> 3;
@@ -315,6 +335,64 @@ impl MagicPage {
                 mp,
                 usable: !battle_only && mp <= r.mp as i32,
                 help,
+                element: (rec.flags & 7) as u8,
+                ring_steps: rec.ring_steps.clone(),
+                ring_mod: rec.ring_mod,
+                target: ((rec.flags >> 7) & 3) as u8,
+            });
+        }
+        v
+    }
+
+    /// Retail `CmdMagicGoods::UpdateScene` (US 0x4c9b60): the rows follow the magic order table (menu data table, retail key 14 = demo 12:
+    /// one record per spell, `+0xc + sort * 2` = the spell at that place for the order `MENU+0x28e`); a spell is listed when the character's
+    /// `CmdPC::CreateMagic` count (0x46c200: per equipped crest of record `+0x32..`, each `MC_P` spell whose flag bit asks for the crest's
+    /// learned bit only when it is set; the count is how many equipped crests grant it) is non-zero.  Cost `Retail_CmdPC_CalcMagicCost`
+    /// (0x46d0c0): `MAGI+0x1e` (effect 0x4a: a tenth of the maximum MP), divided by the count, then the accessories' percentages; greyed when
+    /// battle-only (`(flags & 0x1f) >> 3 == 1`) or above the current MP.  Name `GetRegDat(0xb)`, Notes = magic description kind 0x21.
+    fn retail_crest_entries(&self, env: &Env, t: &sh2_battle::actions::ActionTables, pc: u8) -> Vec<Entry> {
+        let Some(r) = env.session.save.btl.pc(pc as usize) else { return Vec::new() };
+        let src = sh2_battle::menu_data::MenuSource { btl: &env.session.save.btl, menu: &env.session.save.menu, pc: pc as usize, retail: true };
+        let mut count = vec![0u8; t.magic.len().max(1)];
+        for &c in r.skills.iter().filter(|&&c| c >= 0) {
+            let Some(cr) = t.crests.get(c as usize) else { continue };
+            for (k, &m) in cr.magic.iter().enumerate() {
+                if m < 0 || (cr.flags & (1 << k) != 0 && !src.crest_learned(c as usize)) {
+                    continue;
+                }
+                if let Some(n) = count.get_mut(m as usize) {
+                    *n = n.saturating_add(1);
+                }
+            }
+        }
+        let mode = env.session.save.menu.data.get(OFF_MAGIC_SORT).copied().unwrap_or(0).min(3) as usize;
+        let us = env.db.and_then(|d| d.us());
+        let mut order: Vec<usize> = (0..self.sc.mdt.mdt_count(12))
+            .filter_map(|k| {
+                let b = self.sc.mdt.mdt_rec(12, k)?;
+                let o = 0xc + mode * 2;
+                let id = i16::from_le_bytes([*b.get(o)?, *b.get(o + 1)?]);
+                (id >= 0).then_some(id as usize)
+            })
+            .collect();
+        if order.is_empty() {
+            order = (0..t.magic.len()).collect();
+        }
+        let mut v = Vec::new();
+        for id in order {
+            let n = count.get(id).copied().unwrap_or(0);
+            let Some(rec) = t.magic.get(id).filter(|_| n > 0) else { continue };
+            let base = if rec.effect_id == 0x4a { ((r.mp_max as i32 + 5) / 10).max(1) } else { rec.mp };
+            let mp = retail_cost_count(&self.sc, base, n as i32, &r);
+            let battle_only = (rec.flags & 0x1f) >> 3 == 1;
+            log::debug!("crest magic row {id}: flags {:#x} count {n} mp {mp} battle_only {battle_only}", rec.flags);
+            let name = Some(t.magic_name(id).to_string()).filter(|n| !n.trim().is_empty()).unwrap_or_else(|| format!("Magic {id}"));
+            v.push(Entry {
+                id,
+                name,
+                mp,
+                usable: !battle_only && mp <= r.mp as i32,
+                help: us.as_ref().and_then(|u| u.text(0x21, id, -1)).unwrap_or_default(),
                 element: (rec.flags & 7) as u8,
                 ring_steps: rec.ring_steps.clone(),
                 ring_mod: rec.ring_mod,
@@ -433,9 +511,37 @@ impl MagicPage {
                         Some(_) => env.sound(MenuSe::Buzzer),
                         None => {}
                     }
+                } else if keys & padbit::SQUARE != 0 && self.sort_scene.is_some() {
+                    // `CmdMagic::Enter` -> `CmdSort` (the window opens on the current order)
+                    env.sound(MenuSe::Decide);
+                    self.mode = Mode::Sort;
+                    self.sort_sel = env.session.save.menu.data.get(OFF_MAGIC_SORT).copied().unwrap_or(0).min(3) as usize;
                 } else if keys & padbit::CROSS != 0 {
                     env.sound(MenuSe::Cancel);
                     return Flow::Back;
+                }
+            }
+            Mode::Sort => {
+                let n = self.sort_rows();
+                if keys & padbit::UP != 0 {
+                    self.sort_sel = (self.sort_sel + n - 1) % n;
+                    env.sound(MenuSe::CursorMove);
+                } else if keys & padbit::DOWN != 0 {
+                    self.sort_sel = (self.sort_sel + 1) % n;
+                    env.sound(MenuSe::CursorMove);
+                } else if keys & padbit::CIRCLE != 0 {
+                    // `CmdMagic::ExecSort`: `MENU+0x28e = row`, the list is rebuilt in that order and the cursor goes back to the top row
+                    env.sound(MenuSe::Decide);
+                    if let Some(b) = env.session.save.menu.data.get_mut(OFF_MAGIC_SORT) {
+                        *b = self.sort_sel as u8;
+                    }
+                    self.list = ListState::new(VISIBLE, 0);
+                    self.rebuild(env);
+                    self.update_ring();
+                    self.mode = Mode::List;
+                } else if keys & padbit::CROSS != 0 {
+                    env.sound(MenuSe::Cancel);
+                    self.mode = Mode::List;
                 }
             }
             Mode::Target => {
@@ -460,9 +566,46 @@ impl MagicPage {
                 let (x, y) = self.card_origin();
                 self.cursor.set_target(x + 22.0, y + 54.0);
             }
+            Mode::Sort => {
+                let (x, y) = self.sort_origin();
+                self.cursor.set_target(x - 6.0, y + self.sort_sel as f32 * 20.0 + 10.0);
+            }
             Mode::List => self.cursor_to_sel(),
         }
         Flow::Stay
+    }
+
+    fn sort_rows(&self) -> usize {
+        self.sort_scene.as_ref().map(|s| s.msd.count(sh2_menu::msd::ChunkType::Text)).unwrap_or(4).clamp(1, 4)
+    }
+
+    fn sort_origin(&self) -> (f32, f32) {
+        self.sort_scene.as_ref().and_then(|s| s.msd.window(0)).map(|w| (w.x, w.y)).unwrap_or((260.0, 92.0))
+    }
+
+    /// Retail `CmdSort` (`MAGIC.MSD` attach 4, window (260, 92)): the `Name` fence of the list scene with the four orders, the selected one cyan
+    /// (the same window as the item page's, one row taller).
+    fn draw_sort_retail(&self, g: &mut dyn MenuGfx, a: u8) {
+        let Some(s) = &self.sort_scene else { return };
+        let (sx, sy) = self.sort_origin();
+        let n = self.sort_rows();
+        let (bx, by, bw) = (sx - 6.0, sy - 31.0, 113.0);
+        let back = self.fence.as_ref().and_then(|f| f.msd.polygon(0));
+        fence_box(g, back.as_ref(), self.sc.fence_tex, bx, by, bw, 41.0 + n as f32 * 20.0, a);
+        if let Some(f) = &self.fence {
+            if let (Some(t), Some(b)) = (f.msd.menu_text(0), f.msd.resource_bytes(0)) {
+                let hs = TextRun::hscale_of(t.flags);
+                let label = sj(b);
+                let (tw, _) = g.measure_text(0, &sh2_menu::sjis::encode(&label));
+                text_run_h(g, bx + (bw - tw * hs) * 0.5, by + t.y - 1.0, &label, 0, white(a), Some((1, 1)), hs);
+            }
+        }
+        let hs = s.msd.menu_text(0).map(|t| TextRun::hscale_of(t.flags)).unwrap_or(1.0);
+        for i in 0..n {
+            let t = s.msd.text(i).map(sj).unwrap_or_default();
+            let c = if i == self.sort_sel { Rgba::new(0x00, 0x80, 0x80, a) } else { white(a) };
+            text_run_h(g, sx, sy + i as f32 * 20.0, &t, 0, c, None, hs);
+        }
     }
 
     fn draw_retail(&self, g: &mut dyn MenuGfx) {
@@ -475,6 +618,9 @@ impl MagicPage {
         self.draw_card_retail(g, a);
         self.draw_banner(g, a);
         self.draw_list_retail(g, w.x + dx, w.y + dy, a);
+        if self.mode == Mode::Sort {
+            self.draw_sort_retail(g, a);
+        }
         if self.mode == Mode::Target {
             self.draw_target_retail(g, a);
         } else {
@@ -636,6 +782,9 @@ impl Page for MagicPage {
         if let Some((m, _)) = &self.msg {
             return m.clone();
         }
+        if self.retail && self.mode == Mode::Sort {
+            return self.sort_scene.as_ref().and_then(|s| s.msd.text_entry(self.sort_sel)).map(|e| sj(e.1)).unwrap_or_default();
+        }
         if self.retail {
             // `CmdTechniqueGoods::Select`: `GetRegDat(0x1f, pc, i)` of the selected row, also while the target card is up
             return self.entries.get(self.list.sel).map(|e| strip_icon_codes(&e.help)).unwrap_or_default();
@@ -649,8 +798,8 @@ impl Page for MagicPage {
         self.retail && self.mode != Mode::Target
     }
     fn report(&self) -> Option<Vec<(Button, usize)>> {
-        // live: the White Magic page shows no button report
-        self.retail.then(Vec::new)
+        // live: the White Magic page shows no button report, Crest Magic `square : Sort` (`CMDMENUS.MSD` attach 1 resource 6) on its list
+        self.retail.then(|| if !self.white && self.mode == Mode::List { vec![(Button::Square, 6)] } else { Vec::new() })
     }
     fn buttons(&self) -> Vec<(Button, String)> {
         vec![(Button::Circle, "使用".into()), (Button::Cross, "戻る".into()), (Button::L1, "キャラ切替".into())]
@@ -715,6 +864,7 @@ impl Page for MagicPage {
                     self.mode = Mode::List;
                 }
             }
+            Mode::Sort => self.mode = Mode::List,
         }
         Flow::Stay
     }

@@ -575,7 +575,7 @@ pub struct SpritePools {
 }
 
 /// Replace every [`DrawCmd::Text`] by textured quads of the game's bitmap font (a shadow copy first, one quad per line).
-fn expand_text(cmds: Vec<DrawCmd>, bank: &FontBank, pools: &mut SpritePools, textures: &mut UiTextures, images: &mut Assets<Image>) -> Vec<DrawCmd> {
+fn expand_text(cmds: Vec<DrawCmd>, bank: &FontBank, pools: &mut SpritePools, textures: &mut UiTextures, images: &mut Assets<Image>, gamma: bool) -> Vec<DrawCmd> {
     use crate::gfx::Vertex;
     let mut out = Vec::with_capacity(cmds.len());
     for cmd in cmds {
@@ -622,10 +622,21 @@ fn expand_text(cmds: Vec<DrawCmd>, bank: &FontBank, pools: &mut SpritePools, tex
                     out.push(quad(dx as f32, dy as f32, Rgba::new(0, 0, 0, (t.color.a as u32 * 3 / 4) as u8)));
                 }
             }
-            out.push(quad(0.0, 0.0, t.color));
+            out.push(quad(0.0, 0.0, if gamma { gamma_alpha(t.color) } else { t.color }));
         }
     }
     out
+}
+
+/// The GS blends in gamma space (`Cs * a + Cd * (1 - a)` on the 8-bit frame buffer), Bevy in linear light: a half-transparent bright glyph
+/// over the dark menu backdrops comes out ~1.5x too bright (live: a greyed `Shield` row is 113 / 226 of the white text, linear blending gave
+/// 182 / 244).  For text (bright source over darker destination) `a' = a^2.2` reproduces the gamma blend over black exactly.
+fn gamma_alpha(c: Rgba) -> Rgba {
+    if c.a >= 0x80 || c.a == 0 {
+        return c;
+    }
+    let a = (c.a as f32 / 128.0).powf(2.2);
+    Rgba::new(c.r, c.g, c.b, (a * 128.0).round().clamp(1.0, 128.0) as u8)
 }
 
 /// GS colour (0x80 = 1.0, sRGB encoded) -> linear RGBA for a vertex colour attribute.
@@ -701,7 +712,8 @@ pub fn render_sprite_layers(
         }
         let mut cmds: Vec<DrawCmd> = if alive { canvas.layers[&id].cmds.clone() } else { Vec::new() };
         if let Some(b) = &bank {
-            cmds = expand_text(cmds, b, &mut pools, &mut textures, &mut images);
+            // the gamma-space text alpha is only applied to the command menu layer (verified there); other layers keep their tuned alphas
+            cmds = expand_text(cmds, b, &mut pools, &mut textures, &mut images, id == layer::MENU2D);
         }
         let z0 = id as f32;
         let (mut qi, mut ti) = (0usize, 0usize);

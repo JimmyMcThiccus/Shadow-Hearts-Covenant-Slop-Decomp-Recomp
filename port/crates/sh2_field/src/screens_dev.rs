@@ -5,7 +5,7 @@
 //! SH2_SCREEN_DEV=shop:1:AR_01_U  SH2_SCREEN_SHOTS=<dir>  cargo run -p sh2_app            # JP demo
 //! SH2_SCREEN_DEV=shop:6:PA_03_U  SH2_SCREEN_SHOTS=<dir>  cargo run -p sh2_app -- --us    # US retail
 //! ```
-//! Kinds: `shop:<id>:<map>`, `tailor:<map>`, `solomon:<map>`, `warp:<map>` (needs a map with warp points), `save:<map>`.  The process exits when the
+//! Kinds: `shop:<id>:<map>`, `soul:<stone>:<map>`, `tailor:<map>`, `solomon:<map>`, `warp:<map>` (needs a map with warp points), `save:<map>`.  The process exits when the
 //! script has finished.
 
 use std::path::PathBuf;
@@ -46,7 +46,7 @@ fn parse() -> Option<Dev> {
     let v = std::env::var("SH2_SCREEN_DEV").ok()?;
     let mut it = v.split(':');
     let kind = it.next()?.to_string();
-    let (arg, map) = if kind == "shop" {
+    let (arg, map) = if matches!(kind.as_str(), "shop" | "soul" | "wolf") {
         let a = it.next().and_then(|s| s.parse().ok()).unwrap_or(0);
         (a, it.next().unwrap_or("AR_01_U").to_string())
     } else {
@@ -95,6 +95,24 @@ pub fn script_for(kind: &str) -> Vec<ScreenAct> {
                 w(60), shot("solomon_01_tutorial"), ScreenAct::Mash { key: CIRCLE, state: "tutorial".to_string(), every: 20 }, u("menu"), w(30), shot("solomon_02_menu"), k(CIRCLE), u("list"), w(20), shot("solomon_03_crest_list"),
                 k(DOWN), w(8), k(DOWN), w(8), shot("solomon_04_list_note"), k(CIRCLE), u("map"), w(30), shot("solomon_05_holding"), k(RIGHT), w(8), k(RIGHT), w(8), k(DOWN), w(8), shot("solomon_06_moved"), k(CIRCLE), w(30), shot("solomon_07_placed"),
                 k(CROSS), w(20), shot("solomon_08_back_to_list"), k(CROSS), w(20), shot("solomon_09_menu_again"), k(DOWN), w(5), shot("solomon_10_hints_menu"), k(CIRCLE), u("hints"), w(20), shot("solomon_11_hints"),
+            ]
+        }
+        "wolf" => {
+            let u = |s: &str| ScreenAct::Until(s.to_string());
+            vec![u("stamp"), w(16), shot("wolf_01_stamping"), u("message"), w(20), shot("wolf_02_message"), k(CIRCLE), w(40)]
+        }
+        "name" => {
+            let u = |s: &str| ScreenAct::Until(s.to_string());
+            vec![
+                u("entry"), w(30), shot("name_01_default"), k(TRIANGLE), w(10), k(DOWN), w(6), k(RIGHT), w(6), k(CIRCLE), w(6), k(UP), w(6), k(CIRCLE), w(6), k(CIRCLE), w(6), k(CROSS), w(10), shot("name_02_typed"),
+                k(START), u("query"), w(20), shot("name_03_query"), k(CIRCLE), w(40),
+            ]
+        }
+        "soul" => {
+            let u = |s: &str| ScreenAct::Until(s.to_string());
+            vec![
+                u("idle"), w(20), shot("soul_01_idle"), ScreenAct::Hold { key: CIRCLE, ticks: 60 }, u("charge"), w(30), shot("soul_02_charging"), u("idle"), w(10), shot("soul_03_released"),
+                ScreenAct::Hold { key: CIRCLE, ticks: 400 }, u("gradeup"), w(10), shot("soul_04_gradeup_flash"), w(40), shot("soul_05_gradeup_window"), u("close"), w(40),
             ]
         }
         "npc" => {
@@ -273,6 +291,18 @@ fn dev_driver(
                     _ if !dev.via.is_empty() && matches!(dev.kind.as_str(), "shop" | "tailor") => {}
                     "shop" => f.st.menu_req = Some(MenuReq::Shop { id: dev.arg }),
                     "tailor" => f.st.menu_req = Some(MenuReq::Tailor),
+                    "wolf" => {
+                        // `SH2_SCREEN_DEV=wolf:<stamps already>:<map>`: the card after that many bouts
+                        session.save.btl.data[crate::wolf_stamp::OFF_STAMP_COUNT] = dev.arg.clamp(0, 14) as u8;
+                        f.st.menu_req = Some(MenuReq::WolfStamp { bout: 3 });
+                    }
+                    "name" => screens.req = Some(ScreenReq::NameEntry { kind: 1, current: String::new() }),
+                    "soul" => {
+                        // `SH2_SCREEN_DEV=soul:<stone>:<map>`: 150 Soul Energy in the pool, stone grade 0 (what op 0x4d `InvokeCmdScene(stone, 0)` opens)
+                        let o = sh2_menu::save::retail_btl::OFF_SOUL;
+                        session.save.btl.data[o..o + 2].copy_from_slice(&150u16.to_le_bytes());
+                        f.st.menu_req = Some(MenuReq::CmdScene { a: dev.arg, b: 0 });
+                    }
                     "solomon" => {
                         // crests of the flame desert (region 4) and a few others
                         for d in [0usize, 1, 2, 3, 4, 17, 18, 19, 20, 21, 6, 7, 8, 9, 12, 13, 14] {
@@ -303,8 +333,14 @@ fn dev_driver(
                         if let Some(db) = db.as_ref() {
                             let _ = sh2_battle::devdrive::party_overrides(&db.0, &mut session);
                         }
+                        // `SH2_MENU_ENTRIES=all` (every named retail entry usable) or a comma list of entry indices
+                        let entries: Vec<usize> = match std::env::var("SH2_MENU_ENTRIES").ok().as_deref() {
+                            Some("all") => vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 13, 14, 15, 16, 17, 18, 19],
+                            Some(s) => s.split(',').filter_map(|t| t.trim().parse().ok()).collect(),
+                            None => vec![0, 1, 4, 6, 9, 15, 16, 17, 18, 19],
+                        };
                         for i in 0..crate::cmd_top::ENTRY_COUNT {
-                            session.save.menu.data[crate::cmd_top::OFF_ENTRY_FLAGS + i] = if [0, 1, 4, 6, 9, 15, 16, 17, 18, 19].contains(&i) { 2 } else { 0 };
+                            session.save.menu.data[crate::cmd_top::OFF_ENTRY_FLAGS + i] = if entries.contains(&i) { 2 } else { 0 };
                         }
                         f.st.menu_wait = false;
                         menu.request = true;

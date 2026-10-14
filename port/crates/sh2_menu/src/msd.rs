@@ -261,6 +261,17 @@ impl Msd {
         self.cstr(c.offset as u32 + u32_at(r, k * 4))
     }
 
+    /// `n` bytes at pointer field `k` of record `i` (chunk relative), for pointers to binary arrays (the retail help categories point at
+    /// a `u16` list of entry ids).
+    pub fn mdt_ptr_bytes(&self, ty: u16, i: usize, k: usize, n: usize) -> &[u8] {
+        let (Some(c), Some(r)) = (self.find_raw(ty), self.mdt_rec(ty, i)) else { return &[] };
+        if k >= c.ptr_count as usize {
+            return &[];
+        }
+        let o = c.offset + u32_at(r, k * 4) as usize;
+        self.data.get(o..(o + n).min(self.data.len())).unwrap_or(&[])
+    }
+
     /// Non-pointer bytes of an MDT record (after the pointer words).
     pub fn mdt_data(&self, ty: u16, i: usize) -> &[u8] {
         let (Some(c), Some(r)) = (self.find_raw(ty), self.mdt_rec(ty, i)) else { return &[] };
@@ -287,6 +298,10 @@ impl Msd {
 
     pub fn attach_files(&self) -> Vec<AttachRec> {
         let Some(c) = self.find(ChunkType::Attach) else { return vec![] };
+        // an `.MDT` table whose chunk type collides with the attach id has 8-byte rows: not an attach list (QA round 5: no panic)
+        if c.stride < 12 {
+            return vec![];
+        }
         (0..c.count)
             .map(|i| {
                 let r = &self.data[c.record_offset(i)..c.record_offset(i) + c.stride];

@@ -293,6 +293,13 @@ impl KeyCustomPage {
 }
 
 impl Page for KeyCustomPage {
+    /// retail: the page sits on the `CMDMENUS.MSD` backdrop 1 (live captures) and has no JP hint bar
+    fn backdrop(&self) -> Option<usize> {
+        sh2_core::boot::is_retail().then_some(1)
+    }
+    fn report(&self) -> Option<Vec<(Button, usize)>> {
+        sh2_core::boot::is_retail().then(Vec::new)
+    }
     fn page(&self) -> CmdPage {
         CmdPage::KeyCustom
     }
@@ -538,6 +545,13 @@ impl ComboMagicPage {
 }
 
 impl Page for ComboMagicPage {
+    /// retail: the page sits on the `CMDMENUS.MSD` backdrop 0 (live captures) and has no JP hint bar
+    fn backdrop(&self) -> Option<usize> {
+        sh2_core::boot::is_retail().then_some(0)
+    }
+    fn report(&self) -> Option<Vec<(Button, usize)>> {
+        sh2_core::boot::is_retail().then(Vec::new)
+    }
     fn page(&self) -> CmdPage {
         CmdPage::ComboMagic
     }
@@ -633,6 +647,9 @@ pub struct ComboKeyPage {
     #[allow(dead_code)]
     scene: Arc<SceneTex>,
     card: Option<Arc<SceneTex>>,
+    /// retail `CBKEY.MSD` attach 2 (banners) / attach 3 (`Command` fence)
+    banner: Option<Arc<SceneTex>>,
+    fence: Option<Arc<SceneTex>>,
     pcs: Vec<PcView>,
     pc: usize,
     face: Option<TextureId>,
@@ -677,7 +694,12 @@ impl ComboKeyPage {
             (labels[4].clone(), None),
         ];
         let title_img = scene.t(0).map(|t| (t, scene.tex_size(0)));
+        let retail = sh2_core::boot::is_retail();
+        let banner = if retail { env.nested_scene("MENU/MSD/CBKEY.MSD", 2) } else { None };
+        let fence = if retail { env.nested_scene("MENU/MSD/CBKEY.MSD", 3) } else { None };
         let mut p = ComboKeyPage {
+            banner,
+            fence,
             sc,
             slide: Slide::open(0, 240, (300.0, 250.0)),
             scene,
@@ -723,9 +745,13 @@ impl ComboKeyPage {
     /// Re-read the four shortcut slots of the current character.
     fn refresh(&mut self, env: &Env) {
         let slots = self.slots(env.session);
+        let retail = sh2_core::boot::is_retail();
         self.slot_view = slots
             .iter()
-            .map(|&(kind, id)| {
+            .enumerate()
+            .map(|(k, &(kind, id))| {
+                // retail `ConvertComboKeyDefault`: an unset button does the attack style of its own index (L1 Standard, R1 Hard Hit, ...)
+                let id = if retail && kind == KIND_ATTACK && id == 0xffff { k as u16 } else { id };
                 let name = if id == 0xffff && kind == KIND_ATTACK { self.unset.clone() } else { self.command_name(env, kind, id) };
                 (kind, id, name)
             })
@@ -798,6 +824,16 @@ impl ComboKeyPage {
     }
 
     fn cursor_to_sel(&mut self) {
+        if sh2_core::boot::is_retail() {
+            // retail rows (live `cb_page`): the four button rows from y 276 (21.5 px apart), the `Command` fence list from (236, 84)
+            let (x, y) = match self.mode {
+                CkMode::Slots => (36.0, CK_ROW_Y + self.slot as f32 * CK_ROW_H + 10.0),
+                CkMode::Category => (232.0, CK_FENCE_Y + self.cat as f32 * 21.0 + 10.0),
+                CkMode::Command => (232.0, CK_FENCE_Y + self.list.slot() as f32 * 21.0 + 10.0),
+            };
+            self.cursor.set_target(x, y);
+            return;
+        }
         match self.mode {
             CkMode::Slots => self.cursor.set_target(218.0, 100.0 + self.slot as f32 * 28.0 + 12.0),
             CkMode::Category => self.cursor.set_target(402.0, 100.0 + self.cat as f32 * 22.0 + 12.0),
@@ -806,7 +842,104 @@ impl ComboKeyPage {
     }
 }
 
+/// Retail combo-setup layout (live `cb_page`): first button row top, row pitch, first row of the `Command` fence list.
+const CK_ROW_Y: f32 = 276.0;
+const CK_ROW_H: f32 = 21.5;
+const CK_FENCE_Y: f32 = 84.0;
+
+impl ComboKeyPage {
+    /// Retail `CmdComboKey` (`CBKEY.MSD`): member card (attach 1, `< Name >`), the `Character State` / `Command` banners (attach 2), the state
+    /// row (the member's name), the four button rows L1 / R1 / L2 / R2 with the assigned command, the `Command` fence (attach 3 at (228, 40))
+    /// with the categories or, while choosing, the commands of the category.
+    fn draw_retail(&self, g: &mut dyn MenuGfx, a: u8) {
+        use crate::cmd_retail::{draw_pc_card, gs_poly, rgb, CardView, CYAN, LAVENDER};
+        let pc = &self.pcs[self.pc];
+        if let Some(card) = &self.card {
+            let arrows = self.mode == CkMode::Slots && self.pcs.len() > 1;
+            draw_pc_card(g, &self.sc, card, self.face, &CardView::of(pc), arrows, a);
+        }
+        if let Some(b) = &self.banner {
+            let m = &b.msd;
+            for k in 0..2 {
+                let Some(gr) = m.group(k) else { continue };
+                for i in 0..m.count(sh2_menu::msd::ChunkType::Sprite) {
+                    if let Some(sp) = m.sprite(i) {
+                        draw_sprite_rec(g, &sp, b.t(0), gr.x, gr.y, a);
+                    }
+                }
+                if let (Some(t), Some(sres)) = (m.menu_text(0), m.resource_bytes(k)) {
+                    text_run_h(g, gr.x + t.x, gr.y + t.y - 3.0, &sj(sres), 2, rgb(LAVENDER, a), Some((1, 0)), sh2_menu::gfx::TextRun::hscale_of(t.flags));
+                }
+            }
+        }
+        // the state row under `Character State`
+        text_run_h(g, 37.0, 225.0, &pc.name, 0, Rgba::new(0x58, 0x58, 0x60, a), None, 0.8);
+        // L1 / R1 / L2 / R2 rows: icon cells 10 / 11 / 8 / 9 of the common sheet
+        const CELLS: [usize; 4] = [10, 11, 8, 9];
+        for (k, (_, _, name)) in self.slot_view.iter().enumerate().take(4) {
+            let y = CK_ROW_Y + k as f32 * CK_ROW_H;
+            let (cx, cy) = ((CELLS[k] % 8) as f32 * 16.0, (CELLS[k] / 8) as f32 * 20.0);
+            blit(g, self.sc.cmn.s.t(6), 38.0, y, 16.0, 20.0, (cx, cy, cx + 16.0, cy + 20.0), white(a));
+            let c = if k == self.slot { rgb(CYAN, a) } else { white(a) };
+            text_run_h(g, 52.0, y, name, 0, c, None, 0.8);
+        }
+        // the `Command` fence
+        if let Some(f) = &self.fence {
+            let m = &f.msd;
+            let (fx, fy) = m.window(0).map(|w| (w.x, w.y)).unwrap_or((228.0, 40.0));
+            if let Some(p) = m.polygon(0) {
+                gs_poly(g, &p, fx, fy, a);
+            }
+            for i in 0..m.count(sh2_menu::msd::ChunkType::Sprite) {
+                if let Some(sp) = m.sprite(i) {
+                    draw_sprite_rec(g, &sp, self.sc.fence_tex, fx, fy, a);
+                }
+            }
+            if let Some(t) = m.menu_text(0) {
+                let head = m.resource_bytes(1).map(sj).unwrap_or_default();
+                let (tw, _) = g.measure_text(0, &sh2_menu::sjis::encode(&head));
+                text_run_h(g, fx + 72.0 - tw * 0.4, fy + t.y - 1.0, &head, 0, white(a), Some((1, 1)), 0.8);
+            }
+        }
+        match self.mode {
+            CkMode::Command => {
+                for k in 0..self.list.visible.min(5) {
+                    let i = self.list.top + k;
+                    let Some(c) = self.choices.get(i) else { break };
+                    let col = if i == self.list.sel { rgb(CYAN, a) } else { white(a) };
+                    text_run_h(g, 236.0, CK_FENCE_Y + k as f32 * 21.0, &c.name, 0, col, None, 0.8);
+                }
+            }
+            CkMode::Category => {
+                for (k, (name, _)) in self.cats.iter().enumerate() {
+                    let col = if k == self.cat { rgb(CYAN, a) } else { white(a) };
+                    text_run_h(g, 236.0, CK_FENCE_Y + k as f32 * 21.0, name, 0, col, None, 0.8);
+                }
+            }
+            CkMode::Slots => {
+                // live `cb_page`: the fence names the category of the hovered button's command
+                if let Some(&(kind, _, _)) = self.slot_view.get(self.slot) {
+                    if let Some((name, _)) = self.cats.iter().find(|c| c.1 == Some(kind)) {
+                        text_run_h(g, 236.0, CK_FENCE_Y, name, 0, white(a), None, 0.8);
+                    }
+                }
+            }
+        }
+        self.cursor.draw(g, &self.sc.cmn, a);
+    }
+}
+
 impl Page for ComboKeyPage {
+    /// retail: the page sits on the `CMDMENUS.MSD` backdrop 0 (live captures) and has no JP hint bar
+    fn backdrop(&self) -> Option<usize> {
+        sh2_core::boot::is_retail().then_some(0)
+    }
+    fn report(&self) -> Option<Vec<(Button, usize)>> {
+        sh2_core::boot::is_retail().then(Vec::new)
+    }
+    fn shows_root_list(&self) -> bool {
+        sh2_core::boot::is_retail()
+    }
     fn page(&self) -> CmdPage {
         CmdPage::ComboKey
     }
@@ -818,6 +951,13 @@ impl Page for ComboKeyPage {
     }
     fn note(&self) -> String {
         match self.mode {
+            CkMode::Slots if sh2_core::boot::is_retail() => {
+                // live: the assigned command's description ("Attack enemy and push them backwards.")
+                match self.slot_view.get(self.slot) {
+                    Some(&(KIND_ATTACK, id, _)) => sj(self.sc.mdt.mdt_str(49, if id == 0xffff { 0 } else { id as usize }, 1)).replace('$', " "),
+                    _ => self.notes.get(6).cloned().unwrap_or_default().replace("%s", &self.pcs[self.pc].name),
+                }
+            }
             CkMode::Slots => self.notes.get(6).cloned().unwrap_or_default().replace("%s", &self.pcs[self.pc].name),
             CkMode::Category => self.notes.get(self.cat).cloned().unwrap_or_default().replace("%s", &self.cats[self.cat].0),
             CkMode::Command => self.choices.get(self.list.sel).map(|c| c.note.clone()).filter(|n| !n.is_empty()).unwrap_or_else(|| self.notes.get(self.cat).cloned().unwrap_or_default().replace("%s", &self.cats[self.cat].0)),
@@ -900,6 +1040,10 @@ impl Page for ComboKeyPage {
     fn draw(&self, g: &mut dyn MenuGfx) {
         let a = slide_alpha(&self.slide, self.slide.offset((0.0, 0.0)).2);
         if a == 0 {
+            return;
+        }
+        if sh2_core::boot::is_retail() {
+            self.draw_retail(g, a);
             return;
         }
         let w = white(a);

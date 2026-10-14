@@ -106,6 +106,13 @@ impl RingPage {
 }
 
 impl Page for RingPage {
+    /// retail: the page sits on the `CMDMENUS.MSD` backdrop 0 (live captures) and has no JP hint bar
+    fn backdrop(&self) -> Option<usize> {
+        sh2_core::boot::is_retail().then_some(0)
+    }
+    fn report(&self) -> Option<Vec<(Button, usize)>> {
+        sh2_core::boot::is_retail().then(Vec::new)
+    }
     fn page(&self) -> CmdPage {
         CmdPage::RingCustom
     }

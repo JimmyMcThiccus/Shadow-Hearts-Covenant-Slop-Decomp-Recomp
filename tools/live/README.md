@@ -13,3 +13,9 @@ Written 2026-10-13 against the PCSX2 build with the DebugServer (port 21512, new
 * `cap.ps1` - one-shot window capture.
 
 Do NOT set EE breakpoints / watchpoints while driving the game: setting one (recompiler reset) and then pressing a key froze the VM once (PC stuck at one instruction, state loads ignored until PCSX2 was restarted). Sampling memory with `Dbg` never needed a pause.
+
+**Command-menu hang (2026-10-14, MN, corrected):** the retail game hangs for good (EE spins in a list search at 0x265c38..0x265c68; only a
+state load / restart helps) when the command menu is opened with one of the entries **5 Ring Custom, 8 Graveyard or 14 Combo Magic** forced
+usable through `MENU+0x300+i = 2` on a save that has not unlocked them (three hangs, every time one of these was set; 2 / 3 / 7 = Crest Magic /
+Crest Change / Party Members are safe).  Earlier I blamed reopening the menu during its close animation: that was wrong (the third hang had no
+fast reopen).  Do not force those three entries; unlock them the game's way (debug menu > Other > Menu settings) instead.

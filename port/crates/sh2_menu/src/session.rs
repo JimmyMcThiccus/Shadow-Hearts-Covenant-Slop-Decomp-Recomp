@@ -43,6 +43,10 @@ pub struct GameSession {
     pub distance: f32,
     /// number of battles won (stat for the notes / autoplay)
     pub battles_won: u32,
+    /// `SSHSys` bytes the field scripts read (retail `+0x54..+0x57`, JP `+0x50..+0x53`; added by round 5 FS): `[0]` how the map was
+    /// entered (1 map jump, 2 back from a battle), `[1]` result of the last battle (1 won, 0 lost but the story goes on, 0xff escaped),
+    /// `[2]` `SetFieldData(8)` "a defeat does not end the game" for the next battle
+    pub ssh_sys: [u8; 4],
 }
 
 impl Default for GameSession {
@@ -58,6 +62,7 @@ impl Default for GameSession {
             toast: None,
             distance: 0.0,
             battles_won: 0,
+            ssh_sys: [0; 4],
         }
     }
 }
