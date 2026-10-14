@@ -1173,21 +1173,36 @@ pub fn effect_code(recs: &[EffRec], target: &mut Fighter, env: &EcEnv, rng: &mut
                 }
             }
             mk::STEAL => {
-                // steal: a monster's drop item (`MONSTERParam+0x1a`, then `+0x1c`, success `rand() % 100 < power + value - 100`)
+                // steal (`EffectCodeFunc` case 0x4c, SLUS 0x383660): from a monster, one of its drop items `MONSTERParam+0x1a` / `+0x1c` not
+                // stolen yet (`BtlChr+6` bits 6 / 7; the caller passes stolen slots as -1).  With both left, the second (rare) one comes when
+                // `rand() % 100 <= power + value - 100`, the first otherwise -- the steal itself always succeeds while an item is left.
+                // (Not ported: unique items 400..499 the party owns already (`BTL0+0xc1c` bits) are skipped; a monster stealing from the party
+                // takes a random inventory item weighted by count, x10 for item class 1.)
                 if rolls && !roll(rng, r.chance) {
                     a.failed = true;
                     continue;
                 }
-                match env.drops.iter().copied().find(|&d| d >= 0) {
-                    Some(id) if target.is_enemy => {
-                        if !env.no_random && (rng.rand() % 100) >= power + r.value - 100 {
-                            a.failed = true;
-                            continue;
-                        }
-                        a.stolen_item = Some(id as i32);
-                    }
-                    _ => a.failed = true,
+                if !target.is_enemy {
+                    a.failed = true;
+                    continue;
                 }
+                let id = match (env.drops[0] >= 0, env.drops[1] >= 0) {
+                    (true, true) => {
+                        if !env.no_random && power + r.value - 100 < rng.rand() % 100 {
+                            env.drops[0]
+                        } else {
+                            env.drops[1]
+                        }
+                    }
+                    (true, false) => env.drops[0],
+                    (false, true) => env.drops[1],
+                    _ => -1,
+                };
+                if id < 0 {
+                    a.failed = true;
+                    continue;
+                }
+                a.stolen_item = Some(id as i32);
             }
             mk::CASH_STEAL => {
                 if rolls && !roll(rng, r.chance) {
@@ -1432,9 +1447,12 @@ pub struct FighterExt {
     pub mon: Option<RawStats>,
     /// the cash of this monster was already taken by *Cash Steal* (`BtlChr+0xb6` bit 5) / an item was stolen
     pub cash_stolen: bool,
-    pub item_stolen: bool,
+    /// drop slots already stolen (`BtlChr+6` bits 6 / 7 -> bits 0 / 1 here)
+    pub items_stolen: u8,
     /// `BtlChr+0xb6` bit 2: the character went berserk (Sanity ran out) -- it acts by itself (`BerserkFunc`)
     pub berserk: bool,
+    /// `BtlChr+0x1c2`: what `BerserkFunc` chose last (0 attack, 7 crest spell, 8 item, 12 fusion)
+    pub berserk_last: u8,
     /// the `JRCI` ring item effect words of the character's ring (retail `PAtkEffectFunc`, `GetRegDat(0x46)` row `PCParam+0x68`), applied to
     /// every physical hit with the ring grade as power
     pub ring_item: Option<[u32; 4]>,
@@ -1865,6 +1883,37 @@ pub struct ResolveCtx<'a> {
     /// `crest_learned(crest, column)` (`DecMPp`)
     pub learned: &'a dyn Fn(usize, usize) -> bool,
     pub turn_no: i32,
+    /// the hit powers (`args[7]`, percent) of the action's effect program in order ([`program_hits`]); empty = one hit at 100 %
+    pub hit_powers: &'a [i32],
+}
+
+/// The `btlEffectDamageSet` hits of an effect program on the targets: `(tick at 30 Hz, power args[7] in percent)`.  The program is run headless once
+/// to its end (cached per id).  Multi-hit programs split or multiply the damage this way (Soul Comet 20 + 50, Bullenfogel 7 x 40, Gale Spin
+/// 40 + 60; most single hits are 100).  An empty list = the program deals no damage.
+pub fn program_hits(id: i32, bytes: &[u8]) -> Vec<(u32, i32)> {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    static CACHE: OnceLock<Mutex<HashMap<i32, Vec<(u32, i32)>>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some(v) = cache.lock().ok().and_then(|c| c.get(&id).cloned()) {
+        return v;
+    }
+    let ctx = crate::effects_bridge::FxContext { gen: vec![bevy::math::Vec3::new(-50.0, 0.0, 0.0)], targets: vec![bevy::math::Vec3::new(50.0, 0.0, 0.0)], height: 17.0 };
+    let mut out = vec![];
+    if let Ok(mut p) = crate::effects_bridge::FxProgram::new(id, bytes.to_vec(), ctx) {
+        while !p.finished {
+            let t = p.ticks;
+            for e in p.step() {
+                if let crate::effects_bridge::FxEvent::Damage { side: 1, power, .. } = e {
+                    out.push((t, power));
+                }
+            }
+        }
+    }
+    if let Ok(mut c) = cache.lock() {
+        c.insert(id, out.clone());
+    }
+    out
 }
 
 /// One target of a resolved action.
@@ -1880,6 +1929,8 @@ pub struct Hit {
     pub applied: Applied,
     /// `CheckGuard` class of the defender (1 Block, 2 Resist)
     pub guard: u8,
+    /// the damage of every program hit (`btlEffectDamageSet` calls, see [`ResolveCtx::hit_powers`]); sums to `damage`
+    pub parts: Vec<i32>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -1950,9 +2001,22 @@ pub fn resolve_action(ctx: &ResolveCtx, actor: usize, cmd: &crate::flow::Command
     let list = target_list(fighters, ctx.pos, &radius, actor, cmd.p48, rec.side_class(), rec.shape(), rec.size(), rec.revive, berserk);
     // the actor's INT / SATK for the kind 9 / 10 / 11 bonuses: `GetInt` for party members, `GetSAtk` for monsters
     let int_stat = my_ext.raw.map(|r| crate::rules::modded(r.int, &me.status, &me.passives, &[crate::rules::modkind::INT])).unwrap_or(me.satk / 2);
-    let recs = decode_effect_words_src(&rec.words, 1, int_stat, me.satk, !me.is_enemy, 0);
-    let power = (ctx.ring * 100.0).round() as i32;
-    let damage = rec.deals_damage();
+    let special = rec.effect_id.rem_euclid(1000);
+    let mut recs = decode_effect_words_src(&rec.words, 1, int_stat, me.satk, !me.is_enemy, 0);
+    let mut power = (ctx.ring * 100.0).round() as i32;
+    if special == 0x6f {
+        // Kurando's *For Everyone...* (effect 1111): no effect words; `StatusRecovery`'s helper (retail SH2US_BATTLE.BIN 0x627830) builds seven
+        // records for every ally -- PATK / SATK / PDEF / SDEF / evasion +30 % and turn interval -25 % for 5 turns, turn delay -25 % at once --
+        // applied with power 1.0
+        let mk = |kind: u8, value: i32, turns: u8| EffRec { kind, percent: true, dur: 0, chance: 100, turns, value, element: 7, perm: false, all: 0, src: 1 };
+        recs = vec![mk(0x17, 30, 5), mk(0x18, 30, 5), mk(0x19, 30, 5), mk(0x1a, 30, 5), mk(0x16, -25, 0), mk(0x1b, -25, 5), mk(0x1c, 30, 5)];
+        if ctx.ring > 0.0 {
+            power = 100;
+        }
+    }
+    // *For Tomorrow...* (effect 1112, `EffectDamageSet`: `id % 1000 == 0x70`): a damage action without damage words (flat `rec+0x1c`); the damage
+    // dealt fills the drain pool `CBattle+0x490c`, which the 0x627830 helper gives back to Kurando as HP
+    let damage = rec.deals_damage() || special == 0x70;
     let combo_active = !ctx.combo.is_empty() && !me.is_enemy;
     for &t in &list {
         let Some(tgt) = fighters.get(t).and_then(|f| f.clone()) else { continue };
@@ -2017,16 +2081,28 @@ pub fn resolve_action(ctx: &ResolveCtx, actor: usize, cmd: &crate::flow::Command
                 },
                 gm: ctx.gm,
             };
-            let r = if rec.magical() { crate::rules::magic_damage(&av, &dv, &mh, rng) } else { crate::rules::skill_physical_damage(&av, &dv, &mh, rng) };
-            // `EffectDamageSet`: the guard factor, at least 1 point unless the factor is 0
+            // one `EffectDamageSet` call per `btlEffectDamageSet` of the effect program, each with the hit's power `args[7] / 100` as
+            // `GetSAtkDamage` / `GetSkillPAtkDamage`'s second factor (linear); without the program's list: one hit at 100 %
+            let powers: Vec<i32> = if !ctx.hit_powers.is_empty() && ctx.hit_powers.iter().all(|&p| p > 0) { ctx.hit_powers.to_vec() } else { vec![100] };
             let factor = crate::rules::guard_damage_factor(guard);
-            let mut dmg = (r.damage * factor) as i32;
-            if factor != 0.0 && dmg == 0 {
-                dmg = if r.damage > 0.0 { 1 } else if r.damage < 0.0 { -1 } else { 0 };
+            let mut dmg = 0;
+            for &p in &powers {
+                let mh = crate::rules::MagicHit { power2: p as f32 / 100.0, ..mh };
+                let r = if rec.magical() { crate::rules::magic_damage(&av, &dv, &mh, rng) } else { crate::rules::skill_physical_damage(&av, &dv, &mh, rng) };
+                // `EffectDamageSet`: the guard factor, at least 1 point unless the factor is 0
+                let mut d = (r.damage * factor) as i32;
+                if factor != 0.0 && d == 0 {
+                    d = if r.damage > 0.0 { 1 } else if r.damage < 0.0 { -1 } else { 0 };
+                }
+                hit.parts.push(d);
+                dmg += d;
             }
             hit.guard = guard;
             hit.damage = dmg;
             hit.missed = dmg == 0;
+            if special == 0x70 && dmg > 0 {
+                out.drained += dmg;
+            }
             if let Some(Some(f)) = fighters.get_mut(t) {
                 f.hp = (f.hp - dmg).clamp(0, f.max_hp);
             }
@@ -2037,7 +2113,7 @@ pub fn resolve_action(ctx: &ResolveCtx, actor: usize, cmd: &crate::flow::Command
                 no_random: false,
                 immune: tex.immune,
                 pc: tex.pc,
-                drops: if tex.item_stolen { [-1, -1] } else { tex.drops },
+                drops: [0, 1].map(|s| if tex.items_stolen & (1 << s) != 0 { -1 } else { tex.drops[s] }),
                 mon_cash: if tex.cash_stolen { 0 } else { tex.mon_cash },
                 party_cash: ctx.party_cash,
             };
@@ -2049,8 +2125,10 @@ pub fn resolve_action(ctx: &ResolveCtx, actor: usize, cmd: &crate::flow::Command
                 hit.missed = true;
             }
             if let Some(e) = ext.get_mut(t) {
-                if hit.applied.stolen_item.is_some() {
-                    e.item_stolen = true;
+                if let Some(id) = hit.applied.stolen_item {
+                    if let Some(s) = (0..2).find(|&s| e.items_stolen & (1 << s) == 0 && e.drops[s] as i32 == id) {
+                        e.items_stolen |= 1 << s;
+                    }
                 }
                 if hit.applied.cash > 0 {
                     e.cash_stolen = true;
@@ -2313,6 +2391,49 @@ mod bp_tests {
         }
     }
 
+    /// QA13: the record kinds the coverage probe reported as "not applied" (0x54 / 0x55, 0x4c..0x4e, 0xf, 0x15) all act on a target in the
+    /// state they need (a poisoned / aux-afflicted / buffed target, a monster with drop items and cash, Karin for Sanity).  Every US record
+    /// word of these kinds is tried.
+    #[test]
+    fn qa13_kinds_act_on_the_right_target() {
+        let Some((_d, t)) = us() else { return };
+        let all: Vec<&ActionRec> = t.items.iter().chain(t.magic.iter()).chain(t.groups.iter().flatten()).chain(t.mon_skills.iter()).chain(t.combos.iter()).collect();
+        let mut seen = std::collections::BTreeMap::<u8, (u32, u32)>::new();
+        for rec in all {
+            for e in decode_effect_words(&rec.words, 50, 100, true) {
+                if !matches!(e.kind, 0x54 | 0x55 | 0x4c | 0x4d | 0x4e | 0xf | 0x15) {
+                    continue;
+                }
+                let mut best = false;
+                for enemy in [false, true] {
+                    let mut f = unit(enemy, 100);
+                    f.char_id = if enemy { 0 } else { 5 };
+                    // the state the cures / Remove need
+                    f.status.push(StatMod { turns: 4, chance: 100, percent: false, kind: mk::STATUS, value: 0x5f });
+                    f.status.push(StatMod { turns: 4, chance: 100, percent: false, kind: mk::STATUS_AUX, value: -1 });
+                    f.status.push(StatMod { turns: 4, chance: 100, percent: true, kind: 0x17, value: 30 });
+                    let env = EcEnv { pc: if enemy { -1 } else { 5 }, drops: [3, 4], mon_cash: 500, party_cash: 500, ..Default::default() };
+                    let before = format!("{f:?}");
+                    let a = effect_code(&[e], &mut f, &env, &mut Zero);
+                    let did = format!("{f:?}") != before || a.stolen_item.is_some() || a.cash != 0 || !a.permanent.is_empty() || a.hp != 0 || a.status_added != 0 || a.status_cured != 0;
+                    best |= did;
+                }
+                if !best {
+                    eprintln!("qa13: idle word {e:?} of record {} {:x?}", rec.id, rec.words);
+                }
+                let s = seen.entry(e.kind).or_default();
+                s.0 += 1;
+                if best {
+                    s.1 += 1;
+                }
+            }
+        }
+        eprintln!("qa13: kind -> (words, acting) {seen:x?}");
+        for (k, (n, ok)) in &seen {
+            assert_eq!(n, ok, "kind {k:#x}: {} of {n} words do nothing", n - ok);
+        }
+    }
+
     /// Always-succeeding rolls (`rand() % 100 == 0`).
     struct Zero;
     impl Rng for Zero {
@@ -2442,7 +2563,7 @@ mod bp_tests {
         let learned = |_: usize, _: usize| true;
         let fr = |_: usize, _: usize| 0;
         let pos = [[0.0, 0.0, 0.0]; 12];
-        let ctx = ResolveCtx { tables: &t, pos: &pos, radius: &[], gm: GlobalMod::default(), ring: 1.0, combo: &[], friendship: &fr, party_cash: 0, fused: None, learned: &learned, turn_no: 0 };
+        let ctx = ResolveCtx { tables: &t, pos: &pos, radius: &[], gm: GlobalMod::default(), ring: 1.0, combo: &[], friendship: &fr, party_cash: 0, fused: None, learned: &learned, turn_no: 0, hit_powers: &[] };
         let mut rng = Lcg(3);
         // Arc Cure (MAGI 1): area 5 = every living ally, 16 MP, heals 50 + INT * 2 (INT = SATK / 2 without raw stats)
         let cmd = Command { p44: 1, p48: 0, p4c: 1, ..Default::default() };
@@ -2482,7 +2603,7 @@ mod bp_tests {
         ext[0].raw = Some(RawStats { int: 9, max_hp: 999, max_mp: 60, max_sp: 10, ..Default::default() });
         let learned = |_: usize, _: usize| true;
         let fr = |_: usize, _: usize| 0;
-        let ctx = ResolveCtx { tables: &t, pos: &[], radius: &[], gm: GlobalMod::default(), ring: 1.0, combo: &[], friendship: &fr, party_cash: 0, fused: None, learned: &learned, turn_no: 0 };
+        let ctx = ResolveCtx { tables: &t, pos: &[], radius: &[], gm: GlobalMod::default(), ring: 1.0, combo: &[], friendship: &fr, party_cash: 0, fused: None, learned: &learned, turn_no: 0, hit_powers: &[] };
         let r = resolve_action(&ctx, 0, &Command { p44: 0, p48: 0, p4c: 2, ..Default::default() }, &mut fighters, &mut ext, &mut Lcg(1));
         assert_eq!(r.hits[0].applied.hp, 68);
         assert_eq!(r.mp_cost, 6);
@@ -2633,7 +2754,7 @@ mod bp_coverage {
                 _ if rec.target_class() == crate::ai::TargetClass::Opponent || rec.target_class() == crate::ai::TargetClass::OpponentsAlive => 2,
                 _ => 2,
             };
-            let ctx = ResolveCtx { tables: &t, pos: &pos, radius: &[], gm: GlobalMod::default(), ring: 1.0, combo: &[0, 1], friendship: &fr, party_cash: 1000, fused: if fused >= 0 { Some(fused) } else { None }, learned: &learned, turn_no: 0 };
+            let ctx = ResolveCtx { tables: &t, pos: &pos, radius: &[], gm: GlobalMod::default(), ring: 1.0, combo: &[0, 1], friendship: &fr, party_cash: 1000, fused: if fused >= 0 { Some(fused) } else { None }, learned: &learned, turn_no: 0, hit_powers: &[] };
             let mut rng = crate::rules::Lcg(9);
             let r = resolve_action(&ctx, 0, &cmd, &mut fighters, &mut ext, &mut rng);
             let did = r.hits.iter().any(|h| h.damage != 0 || h.applied != Applied::default());
@@ -2643,5 +2764,76 @@ mod bp_coverage {
         }
         eprintln!("bp_coverage: {} records, {} without an effect:\n  {}", cases.len(), idle.len(), idle.join("\n  "));
         assert!(idle.len() * 10 < cases.len(), "too many records without an effect");
+    }
+
+    /// Kurando's word-less specials: *For Everyone...* (1111) raises every ally's PATK / SATK / PDEF / SDEF / evasion by 30 % and speeds them
+    /// up; *For Tomorrow...* (1112) deals damage and gives it back to Kurando as HP.
+    #[test]
+    fn kurando_for_everyone_and_for_tomorrow() {
+        let Some(dir) = std::env::var_os("SH2_US_DISC_DIR") else { return };
+        let Ok(d) = crate::pkb_compat::PkbDisc::open(dir) else { return };
+        let data = crate::data::BattleData::load_us(&d).unwrap();
+        let t = ActionTables::load(&data);
+        let learned = |_: usize, _: usize| true;
+        let fr = |_: usize, _: usize| 5000;
+        let pos = [[0.0f32; 3]; 12];
+        let ctx = ResolveCtx { tables: &t, pos: &pos, radius: &[], gm: GlobalMod::default(), ring: 1.0, combo: &[], friendship: &fr, party_cash: 0, fused: None, learned: &learned, turn_no: 0, hit_powers: &[] };
+        let setup = || {
+            let mut fighters: Vec<Option<Fighter>> = vec![Some(unit(false)), Some(unit(false)), Some(unit(true))];
+            for f in fighters.iter_mut().flatten() {
+                f.status.clear();
+            }
+            fighters[0].as_mut().unwrap().char_id = 21;
+            fighters.resize(12, None);
+            let mut ext = vec![FighterExt { radius: 3.0, pc: 0, ..Default::default() }; 12];
+            ext[2] = FighterExt { radius: 3.0, pc: -1, ..Default::default() };
+            (fighters, ext)
+        };
+        let (mut f, mut ext) = setup();
+        let r = resolve_action(&ctx, 0, &Command { p44: 0, p4c: 2, p48: 0, ..Default::default() }, &mut f, &mut ext, &mut crate::rules::Lcg(3));
+        for k in [0usize, 1] {
+            let st = &f[k].as_ref().unwrap().status;
+            for kind in [0x17u8, 0x18, 0x19, 0x1a, 0x1b, 0x1c] {
+                assert!(st.iter().any(|m| m.kind == kind && m.percent && m.turns == 6), "ally {k} kind {kind:#x}: {st:?} ({r:?})");
+            }
+        }
+        assert!(f[2].as_ref().unwrap().status.is_empty());
+        let (mut f, mut ext) = setup();
+        let r = resolve_action(&ctx, 0, &Command { p44: 1, p4c: 2, p48: 2, ..Default::default() }, &mut f, &mut ext, &mut crate::rules::Lcg(3));
+        let dmg: i32 = r.hits.iter().map(|h| h.damage).sum();
+        assert!(dmg > 0, "{r:?}");
+        assert_eq!(r.drained, dmg);
+        assert_eq!(f[0].as_ref().unwrap().hp, (100 + dmg).min(300));
+    }
+
+    /// A multi-hit program: one damage roll per `btlEffectDamageSet` with its power (Gale Spin, MAGI 46: 40 % + 60 %).
+    #[test]
+    fn program_hits_split_the_damage() {
+        let Some(dir) = std::env::var_os("SH2_US_DISC_DIR") else { return };
+        let Ok(d) = crate::pkb_compat::PkbDisc::open(dir) else { return };
+        let data = crate::data::BattleData::load_us(&d).unwrap();
+        let t = ActionTables::load(&data);
+        let learned = |_: usize, _: usize| true;
+        let fr = |_: usize, _: usize| 5000;
+        let pos = [[0.0f32; 3]; 12];
+        let run = |powers: &[i32]| {
+            let ctx = ResolveCtx { tables: &t, pos: &pos, radius: &[], gm: GlobalMod::default(), ring: 1.0, combo: &[], friendship: &fr, party_cash: 0, fused: None, learned: &learned, turn_no: 0, hit_powers: powers };
+            let mut fighters: Vec<Option<Fighter>> = vec![Some(unit(false)), Some(unit(true))];
+            fighters[1].as_mut().unwrap().hp = 300;
+            fighters[1].as_mut().unwrap().status.clear();
+            fighters.resize(12, None);
+            let mut ext = vec![FighterExt { radius: 3.0, pc: 0, ..Default::default() }; 12];
+            ext[1] = FighterExt { radius: 3.0, pc: -1, ..Default::default() };
+            resolve_action(&ctx, 0, &Command { p44: 46, p4c: 1, p48: 1, ..Default::default() }, &mut fighters, &mut ext, &mut crate::rules::Lcg(5))
+        };
+        let one = run(&[]);
+        let two = run(&[40, 60]);
+        let h1 = &one.hits[0];
+        let h2 = &two.hits[0];
+        assert!(h1.damage > 0, "{one:?}");
+        assert_eq!(h2.parts.len(), 2);
+        assert_eq!(h2.parts.iter().sum::<i32>(), h2.damage);
+        assert!(h2.parts[1] >= h2.parts[0], "{:?}", h2.parts);
+        assert!((h2.damage - h1.damage).abs() <= h1.damage / 4 + 2, "{} vs {}", h2.damage, h1.damage);
     }
 }

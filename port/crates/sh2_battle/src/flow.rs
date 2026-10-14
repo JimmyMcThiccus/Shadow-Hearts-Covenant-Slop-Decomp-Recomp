@@ -533,6 +533,8 @@ pub trait Host {
     fn attack_rider(&mut self, _actor: usize, _target: usize, _skill: i32, _fighters: &mut [Option<Fighter>]) -> Vec<(usize, i32)> {
         Vec::new()
     }
+    /// Round 5 BE hook: fighter `chr` fused into `FUSM` row `id` (-1 = reverted); the host picks the fusion's skill group for its banner / effect.
+    fn fusion_changed(&mut self, _chr: usize, _id: i32) {}
 }
 
 /// Scale an effect hit (damage > 0 / heal < 0) by the Judgement Ring grade of the action: 1.0 = no ring or a clean lap, 0.0 = `Miss!!`
@@ -628,6 +630,8 @@ pub enum PartyEvent {
     RingItem { target: usize, added: u32 },
     /// `TurnBeforeFunc` step 0x37 / `SetBtlMessage(0x79)`: the aroma `id` is gone
     AromaGone { id: i32 },
+    /// *Gathering*: `units` were moved next to unit `centre` (ring of radius [`GATHER_SPACING`]; the battle positions are already updated)
+    Gather { centre: usize, units: Vec<usize> },
     /// Snap Shot: `SetBtlMessage(0x7a)` "You got the "%s" Album!" (album `index` = Anastasia's `SKIL` group 4 record)
     Album { index: u8, name: String },
 }
@@ -668,6 +672,9 @@ pub struct Battle<H: Host> {
     /// the action tables of the party-side engine ([`crate::actions::resolve_action`]); `None` = items / magic / skills go through
     /// [`Host::resolve_effect`] only (the headless tests of other modules)
     pub engine: Option<Arc<ActionTables>>,
+    /// BE round 5: monster items / spells / skills are resolved by the same engine as the party's (`actions::resolve_action`: target lists / area shapes,
+    /// `EffectDamageSet`, `EffectCodeFunc`) when `engine` is set; `false` = the older single-target `BtlHost::resolve_effect` path
+    pub enemy_engine: bool,
     /// per fighter slot: floor positions (Bevy world, x / z) for the area shapes; empty = unknown (every area hits the chosen target only)
     pub positions: Vec<[f32; 3]>,
     /// the party's cash (Cash Steal by monsters)
@@ -682,6 +689,9 @@ pub struct Battle<H: Host> {
     pub escape_now: bool,
     /// Anastasia's albums already owned at the start (`BTL0+0xfc3` bits)
     pub albums_owned: Vec<u8>,
+    /// the hit powers of the pending action's effect program (`actions::program_hits`, set by the presentation before the action
+    /// resolves; cleared after it)
+    pub hit_powers: Vec<i32>,
     pending: Option<MenuEvent>,
 }
 
@@ -726,6 +736,9 @@ pub struct BattleStats {
     pub albums: Vec<u8>,
 }
 
+/// Distance of the gathered units from the target of *Gathering* (world units; the retail placement is the effect program's -- not measured).
+pub const GATHER_SPACING: f32 = 12.0;
+
 /// `StatusRecovery` case 7 (Snap Shot, retail SH2US_BATTLE.BIN 0x626bf8): photographing these `MONSTERParam` ids gives album `k` (bit `k` of
 /// `BTL0+0xfc3..0xfc4`, = Anastasia's `SKIL` group 4 record `k`: Aqua Raise, Direct Press, Cash Steal, Remove, Pillage Storm, Falling Leaves,
 /// Power Cannon, Spirit Ward, Nightmare, Euthanasia).  Same ids as the JP demo's `BtlFree` case 6.
@@ -760,6 +773,7 @@ impl<H: Host> Battle<H> {
             tarot_run: None,
             ext: vec![FighterExt::default(); rules::MAX_CHR],
             engine: None,
+            enemy_engine: std::env::var("SH2_BATTLE_ENEMY_ENGINE").map(|v| v != "0").unwrap_or(true),
             positions: vec![],
             party_cash: 0,
             crest_learned: vec![],
@@ -767,6 +781,7 @@ impl<H: Host> Battle<H> {
             aroma: None,
             escape_now: false,
             albums_owned: vec![],
+            hit_powers: vec![],
             pending: None,
         }
     }
@@ -781,6 +796,7 @@ impl<H: Host> Battle<H> {
             if let Some(e) = self.ext.get_mut(i) {
                 crate::actions::apply_fusion_stats(f, e, None);
             }
+            self.host.fusion_changed(i, -1);
             return;
         }
         if let Some(e) = self.ext.get_mut(i) {
@@ -792,6 +808,7 @@ impl<H: Host> Battle<H> {
         if let Some(slot) = self.fused.get_mut(i) {
             *slot = Some(Fused { id, name, orig_name, model, sp_upkeep });
         }
+        self.host.fusion_changed(i, id);
     }
 
     fn goto(&mut self, p: Phase, step: u16) {
@@ -1116,7 +1133,7 @@ impl<H: Host> Battle<H> {
                 let engine_phase = self.phase == Phase::Effect && matches!(self.cmd.p4c, 0..=3) || self.phase == Phase::RingSkill && self.cmd.p4c == 4;
                 if self.engine.is_some() && self.phase == Phase::Aroma && actor_pc {
                     factor = self.start_aroma(i);
-                } else if self.engine.is_some() && engine_phase && actor_pc {
+                } else if self.engine.is_some() && engine_phase && (actor_pc || self.enemy_engine) {
                     factor = self.resolve_party_effect(i);
                 } else if self.engine.is_some() && self.phase == Phase::Fusion {
                     // the fused form's stats come from `set_fused` (FUSM growth rows); the host only sees the command (banner / effect choice)
@@ -1397,7 +1414,9 @@ impl<H: Host> Battle<H> {
                 rows.push(7);
             } else if self.combo.len() >= if trio_nrv { 2 } else { 3 } {
                 for &m in &alive {
-                    let el = self.ext.get(m).map(|e| e.combo_element).unwrap_or(7) as usize;
+                    // `CheckComboSkill`: a fused member (`BtlChr+0xb1` bit 1) counts with the fusion's element (`FUSM+4 & 7`)
+                    let fused_el = self.fused.get(m).and_then(|s| s.as_ref()).and_then(|s| self.ext.get(m).and_then(|e| e.fusions.iter().find(|x| x.id == s.id)).map(|x| x.element));
+                    let el = fused_el.or_else(|| self.ext.get(m).map(|e| e.combo_element)).unwrap_or(7) as usize;
                     if el < 7 && !rows.contains(&el) {
                         rows.push(el);
                     }
@@ -1503,10 +1522,89 @@ impl<H: Host> Battle<H> {
         self.stats.unconscious[pc] += 1;
     }
 
-    /// `BerserkFunc` (retail 0x690270, attack branch, taken 80 % of the time when a spell would be possible): the berserk character attacks a
-    /// random living unit -- live (pine_us_refinement 9.1): berserk PCs "act by AI and also hit each other and the enemies".  The item / crest
-    /// branches and the per-character antics (phases 0x0f..0x12) are not modelled.
+    /// `BerserkFunc` (retail 0x690270): the berserk character's own choice.  Its per-PC jump table (0x6e6dd0) starts with the character's
+    /// antics; ported: **Yuri** (0x690400) fuses at random -- 75 % of his turns (10 % when already fused; never twice in a row, `BtlChr+0x1c2 ==
+    /// 12`, nor under Seal) into one of his fusions other than the current one, or back (`p44 = -1`).  Then the shared tail (0x694778, PCs 8..11
+    /// directly): with a 20 % chance one of the equipped crests' learned spells whose class (`rec+4 & 0x1f >> 3`) is not 0 / 3 and which has a
+    /// target -- the target is the caster for side 0, everybody for side 3 / shape 5, else a random unit the spell can reach (enemies *and*
+    /// allies); otherwise a plain attack on a random living unit (live, pine_us_refinement 9.1: berserk PCs hit each other and the enemies).
+    /// Not ported: the item branch (15 %, 50 % for PC 4: a random usable battle item of the bag), the other characters' antics blocks
+    /// (Karin 0x691090, ... Kurando 0x694198).
     fn berserk_command(&mut self, i: usize) -> MenuEvent {
+        let Some(me) = self.fighters.get(i).and_then(|f| f.clone()) else { return MenuEvent::Wait { actor: i as i32 } };
+        let ext = self.ext.get(i).cloned().unwrap_or_default();
+        let sealed = rules::status_of(&me.status) & rules::status_bits::SEAL != 0;
+        let last = ext.berserk_last;
+        let set_last = |b: &mut Self, v: u8| {
+            if let Some(e) = b.ext.get_mut(i) {
+                e.berserk_last = v;
+            }
+        };
+        // Yuri's fusion antics
+        if ext.pc == 0 && !sealed && last != 12 && !ext.fusions.is_empty() {
+            let cur = self.fused.get(i).and_then(|s| s.as_ref()).map(|s| s.id);
+            let chance = if cur.is_some() { 1000 } else { 7500 };
+            let mut opts: Vec<i32> = ext.fusions.iter().map(|f| f.id).filter(|&id| Some(id) != cur).collect();
+            if cur.is_some() {
+                opts.push(-1);
+            }
+            if !opts.is_empty() && self.rng.rand() % 10000 <= chance {
+                let id = opts[self.rng.rand() as usize % opts.len()];
+                set_last(self, 12);
+                return MenuEvent::Fusion { id };
+            }
+        }
+        // the crest-spell branch
+        if !sealed {
+            if let Some(t) = self.engine.clone() {
+                let mut spells: Vec<usize> = vec![];
+                for &c in ext.crests.iter().filter(|&&c| c >= 0) {
+                    let Some(cr) = t.crests.get(c as usize) else { continue };
+                    for (k, &m) in cr.magic.iter().enumerate() {
+                        let learned = self.crest_learned.get(c as usize).map(|b| b & (1 << k) != 0).unwrap_or(false);
+                        if m >= 0 && learned && !spells.contains(&(m as usize)) {
+                            spells.push(m as usize);
+                        }
+                    }
+                }
+                let radius: Vec<f32> = self.ext.iter().map(|e| e.radius).collect();
+                let mut usable: Vec<(usize, Vec<usize>)> = vec![];
+                for m in spells {
+                    let Some(rec) = t.magic.get(m) else { continue };
+                    let class = (rec.flags & 0x1f) >> 3;
+                    if rec.empty || class == 0 || class == 3 {
+                        continue;
+                    }
+                    let side = (rec.flags & 0x1ff) >> 7;
+                    let reach: Vec<usize> = if side == 0 {
+                        vec![i]
+                    } else {
+                        (0..self.fighters.len())
+                            .filter(|&k| self.fighters[k].as_ref().map(|f| !f.removed && (f.hp > 0 || rec.revive)).unwrap_or(false))
+                            .filter(|&k| !crate::actions::target_list(&self.fighters, &self.positions, &radius, i, k as i32, rec.side_class(), rec.shape(), rec.size(), rec.revive, true).is_empty())
+                            .collect()
+                    };
+                    if !reach.is_empty() {
+                        usable.push((m, reach));
+                    }
+                }
+                if !usable.is_empty() && self.rng.rand() % 10000 <= 2000 {
+                    let (m, reach) = usable[self.rng.rand() as usize % usable.len()].clone();
+                    let rec = &t.magic[m];
+                    let side = (rec.flags & 0x1ff) >> 7;
+                    let target = if side == 0 {
+                        i as i32
+                    } else if side == 3 || rec.shape() == 5 {
+                        -1
+                    } else {
+                        reach[self.rng.rand() as usize % reach.len()] as i32
+                    };
+                    set_last(self, 7);
+                    return MenuEvent::Magic { id: m as i32, target };
+                }
+            }
+        }
+        set_last(self, 0);
         let any: Vec<usize> = (0..self.fighters.len()).filter(|&k| k != i && self.fighters[k].as_ref().map(|f| f.hp > 0 && !f.removed).unwrap_or(false)).collect();
         let t = if any.is_empty() { 0 } else { any[self.rng.rand() as usize % any.len()] };
         MenuEvent::Attack { actor: i as i32, target: t as i32, kind: 0, skill: -1 }
@@ -1538,12 +1636,15 @@ impl<H: Host> Battle<H> {
             fused,
             learned: &learned,
             turn_no: self.turn_no,
+            hit_powers: &self.hit_powers,
         };
         let mut cmd = self.cmd;
-        if cmd.p4c == 3 {
+        let actor_pc = self.fighters.get(i).and_then(|f| f.as_ref()).map(|f| !f.is_enemy).unwrap_or(false);
+        if cmd.p4c == 3 && actor_pc {
             cmd.p4c = 2;
         }
         let r = crate::actions::resolve_action(&ctx, i, &cmd, &mut self.fighters, &mut self.ext, self.rng.as_mut());
+        self.hit_powers.clear();
         if r.mp_cost > 0 {
             self.events.push(BattleEvent::Party(PartyEvent::MpCost { chr: i, mp: r.mp_cost }));
         }
@@ -1551,9 +1652,13 @@ impl<H: Host> Battle<H> {
         for h in &r.hits {
             let heal = h.applied.hp;
             if h.damage != 0 || h.missed || heal == 0 && h.applied.mp == 0 && h.applied.sp == 0 && h.applied.status_added == 0 && h.applied.status_cured == 0 && h.applied.buffs.is_empty() {
-                let e = BattleEvent::Damage { target: h.target, amount: h.damage, critical: h.critical };
-                self.host.event(&e);
-                self.events.push(e);
+                // one damage event per program hit (the hit panel counts them: "7Hit 280Damage")
+                let parts = if h.parts.len() > 1 { h.parts.clone() } else { vec![h.damage] };
+                for d in parts {
+                    let e = BattleEvent::Damage { target: h.target, amount: d, critical: h.critical };
+                    self.host.event(&e);
+                    self.events.push(e);
+                }
                 damage_total += h.damage.max(0);
             }
             if heal != 0 {
@@ -1589,11 +1694,11 @@ impl<H: Host> Battle<H> {
         // special effect ids of `EffectFunc` whose action is the effect program's (`rec+0x18 % 1000`): 0xe5 *Falling Leaves* -- the party runs
         // away (effect 0x105 = fails when the fight forbids it), 0xde *Spirit Ward* -- one enemy is driven away (0x104 = fails on bosses)
         let special = r.record.as_ref().map(|x| x.effect_id.rem_euclid(1000)).unwrap_or(-1);
-        if special == 0xe5 && self.escape != rules::EscapeMode::Never {
+        if special == 0xe5 && actor_pc && self.escape != rules::EscapeMode::Never {
             self.stats.ran_away = true;
             self.escape_now = true;
         }
-        if special == 0xde && self.escape != rules::EscapeMode::Never {
+        if special == 0xde && actor_pc && self.escape != rules::EscapeMode::Never {
             let t = self.cmd.p48.max(0) as usize;
             if let Some(Some(f)) = self.fighters.get_mut(t) {
                 if f.is_enemy && f.hp > 0 {
@@ -1601,6 +1706,25 @@ impl<H: Host> Battle<H> {
                     let e = BattleEvent::Defeated { chr: t };
                     self.host.event(&e);
                     self.events.push(e);
+                }
+            }
+        }
+        // 0x50 *Gathering* ("Gathers enemies into one place."): the effect program pulls the living units of the target's side to the target;
+        // `EffectFunc` (0x484650) also lets it continue a combo like a damage action.  The area shapes measure on the new places at once.
+        if special == 0x50 {
+            let t = self.cmd.p48.max(0) as usize;
+            let side = self.fighters.get(t).and_then(|f| f.as_ref()).map(|f| f.is_enemy);
+            if let (Some(side), Some(&c)) = (side, self.positions.get(t)) {
+                let units: Vec<usize> =
+                    (0..self.fighters.len()).filter(|&k| k != t && self.fighters[k].as_ref().map(|f| f.is_enemy == side && f.hp > 0 && !f.removed).unwrap_or(false)).collect();
+                for (n, &k) in units.iter().enumerate() {
+                    let a = n as f32 * std::f32::consts::TAU / units.len().max(1) as f32;
+                    if let Some(p) = self.positions.get_mut(k) {
+                        *p = [c[0] + GATHER_SPACING * a.cos(), c[1], c[2] + GATHER_SPACING * a.sin()];
+                    }
+                }
+                if !units.is_empty() {
+                    self.events.push(BattleEvent::Party(PartyEvent::Gather { centre: t, units }));
                 }
             }
         }
@@ -2240,6 +2364,36 @@ mod bp_flow_tests {
         write_score(&st, &mut s.save.btl, 0, true);
         let t = sh2_menu::score::ScoreTotals::from_save(&s.save.btl, &s.save.menu);
         assert_eq!((t.battles, t.max_hits, t.total_hits, t.max_damage, t.berserk, t.victories), (1, 3, 7, 55, 1, 1));
+    }
+
+    /// `BerserkFunc`: berserk Yuri mostly fuses (75 %), never twice in a row; the others attack or cast a crest spell.
+    #[test]
+    fn berserk_yuri_fuses_at_random() {
+        let Some((data, tables, s)) = us() else { return };
+        let (mut b, _) = battle(&data, &tables, &s, &[0, 5], 2);
+        if b.ext[0].fusions.is_empty() {
+            let f = |id| crate::actions::FusionForm { id, growth: [0; 6], skill_flat: [0; 8], element: 0, level: 1 };
+            b.ext[0].fusions = vec![f(0), f(1)];
+        }
+        let mut fusions = 0;
+        let mut attacks = 0;
+        for _ in 0..200 {
+            b.ext[0].berserk_last = 0;
+            match b.berserk_command(0) {
+                MenuEvent::Fusion { .. } => {
+                    fusions += 1;
+                    // the next choice is never a fusion
+                    assert!(!matches!(b.berserk_command(0), MenuEvent::Fusion { .. }));
+                }
+                MenuEvent::Attack { .. } => attacks += 1,
+                _ => {}
+            }
+        }
+        assert!(fusions > 120 && fusions < 180 && attacks > 0, "fusions {fusions} attacks {attacks}");
+        // Karin never fuses
+        for _ in 0..50 {
+            assert!(!matches!(b.berserk_command(1), MenuEvent::Fusion { .. }));
+        }
     }
 
     #[test]

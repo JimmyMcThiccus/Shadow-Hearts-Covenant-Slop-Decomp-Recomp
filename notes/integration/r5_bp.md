@@ -99,11 +99,66 @@ helper in the BP scratchpad: `EffectCodeFunc` 0x36b410, `SpecialEffectCode` 0x36
 * Autoplay sanity run (`sh2_app --us --autoplay --boost 80 --shots`): field, battle command menu, ring, victory, in-game menu as before.
 * Dev drive runs: White Magic / Defend / Thera Leaf / attack (party 0, 5, 11 Lv 12) and Aromatherapy (party 0, 3, 11 Lv 15).
 
+## 2c. Round 2 (2026-10-14 afternoon)
+
+* **QA12** -- battle HUD screenshots (details in `requests.md`, "Round 5 BP round 2"):
+  * The command rows had no labels only because the autoplay shot was taken during the slide-in.  `autoplay.rs` now waits until the menu has
+    settled.
+  * The tilted ring is how the retail game draws it.  No change.
+  * The hit panel's "-N Damage" now prints "N Damage", as retail does.  New sanity shots: BP `scratchpad/bp/auto2` (command menu with labels,
+    ring, "2Hit 19Damage").
+* **QA13** -- the coverage probe's setup was the problem (now fixed in the harness).  The real gap was the **steal** rule, now ported from
+  SLUS 0x383660:
+  * The steal always succeeds while the monster has a drop slot left.
+  * The value is the chance of getting the rare slot.
+  * Each slot can be stolen once (`FighterExt::items_stolen`).
+  * Test `qa13_kinds_act_on_the_right_target`.
+* **Gathering** (effect 0x50: crest spell MAGI 33 and fusion skill SKIL group 17 #5): "Gathers enemies into one place".  The living units of the target's side are placed
+  in a ring (`flow::GATHER_SPACING`) around the target.  `Battle::positions` moves at once (the area shapes measure on the new places);
+  `PartyEvent::Gather` moves the models' homes (plugin hook).  The exact placement belongs to the effect program and is not measured.
+* **For Everyone...** (Kurando, 1111 -> 0x6f): seven records are built for every ally and applied at power 1.0 (`SH2US_BATTLE.BIN`
+  0x627830):
+  * PATK / SATK / PDEF / SDEF / evasion +30 % for 5 turns
+  * turn interval -25 % for 5 turns
+  * turn delay -25 % at once
+* **For Tomorrow...** (1112 -> 0x70): the record has no damage words but still deals damage (flat `rec+0x1c` = 100), and the damage dealt is
+  given back to Kurando as HP (`EffectDamageSet` adds it to `CBattle+0x490c`, then the 0x627830 kind-3 record).  Test
+  `kurando_for_everyone_and_for_tomorrow`.
+* **Per-hit damage**: `actions::program_hits(id, bytes)` runs an effect program headless once (cached) and lists its
+  `btlEffectDamageSet` hits `(tick, args[7])`.  Party actions roll one `GetSAtkDamage` / `GetSkillPAtkDamage` per hit with `power2 = args[7]
+  / 100` (`ResolveCtx::hit_powers`, `Hit::parts`), as retail `EffectDamageSet` does.  This changes the totals:
+  * Soul Comet 20 + 50 %
+  * Bullenfogel 7 x 40 %
+  * Gale Spin 40 + 60 %
+  * Heaven 2 x 23 %
+
+  Most single hits are 100 %, and powers of 0 fall back to one hit at 100 %.  The flow sends one `Damage` event per hit, and the plugin hook
+  shows each number on its program tick (`rt.hit_offsets`), so the panel counts "n Hit".  Only the GUI knows the program, so headless runs keep
+  one hit at 100 %.  Test `program_hits_split_the_damage`.  The list of hit powers: `examples/bp_tables.rs fxpow`.
+* **Berserk** (`BerserkFunc` 0x690270, per-PC jump table 0x6e6dd0):
+  * Yuri's antics block (0x690400) is ported: he fuses at random on 75 % of his turns (10 % when already fused, then also "back"), never twice
+    in a row, never under Seal.
+  * The shared tail (0x694778) is ported: a 20 % chance of a learned crest spell that has a target (any side), else an attack on a random
+    living unit (`FighterExt::berserk_last` = `BtlChr+0x1c2`).
+  * Test `berserk_yuri_fuses_at_random`.
+* **Combo magic with a fused member**: the member counts with the fusion's element (`FUSM+4 & 7`, `CheckComboSkill`).
+
 ## 4. Open (priority order)
 
-1. Special effect ids of `EffectFunc` (`rec+0x18 % 1000`) still without behaviour: 0x50 Gathering, 0x87 cycle hit, 0x89, 0xef Deadly Throw,
-   0x70, 0x86, 0xa8, 0x100, Kurando's 1111 / 1112 (For Everyone / For Tomorrow).  (0xde Spirit Ward and 0xe5 Falling Leaves are done.)
-2. Per-hit damage split of multi-hit spells (needs `args[7]` from FX, request 8).
-3. Berserk item / crest branches and antics (phases 0x0f..0x12; berserk attacks still use the ring), Panic behaviour beyond the SP drain,
-   combo magic with a fused element.
-4. Live checks (PCSX2): Resist factor, a second Block sample, turn factor of spells, an album unlock.
+1. Berserk:
+   * The item branch (15 %, 50 % for PC 4; needs the bag on the flow side).
+   * The other characters' antics blocks: Karin 0x691090, PC 2 0x691f10, 0x692818, 0x6928a0, 0x692b80, 0x693838, Kurando 0x694198.
+   * Berserk attacks still use the ring.
+2. Steal:
+   * Monsters stealing from the party bag.
+   * Skipping unique items 400..499 that are already owned.
+3. Special effect ids:
+   * Not ported: 0xef Deadly Throw (`EffectFunc` calls 0x6a8810), 0x86 / 0x89 / 0xa8 / 0x100 (combo / offensive exceptions in `EffectFunc`).
+   * Gathering is not ported: its combo continuation, and its target swap for monster CHR 499.
+4. Panic: only the x3 SP drain is ported; the meaning of the other `Panic` checks has not been looked into.
+5. Live checks the user could run (PCSX2):
+   * the Resist factor
+   * a second Block sample
+   * a multi-hit spell's per-hit numbers (e.g. Soul Comet: two numbers about 20 / 50 % of one full hit)
+   * an album unlock (Snap Shot on monster 0x3a)
+   * Gathering's placement

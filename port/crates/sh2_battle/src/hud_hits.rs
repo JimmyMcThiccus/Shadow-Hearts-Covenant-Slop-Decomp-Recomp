@@ -7,7 +7,7 @@
 //!   on a party member red (3); `Miss` the other way round; status inflictions pop in red (PC) / blue (enemy); heals green.
 //!   Ten motion types ([`HitText::kind`]), all timed in seconds at 60 Hz exactly as `HitInfo::Polling`.
 //! * **Total hit panel** (`TotalHitInfo`, one per target at (16, 128) stacking downwards): the capsule frame, the target's
-//!   letter card / portrait, then `n Hit`, `-N Damage` [, `Combo +n`] and the status icons of the inflictions, all in the same
+//!   letter card / portrait, then `n Hit`, `N Damage` (no sign, live) [, `Combo +n`] and the status icons of the inflictions, all in the same
 //!   font at 24 px (scale 0.75).  Lives 4 s after the last hit, then collapses vertically.
 //! * **Hit counter pop** (`HitCntEff`): the hit count in gold over the panel's `Hit` number, shrinking from up to 4x to 1x in 0.2 s.
 //! * **Status icons** (`AbnIcon`): a billboard above the model's bounding box, 4.6 x 5.3 world units, bobbing 0.5 units at 1 Hz,
@@ -1125,7 +1125,7 @@ impl HitFx {
             } else if let Some(&f) = hud.faces.get(&model) {
                 sprite(g, (f, (104, 128)), (0.0, 8.0, 104.0, 66.0), (x + sx, y, sx * 36.0, sy * 23.0), grey(0x80));
             }
-            // rows: `n Hit`, `-N Damage`, `Combo +n`, status icons
+            // rows: `n Hit`, `N Damage`, `Combo +n`, status icons
             let mut rx = x + sx * 46.0;
             let ry = y + 1.0;
             let mut anchor = None;
@@ -1163,7 +1163,8 @@ impl HitFx {
             };
             if p.hits > 0 {
                 anchor = row(g, None, Some((p.hits, false, false)), Some((&words(39), blue)));
-                row(g, None, Some((-p.damage, false, true)), Some((&words(40), blue)));
+                // retail prints the total without a sign: "2Hit 18Damage" (live screens/battle_live/02h, 02l, 13a)
+                row(g, None, Some((p.damage, false, false)), Some((&words(40), blue)));
             }
             if p.heal > 0 {
                 row(g, Some((&words(11), blue)), Some((p.heal, true, false)), None);

@@ -83,6 +83,40 @@ fn main() {
             println!("f{i:2} {:20} sp={} chr={} skills={:?}", n, t.fusion_sp[i], t.fusion_models[i], t.fusion_skills[i]);
         }
     }
+    if what == "fxpow" {
+        // the `btlEffectDamageSet` hit powers (`args[7]`) of every party record's effect program: is the per-hit power a split of 100 % or a
+        // full hit each?
+        let disc = sh2_core::fileio::Disc::open(std::env::var("SH2_US_DISC_DIR").unwrap()).unwrap();
+        let mut ids: Vec<(String, i32)> = vec![];
+        for (g, grp) in t.groups.iter().enumerate() {
+            for r in grp.iter().filter(|r| !r.empty) {
+                ids.push((format!("g{g} #{} {}", r.id, t.skill_name(r.name_idx.max(0) as usize)), r.effect_id));
+            }
+        }
+        for (i, r) in t.magic.iter().enumerate().filter(|(_, r)| !r.empty) {
+            ids.push((format!("m{i} {}", t.magic_name(i)), r.effect_id));
+        }
+        for (i, r) in t.combos.iter().enumerate() {
+            ids.push((format!("c{i} {}", t.combo_names.get(i).cloned().unwrap_or_default()), r.effect_id));
+        }
+        for (name, eid) in ids {
+            let Some(id) = sh2_battle::effects_bridge::retail_effect_id(eid, Default::default()) else { continue };
+            let Ok(bytes) = disc.read(&sh2_battle::effects_bridge::efd_path(id)) else { continue };
+            let ctx = sh2_battle::effects_bridge::FxContext { gen: vec![bevy::math::Vec3::new(-50.0, 0.0, 0.0)], targets: vec![bevy::math::Vec3::new(50.0, 0.0, 0.0)], height: 30.0 };
+            let Ok(mut p) = sh2_battle::effects_bridge::FxProgram::new(id, bytes, ctx) else { continue };
+            let mut pw = vec![];
+            while !p.finished {
+                for e in p.step() {
+                    if let sh2_battle::effects_bridge::FxEvent::Damage { power, extra, .. } = e {
+                        pw.push(format!("{power}/{extra}"));
+                    }
+                }
+            }
+            if !pw.is_empty() {
+                println!("{name:32} eff {id:3}: {}", pw.join(" "));
+            }
+        }
+    }
     if what == "kinds" {
         for (k, v) in &kinds {
             println!("kind {k:#04x}: {}", v.join(" | "));

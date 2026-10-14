@@ -950,6 +950,19 @@ fn begin_action_fx(rt: &mut BattleRuntime, cx: &Cx) {
     if eid >= 0 {
         if let Some(files) = cx.files {
             if let Ok(bytes) = files.disc.read(&efd_path(eid)) {
+                // round 5 BP hook: the program's hits (power `args[7]` each) drive the party engine's per-hit damage; their numbers show on the
+                // program's hit ticks (the first hit applies the action)
+                let actor_pc = rt.battle.fighters.get(actor).and_then(|f| f.as_ref()).map(|f| !f.is_enemy).unwrap_or(false);
+                if actor_pc && sh2_core::boot::is_retail() {
+                    let hits = crate::actions::program_hits(eid, &bytes);
+                    rt.battle.hit_powers = hits.iter().map(|h| h.1).collect();
+                    if hits.len() > 1 {
+                        let t0 = hits[0].0;
+                        let one: Vec<f32> = hits.iter().map(|h| h.0.saturating_sub(t0) as f32 / 30.0).collect();
+                        rt.hit_offsets = (0..12).flat_map(|_| one.iter().copied()).collect();
+                        rt.dmg_idx = 0;
+                    }
+                }
                 let p = |i: usize| rt.positions.get(i).copied().unwrap_or(Vec3::ZERO);
                 let ctx = FxContext { gen: vec![p(actor)], targets: vec![p(info.target)], height: 17.0 };
                 match FxProgram::new(eid, bytes, ctx) {

@@ -36,27 +36,45 @@ pub fn kind_applied(r: &sh2_battle::actions::EffRec) -> bool {
         return true;
     }
     thread_local! {
-        static CACHE: std::cell::RefCell<BTreeMap<(u8, u8, bool, i32), bool>> = Default::default();
+        static CACHE: std::cell::RefCell<BTreeMap<(u8, u8, bool, i32, bool, i32), bool>> = Default::default();
     }
-    let key = (r.kind, r.dur, r.percent, r.value.signum());
+    let Some(mut f) = PROBE.with(|p| p.borrow().clone()) else { return true };
+    // (round 5 BP, QA13: the cache is per probe -- a party record probed on a monster first used to stay "not applied" for the party probe)
+    let key = (r.kind, r.dur, r.percent, r.value.signum(), f.is_enemy, f.char_id);
     if let Some(v) = CACHE.with(|c| c.borrow().get(&key).copied()) {
         return v;
     }
-    let Some(mut f) = PROBE.with(|p| p.borrow().clone()) else { return true };
     struct Z;
     impl sh2_battle::rules::Rng for Z {
         fn rand(&mut self) -> i32 {
             0
         }
     }
+    // (round 5 BP, QA13) the probe target gets the state the records need: drop items and cash to steal, an ailment / aux status / a buff for
+    // the cures and Remove; the permanent (Seal item) changes, steals and cash count as an effect
+    let env = sh2_battle::actions::EcEnv { pc: if f.is_enemy { -1 } else { f.char_id }, drops: [1, 2], mon_cash: 100, party_cash: 100, ..Default::default() };
     let try_on = |f: &mut Fighter| {
         let before = format!("{f:?}");
-        let a = sh2_battle::actions::apply_records(&[*r], f, &mut Z);
+        let a = sh2_battle::actions::effect_code(&[*r], f, &env, &mut Z);
         format!("{f:?}") != before || a.hp != 0 || a.mp != 0 || a.sp != 0 || a.status_added != 0 || a.status_cured != 0 || !a.buffs.is_empty() || a.revived
+            || a.stolen_item.is_some() || a.cash != 0 || !a.permanent.is_empty()
     };
     let mut dead = f.clone();
     dead.hp = 0;
-    let v = try_on(&mut f) || try_on(&mut dead);
+    let mut ill = f.clone();
+    for (kind, value, percent) in [(sh2_battle::rules::modkind::STATUS, 0x5f, false), (sh2_battle::rules::modkind::STATUS_AUX, -1, false), (0x17, 30, true)] {
+        ill.status.push(sh2_battle::rules::StatMod { turns: 4, chance: 100, percent, kind, value });
+    }
+    // a party record aimed at the enemies (steal) is tried on a monster copy as well
+    let mut foe = f.clone();
+    foe.is_enemy = true;
+    let env_foe = sh2_battle::actions::EcEnv { pc: -1, ..env };
+    let foe_ok = {
+        let before = format!("{foe:?}");
+        let a = sh2_battle::actions::effect_code(&[*r], &mut foe, &env_foe, &mut Z);
+        format!("{foe:?}") != before || a.stolen_item.is_some() || a.cash != 0
+    };
+    let v = try_on(&mut f) || try_on(&mut dead) || try_on(&mut ill) || foe_ok;
     CACHE.with(|c| c.borrow_mut().insert(key, v));
     v
 }

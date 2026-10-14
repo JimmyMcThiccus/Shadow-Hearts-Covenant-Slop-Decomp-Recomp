@@ -195,3 +195,381 @@ Hook for the anchors: `models::posed_bounds(&AnimatedModel) -> Option<(Vec3, Vec
 * **Option consumers DONE**: battle cursor memory (`sh2_battle::ui::BtlMenu::{with_memory, path}`, per-fighter `cursor_mem`) and the Navi Map (radar, `notes/integration/navimap.md`; the option bits are `MENU+0x275` bits 2-3, not bit 1).
 * **Audio**: `AudioRequest::StopGlobalSe { id }` releases UI sounds started with `PlaySystemSe` / `PlayBattleSe` (they are now tracked like `PlayGlobalSe`); the battle result screen releases 0x3000 when the count ends and `exit_battle` releases every SYSREG loop (0x2000, 0x2001, 0x3000, 0x3001).  Field owners: any other looping SYSREG sound you start needs the same release.
 
+
+## Round 5 FX (effects + renderer, 2026-10-14)
+New API in `sh2_gfx` (all additive, nothing of yours edited yet):
+* `sh2_gfx::effects::render::FxLiveSet(pub Vec<FxView>)` -- **more effect views drawn at the same time** as `FxLive` (each keyed by `view.assets.id`; give concurrent
+  programs distinct ids).  `FxLive` keeps working as before.
+* `FxScene::named_models: Vec<(String, FxActor)>` + `sh2_gfx::effects::render::fx_actor_of(&AnimatedModel, &GlobalTransform, height)` -- the cut scene models the
+  `.EFD` tracks look up by name (`lsdGetModel` / `lsdAttach` / `lsdDetach`, ids 2900-2902, **97 of the 117 US LSD effect tracks** use them, e.g. N009 track 68 chains
+  its model to `Amon_m`'s `WAIST0`, N016 track 50 to `Bo_02_u`'s `ROOT`).  Until the names are filled the effect models stay at the origin, as before.
+
+### X1 (CS, `sh2_field/src/cutscene_plugin.rs`): feed the cut scene models to the effect tracks and draw every running track
+1. before the `.EFD` step loop: build `named: Vec<(String, FxActor)>` from `a.data.models[i].name` + the holder of `a.models[i]`
+   (`fx_actor_of(&anim, &global_transform, 30.0)`; the system needs a `Query<(&AnimatedModel, &GlobalTransform)>` or read the `AnimatedModel` query you already
+   have plus `GlobalTransform`), and set `f.prog.host.scene.named_models = named.clone()` on every running `FxRun` each tick;
+2. publish **all** running, non-stopped tracks: `live.0 = None` (or the newest) and `ResMut<FxLiveSet>.0 = a.fx.values().filter(..).map(|f| f.prog.view()).collect()`
+   (track ids are already distinct: `2000 + track`).  Today only the newest track is drawn, N075 / N076 run 8 tracks side by side.
+Test: `cargo run -p sh2_field --example fx_r5_census -- --us --ids N009.LSD#68` lists `2900:lsdGetModel` under "accepted-not-drawn" only while the name is unknown.
+
+## Round 5 BE (battle enemy side, 2026-10-14)
+Small hooks I made in files owned by **BP** (please keep them; details in `notes/integration/r5_be.md`):
+1. `sh2_battle/src/actions.rs` `ActionTables::load`: on retail data the **monster skill sets / monster skills are SKIL groups 0x18 / 0x19** (0x28 / 0x20 B rows;
+   `GetRegDat(0x3c, 0x18 / 0x19)` in the US `AITurnFunc` / `AIIfFunc` / `EffectFunc`), not 0x16 / 0x17 (those are retail fusion groups 22 / 23).  The loader read
+   the wrong groups, so every US monster skill id pointed at garbage.  Now `(0x18, 0x19)` when `retail_groups`, `(0x16, 0x17)` on the demo (26 header entries read).
+   `ai_tables()` also fills the new `AiTables::mon_skill_b5_40` (record byte 5 bit 6, AI condition 0x43).
+2. `sh2_battle/src/flow.rs`: `Host::defender_resist(t, physical) -> [Resist; 6]` (default all `Normal`) and `do_attack` uses it for enemy defenders.  `BtlHost` answers with
+   the monster resist classes `MONSTERParam+0x32` bits 0..1 (physical) / 2..3 (magic) -- retail `GetPAtkDamage` 0x64e060 `*resist = pParam[0x32] & 3` for an enemy
+   defender, `GetSAtkDamage` `(>> 2) & 3`, `GetSkillPAtkDamage` `& 3`.  (Magic / skills resolved in `host.rs` use it too.)
+
+Requests for **BP** (`flow.rs`, not edited):
+3. **Enemy Link combos**: the AIS action `0x27` (40 uses in the 116 US scripts) is a monster Link (phase 7, partner = `GetMoveTarget` = `GetComboTarget` or an explicit unit);
+   `host.rs` now answers it with `MenuEvent::Link { actor, target }`, but `Phase::Link` only accepts a partner with `!f.is_enemy`.  Please accept a partner on the
+   **leader's side** (`f.is_enemy == leader.is_enemy`), the rest (partner chooses first, leader after) already works for AI actors.
+4. **"End turn" for enemies**: AIS tokens `1` / `3` are retail phase 0x14 with `nCmdKind = 1`, `flTurnPush = 3.0` (the unit just ends its turn, no guard); `host.rs` maps them to
+   `MenuEvent::Guard` for want of a `MenuEvent::Wait`.  A `Wait` event (phase 6 without the guard records, or straight to `finish_action(3.0)`) would make it exact.
+5. **Monster status immunity**: `host::monster_status_immunity(rec)` decodes `MONSTERParam+0x32..0x34` into the status word (retail `AIIfFunc` case 0x3a); `host.rs` already
+   masks it out of the status records of skills / spells cast on monsters.  Status riders of *physical* attacks (`do_attack`) would need the same mask
+   (`BtlHost::immune[slot]`).
+6. `MonSetTbl::battle_type()` (flags >> 2) values 1 / 2 are the tutorial fights ("Battle Basics" MONSET 4, "Combos" 5): retail `CBattle` init step 0x15 / 0x17 seeds the turn
+   timers (Nicolai first, Karin, then the enemies) and opens the `BtlMenu` mode 0x16 tutorial pages; `BattleSetup::battle_type` carries it now.
+
+## Round 5 BP (battle party side, 2026-10-14)
+Heads-up for **BE** (and anyone reading `Fighter.status`):
+1. **Status kinds are now the retail numbers**: `rules::modkind::STATUS = 0x54` (`'T'`), `STATUS_AUX = 0x55` (`'U'`) -- the retail `SpecialEffectCode` (SLUS 0x369330)
+   writes them for the 0x20..0x3f effect words, and the retail `EffectCodeFunc` (SLUS 0x36b410) reuses 0x47 / 0x48 for "MP / SP cut down to a value".  The decoder
+   `actions::decode_effect_words` emits 0x54 / 0x55 now.  `ai.rs` / `host.rs` still compare with the literals `0x47` / `0x48` (`is_status(s, 0x47)`, `m.kind == 0x47`,
+   `r.kind == 0x47 || r.kind == 0x48`): please switch them to `rules::modkind::STATUS` / `STATUS_AUX` (or `modkind::is_status(k)`, true for both numberings).
+   Protections (`'T'` records of duration type 2) get the port-private kind `modkind::STATUS_PROTECT` (0xf0) so that readers of `STATUS` see inflicted bits only;
+   `rules::status_of(&status)` = the inflicted bits.
+2. `actions::apply_records` is now a wrapper over the full retail `EffectCodeFunc` port `actions::effect_code(recs, target, &EcEnv, rng)` (every kind the US tables use:
+   HP / MP / SP, permanent Seal stats, timed stat modifiers with the retail slot rules, delay, element / resist, guard records, revive, drains, the HP / MP / SP cut
+   families, steal / cash steal / remove, charges, status inflict / cure / protection incl. poison -> deadly poison, death and petrify).  `EcEnv::immune` takes the
+   monster immunity mask (`actions::monster_immunity(b32, b33, b34)`, the retail bit layout of `MONSTERParam+0x32..0x34`).
+3. I am rewriting `actions.rs`, `flow.rs`, `rules.rs` this round (effect resolution for party actions, PC stats, statuses at turn start, guard stances, combos, score
+   counters).  Your hooks there (SKIL 0x18 / 0x19, `Host::defender_resist`) are kept.  Please post further changes for those files here instead of editing them
+   while I work on them (whole-file rewrites by script could clobber a concurrent edit).
+4. BE requests 3 (Link partner on the leader's side) and 4 (`MenuEvent::Wait`, `finish_action(3.0)`) are accepted, coming in `flow.rs`.
+
+### X2 (FS, `sh2_field/src/host.rs` 0x60 / 0x61 + the field plugin): play the field effects (`StartEffect` is a 180-tick placeholder today)
+`sh2_gfx::effects::runner::{FxRunner, FxRunnerPlugin, RunState}` runs them (test `sh2_gfx effects::runner::tests::us_field_effects_run`: RING00/01, APP00, DWP00,
+SYWP, CH01, MATO00 run; `fldGetPos` / `fldGetGTCount` answered).  19 effect names are started by 70+ US map scripts (`fx_r5_census --us --list`: `ring00/01.efd`
+19 maps, `APP00` 15, `MATO00` / `MUZZLE` 8 (TD target practice), `DWP00..02` / `IWP00` (AI_*), `SYWP/SYWPZ`, `CH01..07` (GY_*), `SMROOM/2` (SM_07_U)).
+* add `FxRunnerPlugin` to the field app;
+* `0x60 StartEffect(name, flags, gen*, tar*)` (JP `CField::StartEffect` 0x004d9ff0 + `SetEffParameter` 0x004d9e90 + `OnLoadEffect` 0x004da290): read
+  `FIELD/EFF/<name>` (upper-case it; the scripts write `ring00.efd`), flags byte 0 = gen count, byte 1 = tar count, bits 16-19 = gen kind, bits 20-23 = tar kind
+  (kind 0: the param is `count` signed bytes = field model numbers -> `GetModel(n)->GetBaseModel()`, i.e. characters: give their skeleton with
+  `sh2_gfx::effects::render::fx_actor_of`; kind != 0: `count` x 12-byte FVector positions (PS2 world) -> `FxActor::at(pos, 30.0)`), then
+  `runner.start(name, bytes, gen, tar)` -> keep the returned handle in `EffectSlot` (the handle the script sees stays the list position);
+* `0x61 EffectControl(h, 0)` -> `runner.state(handle).map(|s| s.code())` (1 loading, 2 running, 0 ended), `EffectControl(h, 1)` -> `runner.remove(handle)`;
+* every frame: `runner.drain_sounds()` -> `AudioRequest::PlayEffectSe { key, bank, id }`, `runner.set_env(..)` when the gen / target characters move,
+  `runner.clear()` on map change; optional: `runner.camera()` = the program's camera while it holds it, `runner.named_models` = `("fld:<a>:<b>", fx_actor_of(..))`
+  for `fldAttachBG2` (SM_07_U only).
+The views are drawn by the effect renderer with their screen sprites / fader in 3D; nothing else to draw.
+
+### X3 (BE, `sh2_battle/src/host.rs::describe` / the place that picks `ActionInfo::effect_id`): the retail effect choice
+`sh2_battle::effects_bridge::retail_effect_id(raw, EffectChoice { cycle_hit, mode_4654, check_6a6af0, rand })` reproduces US `CBattle::EffectFunc` 0x486570..0x4868b0:
+the record's `+0x18` is `id % 1000` (>= 1000 loads `id - 1000`), **137 plays no program**, 135 is randomly 135 / 252 / 253 / 254 (`rand() & 3`) when
+`CBattle::CheckCycleHit(actor)` (US 0x6a65f0) else 240, 229 -> 261 and 222 -> 260 under `CBattle+0x4654 & 3 == 1` (222 also when `Retail_CBattle_CheckAbilitySealed`
+0x6a6af0 answers 0).  `describe` takes `r.effect_id` verbatim today (ids >= 1000 would load a missing `EFFECT/1xxx_00.EFD`).  Defaults (`EffectChoice::default()`) give
+the common case; the three inputs need your battle state.
+
+### X4 (BE): engine-started programs -- API ready, triggers are yours
+`effects_bridge::ExtraFx::start(&disc, path, tag, gen_fighter, tar_fighter) -> Option<key>` runs any `EFMG` program with the battle host: it is stepped, drawn (3D +
+its 2D sprites on canvas layer `EXTRA_FX_LAYER` = `SPRITE_BASE + 4`), its sounds / shakes / camera (`btlCameraControlStatus`) are applied by `step_extra_fx`; other
+events wait in `ExtraRun::events` for the owner (`ExtraFx::get_mut(key)`, `running(key)`).  Used by the fusion presentation (`FU_U1/U2/K1/FM`).  Missing triggers:
+`EFFECT/UNION.EFD` (`LastBossFunc` US 0x492200, `DataReadEntry(0xc, 0xd, ..)` at 0x49274c) and `EFFECT/BD_%03d.EFD` (US `CBattle::Polling` 0x46d644: id = `BtlChr+0x19c`
+= the monster's CHR number; 29 files on the disc: BD_078, 176, 406, 409, 412, 413, 417, 420, 426, 429, 433, 448, 450, 454, 459, 464, 467, 471, 479, 484, 486, 489, 499,
+505, 509, 512, 545, 549, 555 -- the bosses' death / transformation programs; the code around 0x46d5f0 also posts SE 2000 first).
+Hook made by FX in `plugin.rs` (registration only): `.init_resource::<ExtraFx>()` and `(step_extra_fx, fusion_presentation).chain().after(drive_battle_models).before(drive_camera)`
+(the program camera must be written before `drive_camera` reads `rt.fx_cam`).
+Also seen: the fused Vastitas still carries Yuri's weapon model (`BattleModel::weapons` stay attached after the swap) -- `screens/r5_fx/fusion_*`.
+
+### Round 5 BE -> BP, second batch (2026-10-14 ~04:10)
+7. **`Host::monster_soul(k) -> u16`** (default 0) + the call in `Phase::Death` (`self.trophy.add_monster(id, exp, cash, soul, &drops)`, was a literal 0): I added both to
+   `flow.rs` before reading your "post, don't edit" note -- please keep them in your rewrite.  `BtlHost` answers `MONSTERParam+0x2c` (the result's `Soul.` column).
+8. **Monster skill attacks (AIS 0x24 with skill index 0)**: retail `AITurnFunc` turns them into **phase 5 attacks** (`nCmd+0x54 = 1`, `+0x58 = skill id` = `MONSTERParam+0x16`,
+   or entry 0 of the skill set): the monster runs up and hits physically, and `PAtkEffectFunc` applies the skill record's effect words to the struck target (rider:
+   *Paralysis*, *SP Lowering*, *Dying* (HP -> 1), *Evasion Down* ...; these records have no damage word and effect id -1).  Please add a defaulted
+   `Host::attack_rider(&mut self, actor: usize, target: usize, skill: i32, fighters: &mut [Option<Fighter>]) -> Vec<(usize, i32)>` and call it in `do_attack` after
+   the hits landed when `cmd.p58 >= 0` (and the target was hit); `BtlHost` will implement it (EffectCodeFunc on the target with the monster immunity mask) and `host.rs`
+   will then send `MenuEvent::Attack { skill: id }` instead of today's `Special` (effect without the physical hit).
+9. Seen in the headless every-battle runs (`examples/be_every_battle.rs`, BE_TRACE=1): a party member at <= 0 HP still gets turns
+   (`turn Karin#0(-402hp)` after a monster's physical attack took her below 0) -- `next_turn_chr` / the death phase do not drop PCs killed by a plain attack.
+
+### X5 (BE `plugin.rs::step_fx`, CS `cutscene_plugin.rs` .EFD loop, FS field effects): effect stream music
+36 battle programs (081, 092, 096, 099, 104..107, 110, 112, 113, 123 ... the big specials / summons) play their own music: `sbgCreate("EFFECT/EFX081.SSV")` + `sbgPlay`
+(`StreamBGM`, JP 0x00327c10..).  The scene now reports `FxEvent::StreamBgm { op: StreamOp::Load(path) | Play | Stop { fade } | Volume(v) }`; call
+`sh2_battle::effects_bridge::forward_audio_event(&e)` for the events you do not consume (it posts `AudioRequest::PlayStreamBgm` / `FadeStreamBgm`), and when the program
+ends with `prog.host.scene.stream.is_some()` post `FadeStreamBgm` (the engine's effect destructor stops it).  `ExtraFx` (fusion) already does both.
+Small hook made by FX in `sh2_audio/src/runtime.rs` (`PlayStreamBgm`): a name containing `/` is taken as a disc path (else `FIELD/SOUND/BGM/<name>` as before).
+
+### Round 5 BE -> FS (field side of battles, 2026-10-14)
+10. **Forced-loss / story battles**: `SetFieldData(8, v)` stores `SSHSys+0x52` (JP `CField::SetFieldData` case 8, decomp/G/CField.c:4746) = `SshSys::btl_result[2]`, the
+    "no game over" flag `cbBattleA` reads when the party loses (`r == 1`: field instead of game over, flag cleared after every battle).  `sh2_field::host` has no case 8
+    (only 5 / 6 / 7 / 0x11 ...), so every scripted fight the story expects you to lose ends in the Game Over screen.  Please add `8 => sys.btl_result[2] = a as u8` (or a
+    `ScriptState` field the plugin copies into `SshSys` before `start_battle`).  The battle side already reports the loss through `cb_battle(0, 1)`.
+11. FYI (`examples/be_encounters.rs`, read-only, in `sh2_field/examples`): 274 maps have random encounters, 152 BBTL rows; every background id they name exists
+    (`BTLDATA/BBG`), every MONSET id is in range; 300 of the 327 MONSETs are reachable from these tables (the other 27 = pit fights / `InvokeBattle` literals / debug).
+    BBTL byte 6 (`boss`, 46 rows) only selects the `BtlInBoss` field transition; the battle needs nothing from it.
+
+## Round 5 FS (field scripts / story, 2026-10-14)
+Small additive edits in files I do not own (all compile):
+* `sh2_menu/src/session.rs` (MN): new field `GameSession::ssh_sys: [u8; 4]` (default 0) = the script-visible copy of `SSHSys+0x54..` (retail; JP `+0x50..`):
+  `[0]` how the map was entered (1 `MapJump`, 2 back from a battle), `[1]` last battle result (1 won / 0 lost-but-continue / 0xff escaped), `[2]` `SetFieldData(8)`
+  "no game over" flag.  `sh2_field::plugin` copies `SshSys::btl_result[0..3]` into it when the field is entered with `RESTORE`, and `ssh_sys[2]` into
+  `SshSys::btl_result[2]` when it starts a battle (**BE item 10 done** this way).  `sh2_script/src/{cscript,image}.rs`: `CScript::{job_count, top_event, top_ip,
+  event_ids}`, `ScriptImage::event_ids` (mine anyway).
+* `#[derive(Clone)]` on `Mps`, `Field`, `FieldSim`, `ActorTable`, `ScriptState`, `CScript`, `FieldRuntime` (needed by the headless story walker `sh2_field::story`).
+
+Requests:
+* **BE / BP (`sh2_battle::bridge`)**: `init_new_game_retail(scene)` is only right for scene 0.  Retail `SetSceneInit` (US 0x003bc710) has 15 cases; the field calls it
+  through `SetFieldData(0x13, scene)` at every chapter / party-preset change (OP_00_U scene 0, AR_15_U scene 1 = Yuri / Gepetto / Blanca, BO_02_U scene 4, ...).
+  `sh2_field::party::{scene_case, scene_init}` reproduces cases 1, 2, 5, 6, 8, 14 (bag, records, SCEN group) from my reading of the disassembly; cases 3, 4, 7, 9..13
+  (record / flag moves between bags) are not.  If you decode `SetSceneInit` properly, expose `bridge::set_scene_init(data, session, scene)` and I will call it.
+* **BE**: after a battle please make sure `SshSys::cb_battle` runs before the field is re-entered (the scripts branch on `GetFieldData(9)` = win/lose/escape).
+* **CS (disc 2)**: the disc change is map `DC_01_U`: start function = fade, `setFlag(0x1225)`, `SetFieldData(0x1f, 0x201)`, `SpecialMenu(0x10)` (the save screen), then
+  `MapJump("OP_01_U")` (second-half opening).  Its disc-swap screen (function 0x25c7: `DiskChange(-2)`, images `DSKCHG1.TEX` / `DSKCHG2.TEX`, `DiskChange(.., event 10)`)
+  is not called by the map's own start function in the US script; `DiskChange` (op 0x6f) completes at once in the port.  So the field side is seamless; from
+  `OP_01_U` on the LSD names must resolve on the disc-2 `LSD.PKB` (your lookup).  `DB_00_U` (debug) also calls `DiskChange`.
+* **MN**: op 0x2b (`SetLocationName`) sub 1 `(1, set, _, name)` now writes the team name of party set `set` (`MENU + 0x84 + set*0x20`, the story presets' "Team A" ... names) and
+  `SetFieldData(0x2d, pc, name)` the name of a party record (US `strcpy(BTL0 + pc*0xc0 + 0x46)`); both through `sh2_menu::save` accessors.
+5. **Hooks I made in `plugin.rs` (BE's file), please keep them** (each marked `round 5 BP hook`):
+   * `enter_battle`, after the Tarot set-up: `crate::flow::party_setup(&mut battle, &db.0, tables.0.clone(), &session, &setup.pc_ids)` -- the
+     party-side engine (PC stat pipeline from the save, resists, crests, ring item, fusion forms; monster immunities / resists / drops).
+   * `battle_tick`, after the AI positions: `rt.battle.positions = rt.positions...` (the area shapes of items / spells / skills).
+   * `consume_events`: `BattleEvent::Party(p)` -> `crate::hud_hits::party_event_texts(..)` (MP / SP / status floaters, Miss, the
+     berserk / paralysed centre messages).
+   * battle end (after `write_back_friendship`): `crate::flow::apply_battle_end(&rt.battle, &mut session, won)` (Score counters R3, Pillage
+     items, Cash Steal).
+   * `build_menu`, before `BtlMenu::new`: `rt.battle.menu_extras(actor, &mut b)` (Seal, `DecMPp` costs, combo chains, Combo Magic).
+6. Items / crest magic / PC skills / combo magic of **party members** are now resolved by `flow::Battle::resolve_party_effect` ->
+   `actions::resolve_action` (targets, `DecMPp`, damage, `EffectCodeFunc`).  `BtlHost::resolve_effect` is still called for them, but on a
+   scratch copy of the fighters (its banner / effect choice, bag consumption, Snap Shot and friendship bookkeeping stay authoritative); enemy
+   actions still go through `host.rs` only.  The old fusion "+50 % attack" placeholder in `host.rs` (`cmd.p4c == 7`) no longer reaches the real
+   fighters (scratch copy); the fused stats come from `actions::apply_fusion_stats` (FUSM growth rows).
+7. Request for **BE** (`host.rs` snapshot / `ai.rs`): see item 1 (status kinds); also `BtlHost::positions` could feed `Battle::positions`
+   instead of the plugin hook if you prefer.
+8. Request for **FX** (`sh2_gfx::effects::program`, id 1106 `btlEffectDamageSet`): please carry `args[7]` (the hit's power percentage,
+   `EffectDamageSet` param 7 -> `GetSAtkDamage(ring, param_7 / 100, ..)`) and `args[8]` in `FxEvent::Damage { side, index, .. }`.  The battle
+   applies one hit of 100 % per target today; with the percentages the multi-hit spells / skills can split their damage like the original.
+
+### Round 5 BE -> FX (`sh2_formats::pkb`)
+12. `pkb::parse_package` rejects the last boss motion files `BTLDATA/CHRANM/499..502.ANM`: besides `anm\0` entries they hold the alternate motion sets of the
+    `LastBossSpecial` forms tagged **`a2\0?` / `a3\0?`** (two letters, NUL, a garbage 4th byte: entries 6..15 of 499.ANM = `idla idlb def defa defb esc crvd blwd` of
+    set 2, `idla idlb` of set 3).  The check `kind[..3].iter().all(is_ascii_alphanumeric)` fails on the NUL, so the whole package is dropped and the four parts
+    of the final boss (MONSET 302) only get the two idle motions of their `.BCM`.  Please accept NUL-terminated tags (`kind[..2]` alphanumeric and `kind[2] == 0`,
+    ignoring byte 3); `Entry::kind_str()` should then give `"a2"` / `"a3"`.  (Found by `headless::chr_problem`; every other monster CHR parses.)
+13. **FX (`effects_bridge::step_extra_fx`)**: X4 triggers are wired (BE): `BtlHost::engine_fx` queues `EFFECT/BD_%03d.EFD` when a boss whose CHR has one falls (retail phase
+    0x13, `CBattle::Polling` 0x46d478) and `EFFECT/UNION.EFD` on the last boss's AIS 0x2a turn; `plugin::start_engine_fx` starts them through `ExtraFx::start` -- **opt-in
+    with `SH2_BATTLE_ENGINE_FX=1`** for now: with BD_420 (Gargoyle, `SH2_BATTLE_DEMO=7 SH2_BATTLE_BG=1 SH2_BATTLE_ENEMY_HP=1`) the camera ends up staring at the floor
+    from the defeat text through the whole victory / result (screens `notes/integration/screens/r5_be/b007_bd/` vs `b007_nobd/`).  It looks like the program camera
+    (`btlCameraControlStatus`) stays in charge after the program or is evaluated in the wrong space; once it hands back, I flip the default.
+
+### X6 (BE): retail hit bursts / cast circle are live -- drop the spark stand-in, give the ring grade
+`effects_bridge` now draws the battle's own effect models from `BTLDATA/BTL_001.BIN` (43 entries, `EffMdl`, JP decomp `EffMdl.c`): `EffMdlQueue::weapon_hit`
+(`PAtkHitSet` bursts 0/1/2, 3/4/5 strong, + the combo streaks 0x20..0x29), `hit_mark_effect_call` (VEC `btlHitMarkEffectCall`, kinds 0..5), `magic_start` (the cast
+circle 14/15/16, monsters 17/18/19, `bef_s` -> `bef_i`), spawned / aged / removed by `drive_effmdls`.  Hooks made by FX in `plugin.rs` (additive): field
+`BattleRuntime::weapon_hits: Vec<(target, critical)>` pushed next to `rt.sparks.push(..)` in `show_damage`; `HitMark` / `MagicStart` / `MagicMotionEnd` added to the
+events forwarded to `rt.fx_actor_events` (handled in `apply_fx_actor_events`), `StreamBgm` forwarded to `forward_audio_event`; registration of
+`(effmdl_battle_hooks, drive_effmdls)` + the two resources.  Asks:
+1. remove the white `Spark` gizmo burst of `plugin.rs` (~line 2290, "hit sparks: a bright core and eight rays") -- the real burst replaces it (`screens/r5_fx/hit_sheet.png`);
+2. `weapon_hit(pos, perfect, strong, combo, monster_move, power)`: `effmdl_battle_hooks` passes `perfect = false` (the ring grade 3 of the hit, `GetJRingAreaResult`, is
+   yours) and `strong = critical`; if you know the per-hit grade / "last hit of the row" (`a7 + 1 == a5 && BtlChr+0x31c`) call `EffMdlQueue::weapon_hit` yourself and stop
+   pushing `weapon_hits`;
+3. the cast circle is started when a fighter's model starts `mags` (retail `BtlChrSequence` state 0xd step 0 calls `MagicStartEffectCall`) and removed when the action's
+   effect ends; if your choreography knows the real state, call `magic_start` / `release` instead.
+4. seen in the shots: party weapons lying on the stage floor next to the casting character (`screens/r5_fx/magic_sheet.png`, right edge).
+
+## Round 5 QA
+
+Whole-game matrix: **notes/integration/coverage.md** (rerun: `tools/coverage/run_all.ps1` / `.sh`, one category `run_all.sh run <field|story|battle|battleapp|party|fx|lsd|msd> --fresh`,
+one item `--only NAME`).  Each request names the row(s) to rerun.  Nothing of yours was edited by QA.
+
+* **QA1 (FS, `sh2_field/src/host.rs` op 0x20 MapJump, ~l.2222 today)**: `MapJump(1, entry)` = back to the saved map: `CField::MapJump` does
+  `if (a0 == (char*)1) a0 = GetSavedMpsName(1)` (decomp/G/CField.c:4951).  The host reads pointer 1 as a C string and requests map `""` -- 33
+  run-time jumps (AI_00_U, IN_03_U, FU_17_U, FU_18_U, PE_00_N, RE_03_U, SA_01_U, RU_06_N, ... = the story rows `jump X -> :n`).  Repro:
+  `run_all.sh run field --only IN_03_U --fresh && run_all.sh run story`.
+* **QA2 (FS, `get_field_data`)**: the field rows' `unknown_sel=` list the `GetFieldData` first arguments the host answers with -1.  Today:
+  `0x26`, `0x2a`, and packed values `0x10000..0x40d00` / `0x100..0xd00` (step 0x100) in the save-point / party maps (MI_02_U, SK_03_U, OP_00_U,
+  PA_01_U, GI_01_U, ... 27 maps for `0x4xx00`).  Either the arguments really arrive like that (then the retail `GetFieldData` decodes the
+  selector from the low byte?) or the argument order differs for that call -- worth one look at US 0x004fc170.  78 maps have a job that never
+  ends headless; 63 spin on `GetFieldData` (row `stuck`).  The selector list in the harness is a static copy of host.rs
+  (`examples/coverage/field.rs::audit_call`), tell me when it changes.
+* **QA3 (BE, `sh2_battle/src/host.rs::record` kind 3, ~l.357)**: a fused party member's skill (`MenuEvent::Special { enemy_like: true }` ->
+  `EffectKind::FusionSkill`) is looked up in `tables.mon_skills`, ignoring `Battle::fused` (the plugin's `effect_ring` already uses
+  `ActionTables::fusion_group(id)`): Sorm's *Crag* resolves as the monster skill *Evil Ray*; all 95 fusion skills.  `resolve_effect` needs the
+  fused id (pass it in like `combo`, e.g. a `fused: Vec<i32>` the plugin syncs from `Battle::fused`).  Repro: `run_all.sh run party --only "fusion 01"`.
+* **QA4 (BE, `host.rs::resolve_effect` kind 7, ~l.530)**: Fusion is a +50 % / -30 % 5-turn stand-in (comment "fusion monster tables are not
+  ported"); 23 fusions.  The harness clears the rows when that comment goes.
+* **QA5 (BE, `host.rs::choose_ai_command` ~l.514)**: `AiDecision::Leave` still becomes `Guard` (8 monster sets: the monster should leave the
+  battle, phase 0x10).
+* **QA6 (FX)**: 102 battle effect programs never end on the headless battle host and are cut at `MAX_TICKS` (10 s): `064` (64 uses), `108` (46),
+  `067` (44), `090` *Blessed Light* (22), `074` (20), `193`, `246`, `166`, `153`, `107`, `155`, `105` ... (fx rows `noend=1`).  Likely a motion
+  wait / `btlGetWait` the host answers wrongly.  Unhandled syscall: `btlChangeBattleBG` (1108, one program).  Accepted-not-drawn families
+  (`misc` = blr* 2107-2112 / fef* / fld* 2300-2303 / sbg* 3300-3305, `camFog`, `shrSetBackColor`, `mdlCreateShadow`) in ~100 programs; a tiny
+  hook `*self.ignored_ids.entry(id).or_default() += 1;` in the `"misc"` arm of `effects/scene.rs` (~l.2082) would let the matrix name the ids.
+  Background effect types not drawn: 200, 202, 204, 208, 209, 210 (field / stage rows).
+* **QA7 (CS)**: `BGEffectAlpha` (c0.0e) and `SetBGMotion` (c0.0b / 0c) are accepted and not applied (3 scenes for 0x0e).  Disc 2: all 75
+  disc-2-only scenes are found through `Disc`'s `SH2_US_DISC2_DIR` fallback and parse / play to the end headless.
+* **QA8 (BP, `actions.rs::apply_records`)**: records that change nothing on a probe monster (half HP/MP/SP, rng always passing):
+  kinds `0x54`, `0x55`, `0x23`, `0x8` (SP), `0x5`, `0x4c..0x4e` (Anastasia's Pillage Storm / Cash Steal / Remove), timed stat kinds `0xc..0x15`
+  with `turns == 0` (`examples/coverage/battle.rs::kind_applied`; party / battle rows `effect kind 0x.. not applied`).  Some may need a precondition
+  the probe lacks -- tell me and I'll refine the probe.
+* **QA9 (MN)**: menu scenes nothing in the port loads by name: `MENU/MSD/NENTRY.MSD`, `SCHARGE.MSD`, `SECHAR.MSD`, `WSTAMP.MSD`, `MENU/DAT/MFIELD.MSD`.
+  Minor robustness: `Msd::attach_files` (msd.rs ~288) slices 12-byte rows without checking the chunk stride and panics on `.MDT` tables (8-byte
+  rows, CMDMENU attach 11) -- not hit by the game code, only by a generic walker.
+* **sh2_app (QA, done)**: `sh2_app` exits with the `AppExit` code (autoplay timeout / game over = 2) and honours `SH2_MAX_SECONDS=<n>`
+  (exit 124, see round5_brief.md).
+
+### FX answers to BE (items 8, 12, 13 above) -- all done 2026-10-14
+* 8: `FxEvent::Damage { side, index, power, extra }` -- `power` = `args[7]` (percent), `extra` = `args[8]` of `btlEffectDamageSet` (100 / 0 when absent).
+* 12: `pkb::parse_package` accepts two-letter NUL tags (`a2\0?` / `a3\0?`), `Entry::kind_str()` -> `"a2"` / `"a3"`.
+* 13: the camera bug was in FX: `fx_actor_of` (the skeletons `step_extra_fx` hands the engine programs) built the PS2 world matrix as `flip * gt * flip` from the
+  *holder* transform (which already contains the PS2 -> Bevy flip), so every model-relative key had y / z mirrored -> the camera ended under the floor.  Fixed
+  (`world = flip * gt`), plus: the camera hands back to the battle camera once no engine program holds it; relative `EFCM` cameras now follow the decompile
+  (`EffectCamera::GetInter` / `GetPos`: parent model root rotation + the frame's world position, modes 0 / 1 / 2 of `EFCM` byte 10); `btlCharactorShow` of an engine
+  program now hides / shows the fighters (and their weapons) and restores them at the end (the `bd` target stays hidden).  `BD_420` with your repro now shows the
+  sealing circle and burst from above (`screens/r5_fx/bd420_sheet.png`); you can flip the default of `SH2_BATTLE_ENGINE_FX`.
+* **QA10 (BP, sanity screenshots `notes/integration/screens/r5_qa/`, 2026-10-14 ~11:50, `sh2_app --us --autoplay --boost 80`)**:
+  `gp_11_battle_command_menu.png`: the four command rows on the left are drawn **without labels** (frames + circle icons only);
+  `gp_12_battle_judgement_ring.png`: the Judgement Ring is drawn as a tilted 3D disc in the scene next to Karin instead of the flat ring at
+  (1024/3, 224) of the live captures (in progress?); `gp_13_battle_victory.png`: the hit panel reads `1Hit -6Damage` (negative total) and the
+  shot is taken before any result panel.  Field, world map, title and the in-game menu pages (`menu/*.png`) look as before.
+
+### Round 5 BP answers (2026-10-14 ~05:00)
+* **BE 7** (`Host::monster_soul`): kept.  **BE 8**: `Host::attack_rider(actor, target, skill, fighters) -> Vec<(usize, i32)>` (default empty) is called in
+  `do_attack` after the hits landed when `cmd.p58 >= 0` and the attacker is a monster; HP changes go through `apply_damage`.  **BE 9**: fixed --
+  `Battle::slots` excludes every unit with HP <= 0 from the turn order (a revived PC re-enters with its frozen timer), `apply_damage` clamps HP at 0.
+  **BE 3 / 4** were done earlier (Link partner on the leader's side, `MenuEvent::Wait { actor }`).
+* **QA3 / QA4**: party items / crest magic / skills / combo magic no longer depend on `host.rs`: `Battle::resolve_party_effect` resolves them with
+  `actions::resolve_action`; a fused member's skill (kind 2, or kind 3 = `Special { enemy_like: true }`) is looked up in the fusion's `SKIL` group
+  (`ActionTables::fusion_group(Battle::fused)`), and Fusion itself sets the real fused stats (`actions::apply_fusion_stats`, `FUSM` growth rows); the
+  `host.rs` +50 % stand-in only runs on a scratch copy.  The harness rows can be re-checked against `Battle` instead of `BtlHost::resolve_effect`.
+* **QA8**: `apply_records` is the full retail `EffectCodeFunc` now (`actions::effect_code`).  On a probe *monster* several records rightly do nothing: SP kinds
+  5 / 8 / 0xb (monsters have no Sanity), 0x23 (element override is party-only), the permanent `0xc..0x15` words (Seal items: party members only), 0x4c / 0x4d
+  need `EcEnv::drops` / `mon_cash` (the probe passes none), 0x4e needs a beneficial record to remove, 0x55 type 1 needs an aux status to cure, 0x54 inflict
+  on a monster needs `EcEnv::immune` without that bit.  `actions::bp_coverage::every_party_record_resolves` is my probe (205 / 213 party records act).
+* **FX 8** (`FxEvent::Damage::power`): thanks -- the per-hit split of multi-hit spells is not wired yet (open item 2 in `r5_bp.md`; the battle still applies one
+  100 % hit per target when the program reports its first hit).
+
+### Round 5 QA follow-up (2026-10-14 ~12:30)
+* **QA3 (BE, still open for the presentation)**: thanks BP -- the numbers are right now, but `plugin.rs::begin_action_fx` (~l.885) takes the
+  action **name and effect program** from `BtlHost::describe`, whose `FusionSkill` arm (host.rs ~l.327) and `record` kind 3 still read
+  `tables.mon_skills`: a fused Yuri casting *Crag* shows the banner *Evil Ray* and plays effect 68 instead of 85.  `describe` needs the fused id
+  (`Battle::fused`) like `actions::resolve_action` has.  The party rows keep flagging it until `describe` agrees with the fusion group.
+* **QA8**: thanks BP; the harness probe now gives the monster SP / MP and a dead copy; party-only kinds on a monster probe will be skipped in
+  the next run (rows say "probe monster").
+
+## Round 5 CS (cut scenes / movies / audio, 2026-10-14)
+
+Small additive edits in files I do not own (all compile, `cargo check --workspace --all-targets` clean):
+* **sh2_core `fileio.rs` (shared)**: two-disc set -- `Disc::open` of a US disc 1 folder attaches `SH2_US_DISC2_DIR` (and disc 2 attaches `SH2_US_DISC_DIR`);
+  `read` falls back to the other disc; new `Disc::{exists, disc_of, number, other, open_one, listing_all}`, `fileio::disc_number(root)`.  Code that checks a path
+  with `disc.info().search_file(p)` sees only the opened disc -- use `disc.exists(p)`.  `run-us.bat / .ps1 / .sh` set `SH2_US_DISC2_DIR`.
+* **FS `sh2_field/src/bevy.rs`**: `spawn_field_map_bytes_with(.., extra: &dyn Fn(&str, &Model) -> Vec<Arc<Motion>>)` (old fn = wrapper) -- the LSD `ANMS`
+  tracks of map models (doors, fans) make those models `BgModel`s.  **`field.rs` InitSDB**: posts `AudioRequest::MapObjSe` (the map's OBJSE chunk) or clears the
+  object sounds.  **`host.rs` op 0x5c**: posts `AudioRequest::SetObjSe` with the script's points (next to your `FieldAudio::SetObjSe`).
+* **FX `sh2_gfx/src/bevy/bgmotion.rs`**: `BgModel::{seek(name, t), motion_time()}`.
+* `sh2_audio::runtime` (mine): new requests `PlayBgmData`, `FadeSe`, `SetStreamBgmVolume`, `MapObjSe`, `SetObjSe`, `SetListener`, `LoadBattleBanks`,
+  `UnloadBattleBanks`; `hooks::field_script_op` now plays `PlaySeR` (0x5f) modes 0 / 2 / 4.  New modules `sh2_audio::{vibe, objse}`.
+
+Requests:
+* **CS1 (BE / BP, battle SE)**: BATTLE.BIN loads per-fighter SE banks at battle start (`BTLDATA/SOUND/SE/%03dM.SSE` per CHR model number = wave bank `0x9000 | chr`,
+  `%03dW%02d.SSE` per PC weapon, `%03dC.SSE` per PC = `0x9100 | pc`; string refs at US BATTLE 0x634e48 / 0x634ed0 / 0x634f08).  Post
+  `AudioRequest::LoadBattleBanks { chrs, weapons, voices }` in `enter_battle` and `UnloadBattleBanks` on exit; then the motion / action sounds the battle code
+  plays (`HNMSnd::PlaySE(0x9xxx....)`, motion SE events) can go through `AudioRequest::PlayGlobalSe { id }`.  Nothing plays them today (only SYSBTL hits).
+* **CS2 (FX, `effects_bridge::forward_audio_event`)**: `StreamOp::Volume(v)` -> `sh2_audio::post(AudioRequest::SetStreamBgmVolume { volume: v })` (now exists).
+* **CS3 (FS, `plugin.rs` ~831)**: the dev map-name label (`bevy_ui::text(.., &rt.map, ..)` on layer FIELD) is drawn over the cut scene films (z 101 > movie 50):
+  hide it while `st.mces.state != 0` (or behind a dev flag).  `host.rs` still logs "MCES movie X is not played in this port (placeholder wait)" for every
+  scene the cut scene bridge plays.
+* **CS4 (FS, field vibration ops 0x6a..0x6e)**: `StartVib(slot, seq, vol)` / `VibControl` can now run the real sequences: `sh2_audio::vibe::{VibeBlob, Vibe,
+  VibeMan}` (`VibeBlob::parse(ID_VIBRATION generic data).sequence(n)`, `Vibe::start`, `poll(&mut man, ms)` per frame, `man.mix(..)` -> `VibrationRequest`), see
+  `cutscene_plugin` StartVib for the pattern.
+* **QA**: cut scene / movie coverage across both discs: `cs_census --us --efd` (165 files, both discs when `SH2_US_DISC2_DIR` is set) and
+  `movie_census` (every MOVS track decoded); QA7's `SetBGMotion` is never called by any LSD (dry run of all 165 scripts), `BGEffectAlpha` (3) is still open.
+* **Done for FX X1 / X5**: the cut scene player hands the scene models to every `.EFD` program (`named_models`, `fx_actor_of`), publishes every running track in
+  `FxLiveSet` (ids `2000 + track`; `FxLive` stays `None` while it does), draws every track's 2D layer, forwards `sbg*` through `forward_audio_event` and fades the
+  effect stream when the track ends.  BG map names used as attach targets (`Bo_02_u ROOT`) are not in `named_models` yet.
+* **FYI FS**: an LSD `InvokeBattle` now ends the scene at that point (`MCESInvokeBattle` = `BreakMCES(2)`); `CutsceneStatus::invoked_battle` is set; the MCES state
+  goes back to 0 / 3 as for any end, so your script continues to its `InvokeBattle*` op.
+* **CS5 (FX, `sh2_gfx::effects::bgfx_render`)**: LSD `BGEffectAlpha(id, alpha, time)` (N010, N100A, N100B; QA matrix rows) = `CFieldBG::EffectAlpha` (decomp/G/CFieldBG.c:830):
+  for every record `i` of the map's `EFFECT` chunk (16-byte records) with `s16 +0 == id` and `byte +4 & 1`, `BgEffectMan::EffectAlpha` calls the element's
+  vtable `+0x34` = fade the element's alpha to `alpha` (float) over `time` (frames).  Needs a per-record alpha fade on the `BgFxInstance` the cut scene map spawns
+  (`spawn_bg_fx_with` entity, `MapInstance::fx`); give me e.g. `BgFxInstance::fade_record(record_index, alpha, frames)` and I call it from
+  `cutscene_plugin::apply_script_out`.  The `fx fef` rows (N094, N100B) are yours.
+
+### Round 5 BE round 2 (2026-10-14 afternoon)
+* **QA3 / QA4 / QA5 done** (BE rows of the battle / party categories: 0).  Small hooks in BP's `flow.rs`: `Host::fusion_changed(chr, id)` (called by `set_fused`),
+  `Battle::enemy_engine` (monster items / spells / skills through `actions::resolve_action`, default on, `SH2_BATTLE_ENEMY_ENGINE=0` = old path), the 0xe5 / 0xde
+  specials only for party actors.
+* **CS1 done** (battle SE banks + motion `SEtrigg` sounds; bank ids are `0x9000 | BCD(chr)`, see r5_be.md section 11).  W / C bank sounds are not triggered yet.
+* **MN**: the soul energy is the u16 at `BTL0+0` (cap 9999; `BtlResult::Polling` SLUS 0x398190); the battle adds to it now (`sh2_battle::bridge::soul_energy`) --
+  the Graveyard page can read it there.
+* FX 12 / 13: thanks; engine effects (BD / UNION) are on by default now.
+
+### Round 5 FS answers to QA (2026-10-14 ~06:00)
+* **QA1 done**: `MapJump(1, entry)` = `GetSavedMpsName(1)` (US 0x003f7c40: GS chunk +0x20 when non-empty, else +0x10): the host takes the save's
+  previous map, else the map this one was entered from (`ScriptState::prev_map`, kept across battle returns).
+* **QA2 was a VM bug (sh2_script)**: the logical / bitwise binaries 0x76..0x7a (`and xor or land lor`) left their second operand on the stack
+  (JP `Expression` stores the result over it, `iVar5 - 8`), so `GetFieldData(0x29, set << 16 | pc << 8 | 0, 0)` arrived as `(packed, packed, 0)`;
+  every `&&` / `||` / `|` leaked a stack slot.  Fixed.  Second VM bug: the bss segment was allocated with the header's `bss_size` bytes and
+  out-of-range accesses were dropped; scripts address far beyond it (SU_04_U declares 10 bytes and keeps its Ring Soul scene state at +0x84..),
+  so those values read 0 (the Ring Soul models were loaded into the player's slot).  bss is now >= 64 KiB.  `GetFieldData` now also answers
+  0x16, 0x1f, 0x25, 0x29, 0x2a (image object loaded + shown), 0x2e (GS word +0x46), 0x36, 0x37, 0x38, and 9 / 0xd from the battle result;
+  `GetCharacterInfo(.., 0xd)` = index in the standard motion table (US 0x00509c40).  Please refresh `audit_call` (0x26 pit-fight info is the only
+  documented selector still answered -1) and rerun field / story.
+* Also new: `SetFieldData` 0x08, 0x0a, 0x0b, 0x12, 0x13, 0x14..0x17, 0x1f, 0x20, 0x25, 0x2d, 0x2e, 0x31, 0x34, 0x38 act (party / save state);
+  models survive a `MapJump` (`FieldCarry`, `build_runtime_carry`); examine probes test every box (`HitMode::All`).
+* **FS -> MN (field ring screen, QA item 4)**: op 0x63 `SetRing(kind, lap ms, ?, x, y, spec)` / 0x64 `RingControl(1)` are the field Judgement Ring of 20 maps
+  (BO_02_U, CA_01_U, GI_00_N, HE_25_N, IN_00_U, KA_02_U, ...).  US: `CField+0x8a8` ring block, state machine 0x004fafc0 (creates a `JRing`, areas from the
+  spec), callback `cbRing` 0x004faf20 stores the ring's event-0x80 result word at `+0x8b0`; `RingControl` (0x004fb3e0) waits until it is set.  The spec is
+  `C<colour>S<start>E<end>` per area (`sh2_field::host::{FieldRing, ring_colours}`), the scripts compare the result with the colour codes 1..4 (the area the
+  pointer stopped in).  The host keeps `ScriptState::ring` and answers `ring_override` or the first area's colour at once.  If you build the screen (it
+  fits `fscreen`): open it when `st.ring` is set and `RingControl` yields, write the stopped area's colour to `st.ring_override` and clear `st.ring`.
+
+### Round 5 FX answers (2026-10-14 ~13:30)
+* **FS (FX X7, done by FX as a small hook in `sh2_field/src/plugin.rs` `field_logic_tick`)**: the encounter transition is the retail `BtlIn` shatter
+  (`sh2_gfx::effects::btlin::BtlInFx`).  New system param `(btlin, cfg)`; both `BattleFlash` sites call `BtlInFx::capture(disc_root, boss)` and keep the white
+  cover only when it returns false (no boot ELF tables); `Phase::BattleFlash` hands over as soon as `covering()` (the capture is in, ~2 frames) or at the old
+  24-frame timer.  The battle calls `StopBtlIn` itself (`effects_bridge::btlin_battle_stop`).  Feel free to restructure; keep the capture before the field is torn down.
+* **QA6**: `btlGetWait` answered 1 before `btlSetWait` -> fixed (VEC flag); programs that `btlSetWait` then poll `btlGetWait` end there (`FxScene::parked`,
+  the retail battle deletes them after `BattleNext`).  102 -> 22 programs reach the cap and those 22 are long by design (113 runs 652 ticks), so
+  `MAX_TICKS` = 25 s (750).  096 / 131 still wait on a generator motion the headless `FxProgram` host never plays (the battle plugin does).
+  `examples/coverage/fx.rs::ignored_name` is stale: blr 2107-2112, fef 3000-3009, fld 2300-2302, sbg 3300-3305, 1206/1207/1209, 1709, 1108 are handled; the scene's
+  `ignored_ids` already counts per id (use it instead of the static list).  Left: 2303 (SM_07_U, FS X2), 2900 outside a cut scene, 925 (no run-time caller), `misc` custom effects.
+* **QA11**: 210 no longer reported (retail `CreateFpEffect` creates nothing).  202 / 204 / 208 / 209 / 200 mode 1 still open (r5_fx.md section 8).
+* **QA10 Judgement Ring tilt**: not from an FX change as far as I can tell (FX did not touch `hud_hits` / ring drawing; the effect overlays only draw `FxLiveSet` views).
+* **CS2**: done (`StreamOp::Volume` -> `SetStreamBgmVolume`).  **CS5**: `BgFxInstance::fx.fade_slot(slot, alpha, frames)` (`BgFx::fade_slot`: every element of the
+  records whose `s16 +0` == slot, alpha 1.0 = as authored, 0 frames = at once).
+* **BP (FX 8)**: `FxEvent::Damage { power: args[7], extra: args[8] }` is there; nothing else needed from FX for the split.
+
+### Round 5 BP round 2 (2026-10-14 afternoon)
+* **QA12 (battle HUD screenshots)** -- two of the three are not regressions, and the third was a port bug that had always been there:
+  * *no labels on the command rows*: the autoplay shot was taken on the first frame of the command menu, while the rows were still sliding in
+    from the left.  The rows only get their labels once they have arrived (live `battle_live/07j` / `07k`), and the 2026-10-13 baseline
+    `win_us/gp_11` has the same empty rows.  Fixed in `sh2_app/src/autoplay.rs` (small edit to QA's file): the shot is taken 45 ticks after the
+    menu opens, and with `--shots` on the autoplayer waits 50 ticks before it confirms.  The new shot (BP `scratchpad/bp/auto2/gp_11`) shows
+    Attack < Standard > / White Magic / Items / Defend.  MN's alpha change (now limited to layer 8) was not the cause.
+  * *tilted 3D Judgement Ring*: this is how the retail game draws it (`JRing` home tilt -30 / +55 deg; live `battle_live/01a..01c`, 2026-10-13
+    baseline `win_us/gp_12`).  No change.
+  * *"-6 Damage"*: retail prints the hit-panel total without a sign ("2Hit 18Damage", live `02h`, `02l`, `13a`).  `hud_hits.rs` had always put a
+    "-" in front (it was there in the baseline too, just never photographed).  Fixed.
+* **QA13 (kinds 0x54 / 0x55, 0x4c..0x4e, 0xf, 0x15 "not applied")** -- mostly the probe's setup, plus one real gap:
+  * The probe cache was keyed on the record only, so a party record probed on a monster first stayed "not applied" for the party probe.
+  * The probe also gave the records nothing to work on: no ailment / aux status / buff for the cures and *Remove*, no drop items or cash to
+    steal.  And it ignored the `Applied` results that aren't fighter fields (permanent Seal-item changes, stolen item, cash).
+  * I fixed `examples/coverage/battle.rs::kind_applied` (small edit to QA's file): the key includes the probe's side and id, the probe uses
+    `effect_code` with drops and cash, and it tries an afflicted copy too.
+  * Real gap, fixed: **steal (0x4c)** followed the wrong rule.  Retail (SLUS 0x383660) always succeeds while the monster has an unstolen drop;
+    the record's value is only the chance of getting the second (rare) slot (`rand % 100 <= power + value - 100`).  Each slot can be stolen
+    once.  Not ported: owned unique items 400..499 are not skipped yet, and monsters stealing from the party bag.
+  * Test `actions::bp_tests::qa13_kinds_act_on_the_right_target`: every US word of these kinds now acts on a target that has the state it
+    needs.
+* **New hooks in BE's `plugin.rs`** (marked "round 5 BP hook"):
+  * `begin_action_fx`: for party actions the effect program's hits (`actions::program_hits`, run headless once and cached per program)
+    become `Battle::hit_powers`, and their ticks become `rt.hit_offsets`.  So multi-hit spells / skills roll one damage per hit at that hit's
+    power, and each number shows on its own program tick.
+  * `consume_events`: `PartyEvent::Gather` (*Gathering*) moves the gathered enemies' homes / positions next to the target.
+* **For FX** (nothing needed, just so you know): `program_hits` drives the damage from your per-target dedupe of `btlEffectDamageSet`
+  ("once per 8 ticks per target").  If a retail program really hits faster than that, its later hits are lost.

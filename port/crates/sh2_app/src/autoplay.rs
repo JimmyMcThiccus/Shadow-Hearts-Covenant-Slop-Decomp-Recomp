@@ -100,6 +100,8 @@ pub struct Autoplay {
     menu_scripted: bool,
     menu_ticks: u32,
     ring_zone_ticks: u32,
+    /// ticks the battle command menu has been open (round 5 BP: the shot waits for the slide-in, QA12)
+    battle_menu_ticks: u32,
     tap: u32,
     battle_seen: bool,
     done_at: Option<u64>,
@@ -149,6 +151,7 @@ impl Plugin for AutoplayPlugin {
             menu_scripted: false,
             menu_ticks: 0,
             ring_zone_ticks: 0,
+            battle_menu_ticks: 0,
             tap: 0,
             battle_seen: false,
             done_at: None,
@@ -663,7 +666,11 @@ fn autoplay_inject(
                 ap.story_battles += 1;
                 story_log!("story: [{:.0}s] battle #{} (return {:?})", ap.ticks as f32 / 60.0, ap.story_battles, session.chr_pos);
             }
-            if battle.stage == "running" && battle.menu_open && ap.scene_ticks > 60 {
+            // the command rows slide in from the left and their labels appear when they have arrived (`BtlMenu`, live 07j / 07k):
+            // photograph the menu once it has settled, and with screenshots on, leave it open that long
+            ap.battle_menu_ticks = if battle.stage == "running" && battle.menu_open { ap.battle_menu_ticks + 1 } else { 0 };
+            let menu_settled = ap.opts.shots.is_none() || ap.battle_menu_ticks > 50;
+            if battle.stage == "running" && battle.menu_open && ap.scene_ticks > 60 && ap.battle_menu_ticks == 45 {
                 ap.shot("battle_command_menu");
             }
             if ring.active {
@@ -677,7 +684,7 @@ fn autoplay_inject(
                 if battle.result_shown {
                     ap.shot("battle_victory");
                     raw = ap.tap_bits(padbit::CIRCLE);
-                } else if battle.menu_open && battle.stage == "running" {
+                } else if battle.menu_open && battle.stage == "running" && menu_settled {
                     raw = ap.tap_bits(padbit::CIRCLE);
                 } else if battle.stage == "defeat" {
                     raw = ap.tap_bits(padbit::CIRCLE);
