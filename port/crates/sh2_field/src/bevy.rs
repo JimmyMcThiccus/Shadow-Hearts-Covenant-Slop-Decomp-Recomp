@@ -293,6 +293,19 @@ pub fn spawn_field_map(commands: &mut Commands, gpu: &mut GpuCtx, disc: &Sh2Disc
 
 /// [`spawn_field_map`] for map data that is already in memory (the `MPS ` track of an LSD cut scene carries a complete MPS image).
 pub fn spawn_field_map_bytes(commands: &mut Commands, gpu: &mut GpuCtx, data: Vec<u8>, name: &str) -> Result<LoadedFieldMap, FieldMapError> {
+    spawn_field_map_bytes_with(commands, gpu, data, name, &|_, _| Vec::new())
+}
+
+/// [`spawn_field_map_bytes`] with extra motions per BG model (round 5 CS hook): `extra(model record name, model)` returns motions the model
+/// must be able to play (an LSD cut scene's `ANMS` tracks of the map's own models: doors, fans, props); a model that gets any is spawned as an
+/// animated [`sh2_gfx::bevy::bgmotion::BgModel`].
+pub fn spawn_field_map_bytes_with(
+    commands: &mut Commands,
+    gpu: &mut GpuCtx,
+    data: Vec<u8>,
+    name: &str,
+    extra: &dyn Fn(&str, &Model) -> Vec<std::sync::Arc<Motion>>,
+) -> Result<LoadedFieldMap, FieldMapError> {
     let mps = Mps::parse(data)?;
     let mut out = LoadedFieldMap { name: name.to_owned(), ..Default::default() };
 
@@ -335,6 +348,7 @@ pub fn spawn_field_map_bytes(commands: &mut Commands, gpu: &mut GpuCtx, data: Ve
         };
         out.warnings.extend(model.warnings.iter().map(|w| format!("MODEL `{}`: {w}", rec.name)));
         let local = placement(rec.pos, rec.rot);
+        motions_of[i].extend(extra(&rec.name, &model));
         if motions_of[i].is_empty() {
             let (_, st) = spawn_map_model(commands, ps2, &model, gpu, local, &rec.name);
             out.groups += st.groups;

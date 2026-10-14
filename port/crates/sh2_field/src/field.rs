@@ -80,6 +80,7 @@ impl From<u16> for FieldState {
 }
 
 /// Everything `CField::InitSDB` instantiates from one MPS.
+#[derive(Clone)]
 pub struct Field {
     pub state: u16,
     pub entry_id: i16,
@@ -207,6 +208,11 @@ impl Field {
         setup.models = mps.models()?.len();
         setup.has_navimap = mps.navimap().is_some();
         setup.objse = mps.objse().is_some();
+        // round 5 CS hook: `CField::AutoLoadSE` -- the map's object sounds (OBJSE chunk: SE banks + positional ambient sounds) go to the audio layer
+        match mps.find(crate::mps::tags::OBJSE) {
+            Some(c) => sh2_audio::post(sh2_audio::AudioRequest::MapObjSe { chunk: std::sync::Arc::new(mps.data.get(c.data_start()..).unwrap_or(&[]).to_vec()) }),
+            None => sh2_audio::post(sh2_audio::AudioRequest::SetObjSe { slot: -1, rec: None, one_shot: false }),
+        }
         setup.bg_color = mps.bg_color();
         self.navi = crate::navimap::NaviData::from_mps(&mps);
         self.mps = Some(mps);

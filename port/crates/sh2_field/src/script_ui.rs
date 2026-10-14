@@ -357,6 +357,25 @@ mod tests {
         assert_eq!(w.state(), 9);
     }
 
+    /// TD_14_U's orders (three `$` lines in a 20 x 3 window) type to the end.
+    #[test]
+    fn long_message_finishes_typing() {
+        for speed in [TextSpeed::Slow, TextSpeed::Normal, TextSpeed::Fast] {
+            let mut w = FieldWindow::default();
+            w.cols = 0x14;
+            w.rows = 3;
+            w.open(0xf);
+            w.append(b"What do you think you're aiming at?! How$could you miss such a big target?!", speed);
+            let mut n = 0;
+            while !w.typed() && n < 5000 {
+                w.tick();
+                n += 1;
+            }
+            let m = w.msg.as_ref().unwrap();
+            assert!(w.typed(), "{speed:?}: state {:?} glyph {} / {} fade {} macro {:?}", m.state, m.cur_glyph, m.glyphs.len(), m.fade_from, m.macros.get(m.cur_macro as usize).map(|x| format!("{x:?}")));
+        }
+    }
+
     #[test]
     fn text_codes_are_stripped() {
         assert_eq!(strip_text_codes(b"%t0%p4Nicole%p0 a%d"), b"Nicole a%d");

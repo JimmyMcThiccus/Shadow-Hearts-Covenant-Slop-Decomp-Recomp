@@ -11,8 +11,8 @@ NAMES = {0xa0: "chain", 0xa1: "callEvent", 0xa2: "callEventDly", 0xa3: "getSysIn
          0xaf: "dprintf", 0x90: "jmp", 0x91: "jz", 0x92: "jnz", 0x94: "switch", 0x98: "retv", 0x99: "ret"}
 LOADS = {0x20: "ld.s8", 0x21: "ld.u8", 0x22: "ld.s16", 0x23: "ld.u16", 0x24: "ld.i32", 0x25: "ld.f32", 0x26: "st8", 0x27: "st16",
          0x28: "st32"}
-BIN = {0x67: "mul", 0x68: "div", 0x69: "mod", 0x6a: "add", 0x6b: "sub", 0x6c: "shl", 0x6d: "shr", 0x70: "eq", 0x71: "ne",
-       0x72: "lt", 0x73: "le", 0x74: "gt", 0x75: "ge", 0x76: "and", 0x77: "or", 0x78: "xor", 0x79: "land", 0x7a: "lor"}
+BIN = {0x67: "mul", 0x68: "div", 0x69: "mod", 0x6a: "add", 0x6b: "sub", 0x6c: "shl", 0x6d: "shr", 0x70: "lt", 0x71: "gt",
+       0x72: "le", 0x73: "ge", 0x74: "eq", 0x75: "ne", 0x76: "and", 0x77: "xor", 0x78: "or", 0x79: "land", 0x7a: "lor"}
 
 
 def main():
@@ -58,7 +58,7 @@ def main():
         elif b == 0x0c: s = "push %#x" % u16(ip); ip += 2
         elif b == 0x0d: s = "push %d" % (u16(ip) - 0x10000); ip += 2
         elif b in (0x0e, 0x0f): s = "push %#x" % struct.unpack_from("<I", code, ip)[0]; ip += 4
-        elif 0x10 <= b <= 0x13: s = "reg%d %#x" % ((8, 16, 32, 'f')[b - 0x10], u8(ip)); ip += 1
+        elif 0x10 <= b <= 0x13: s = "reg%s %#x" % ((8, 16, 32, "f")[b - 0x10], u8(ip)); ip += 1
         elif b == 0x14: s = "regT %#x" % u16(ip); ip += 2
         elif b == 0x15:
             o = u16(ip); ip += 2

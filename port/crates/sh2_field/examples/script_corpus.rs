@@ -64,6 +64,9 @@ fn reset_vm(rt: &mut FieldRuntime, map: &str, bytes: &[u8]) {
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let us = a.iter().any(|x| x == "--us");
+    if us {
+        sh2_core::boot::set_active_region(sh2_core::boot::Region::Us);
+    }
     let verbose = a.iter().any(|x| x == "--verbose");
     let max_events: usize = a.iter().position(|x| x == "--max-events").and_then(|i| a.get(i + 1)).and_then(|v| v.parse().ok()).unwrap_or(usize::MAX);
     let start_ticks: u32 = std::env::var("CORPUS_START_TICKS").ok().and_then(|v| v.parse().ok()).unwrap_or(3000);

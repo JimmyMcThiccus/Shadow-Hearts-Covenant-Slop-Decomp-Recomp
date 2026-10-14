@@ -102,8 +102,9 @@ impl Chunk {
     }
 }
 
+#[derive(Clone)]
 pub struct Mps {
-    pub data: Vec<u8>,
+    pub data: std::sync::Arc<Vec<u8>>,
     pub version_minor: u8,
     pub chunks: Vec<Chunk>,
 }
@@ -151,7 +152,7 @@ impl Mps {
                 relocated: rd_u32(&data, hdr + 16),
             });
         }
-        Ok(Mps { version_minor: data[7] - b'0', data, chunks })
+        Ok(Mps { version_minor: data[7] - b'0', data: std::sync::Arc::new(data), chunks })
     }
 
     pub fn file_size_field(&self) -> u32 {

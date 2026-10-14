@@ -168,6 +168,7 @@ struct DelayedEvent {
 }
 
 /// One running script (a `CScript` + its `ScriptWork`).
+#[derive(Clone)]
 pub struct CScript {
     pub mem: Memory,
     pub image: Option<ScriptImage>,
@@ -246,6 +247,22 @@ impl CScript {
     pub fn is_running(&self) -> bool {
         self.jobs.last().map(|j| j.ip != NONE).unwrap_or(false)
     }
+    /// Number of live jobs (the start function / root job plus nested events called on top of it).
+    pub fn job_count(&self) -> usize {
+        self.jobs.iter().filter(|j| j.ip != NONE).count()
+    }
+    /// The event id of the topmost job when it is an event job (`CallEvent`), `None` for the start function or no job.
+    pub fn top_event(&self) -> Option<u32> {
+        self.jobs.last().filter(|j| j.ip != NONE && j.kind == 1).map(|j| j.event_id)
+    }
+    /// Current code offset of the topmost job (diagnostics).
+    pub fn top_ip(&self) -> Option<u32> {
+        self.jobs.last().filter(|j| j.ip != NONE).map(|j| j.ip)
+    }
+    /// Event ids of the event table of the loaded image (kind 0 = field events).
+    pub fn event_ids(&self) -> Vec<u32> {
+        self.image.as_ref().map(|i| i.event_ids(0)).unwrap_or_default()
+    }
     pub fn pause(&mut self, on: bool) {
         // JP: Pause__7CScriptFi (FIELD.BIN 0x004a3b80) flags bit5
         self.paused = on;
@@ -263,7 +280,10 @@ impl CScript {
         }
         self.mem.code = img.code.clone();
         self.mem.data = img.data.clone();
-        self.mem.bss = vec![0; img.hdr.bss_size as usize];
+        // `InitScript` allocates exactly `bss_size` bytes (`__nwa`), but scripts address further: SU_04_U declares 10 bytes and keeps its
+        // Ring Soul scene's slot numbers at bss +0x84..+0x94 (on the console those writes land in the heap block after it and read back
+        // fine).  Out-of-range bss accesses used to be dropped here (reads 0), which loaded every Ring Soul model into the player's slot.
+        self.mem.bss = vec![0; (img.hdr.bss_size as usize).max(0x10000)];
         let mut stack = vec![0u8; self.stack_words * 4];
         stack.fill(0);
         self.mem.stack = stack;
@@ -1057,11 +1077,29 @@ impl CScript {
                 self.write_sized(second, wsz, new);
                 result = new;
             }
-            0x7a => result = (second != 0 || top != 0) as u32,
-            0x79 => result = (second != 0 && top != 0) as u32,
-            0x78 => result = second | top,
-            0x77 => result = second ^ top,
-            0x76 => result = second & top,
+            // JP 0x00295840: the logical / bitwise binaries also store their result over the second operand (`iVar5 - 8`) and pop one slot
+            // (the port used to leave the second operand on the stack, which shifted the arguments of calls such as
+            // `GetFieldData(0x29, set << 16 | pc << 8 | 0, 0)`)
+            0x7a => {
+                result = (second != 0 || top != 0) as u32;
+                slot = old_sp.saturating_sub(8);
+            }
+            0x79 => {
+                result = (second != 0 && top != 0) as u32;
+                slot = old_sp.saturating_sub(8);
+            }
+            0x78 => {
+                result = second | top;
+                slot = old_sp.saturating_sub(8);
+            }
+            0x77 => {
+                result = second ^ top;
+                slot = old_sp.saturating_sub(8);
+            }
+            0x76 => {
+                result = second & top;
+                slot = old_sp.saturating_sub(8);
+            }
             0x70..=0x75 => {
                 result = match op {
                     0x75 => if isf { (fa != fb) as u32 } else { (second != top) as u32 },

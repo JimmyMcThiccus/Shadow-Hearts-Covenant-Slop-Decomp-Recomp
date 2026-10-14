@@ -148,6 +148,12 @@ pub enum MenuReq {
     CmdScene { a: i32, b: i32 },
     /// `SpecialMenu(0x5xx)`: game over on field teardown
     GameOver,
+    /// `SpecialMenu(0x7xx)`: the field ends and the game returns to the title (the ending)
+    EndToTitle,
+    /// (round 5 MN) `SpecialMenu(0x400, ..)`: the retail name entry (`CommandMenu(7)`, page 18, SM_20_U)
+    NameEntry,
+    /// (round 5 MN) `SpecialMenu(0x600, bout)`: the retail Wolf Bout stamp card (`CmdRetailSel02`)
+    WolfStamp { bout: i32 },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -204,6 +210,8 @@ pub struct RetailState {
     pub fog_level: i32,
     pub far_plane: f32,
     pub location_name: String,
+    /// op 0x2b sub 2: the `CFieldSocket` map name was replaced -- after the next battle the field reloads this map instead of the current one
+    pub socket_map: Option<String>,
     pub name_slots: BTreeMap<i32, String>,
     pub cam_blur: Vec<i32>,
     /// op 0x1b: armed observers `(observer, target, sight, event)`
@@ -213,7 +221,7 @@ pub struct RetailState {
     pub field_data_ex: BTreeMap<i32, (i32, i32)>,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct ScriptState {
     /// `CField::MapJumpA(name, entry)`
     pub pending_jump: Option<(String, i32)>,
@@ -278,7 +286,13 @@ pub struct ScriptState {
     pub mces: McesState,
     /// `CField::pEffect_list`: effects started by the script (`StartEffect`); they "run" for a fixed time
     pub effect_list: Vec<EffectSlot>,
+    /// runner handles of effects the script removed (the plugin stops them)
+    pub effect_removed: Vec<u32>,
     pub ring_result: i32,
+    /// the field ring set up by `SetRing` (op 0x63)
+    pub ring: Option<FieldRing>,
+    /// result `RingControl` reports instead of "every area hit" (tests / the story walker)
+    pub ring_override: Option<i32>,
     pub treasure_msg_quiet: bool,
     pub bg_models: usize,
     /// cumulative count of events queued for the VM (tests)
@@ -288,6 +302,68 @@ pub struct ScriptState {
     pub equip_log: Vec<[i32; 5]>,
     pub disk_state: i32,
     pub world_flags: Vec<(i32, i32)>,
+    /// party changes that need the battle databases (`SceneInit` = `BtlSaveSec::SetSceneInit`, `PCAddInit`): applied by the plugin /
+    /// the story walker where `sh2_battle::BattleData` is available ([`crate::party::apply_party_ops`])
+    pub party_ops: Vec<PartyOp>,
+    /// `SetFieldData(0x17)`: the `GS` chunk flag bit 0 (`a1 == 0`)
+    pub gs_flag0: bool,
+    /// `SetFieldData(0x12)`: `GraveYardEnable(a1)`
+    pub graveyard: i32,
+    /// log of party changes (tests / the story walker)
+    pub party_log: Vec<String>,
+    /// running vibration sequences (`CField::aVib[]`) and their mixer, and the mixed motor output of the last tick
+    pub vibes: BTreeMap<i32, sh2_audio::vibe::Vibe>,
+    pub vibe_man: sh2_audio::vibe::VibeMan,
+    pub vib_out: (f32, bool),
+    /// message variable buffer (`CField+0x2170`): the name entered in the name entry screen, read back by `SpecialMenu(-1)`
+    pub name_buffer: Vec<u8>,
+    /// the map this one was entered from (fallback of `MapJump(1)` when the save's GS +0x20 is empty)
+    pub prev_map: String,
+}
+
+/// `SetRing(kind, lap ms, ?, x, y, areas)` (op 0x63).
+#[derive(Debug, Clone, PartialEq)]
+pub struct FieldRing {
+    pub kind: i32,
+    pub lap_ms: i32,
+    /// number of hit areas in the spec
+    pub areas: i32,
+    pub spec: String,
+    /// colour code of each area (`C<n>` before each `S`), in order
+    pub colours: Vec<i32>,
+}
+
+/// The colour codes of a `SetRing` area spec (`C4S10E70C2S100E125...`): one per `C<n>S..E..` area.
+pub fn ring_colours(spec: &str) -> Vec<i32> {
+    let b = spec.as_bytes();
+    let mut out = vec![];
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'C' {
+            let mut j = i + 1;
+            let mut v = 0i32;
+            while j < b.len() && b[j].is_ascii_digit() {
+                v = v * 10 + (b[j] - b'0') as i32;
+                j += 1;
+            }
+            if j < b.len() && b[j] == b'S' {
+                out.push(v);
+            }
+            i = j;
+        } else {
+            i += 1;
+        }
+    }
+    out
+}
+
+/// A party change the field host cannot apply alone (it needs `SSHDAT` through the battle crate).
+#[derive(Debug, Clone, PartialEq)]
+pub enum PartyOp {
+    /// `SetFieldData(0x13, scene)` = `SceneInit(scene)` -> `BtlSaveSec::SetSceneInit(scene, MENU[0] != 0)` (US 0x003f7bc0 / 0x003bc710)
+    SceneInit(i32),
+    /// `SetFieldData(0x20, pc)` = `BtlSaveSec::PCAddInit(pc)` (US 0x003c1600): create the record of a member joining later
+    PcAdd(i32),
 }
 
 /// One `SetLookPoint(id, pos, radius, event, icon, view)` record (JP `CField+0x3f0 + slot * 0x10`: short pos + radius, `+8` event, `+0xc` id, `+0xe` icon / view nibbles).
@@ -393,9 +469,26 @@ impl LookPoints {
 pub struct EffectSlot {
     pub name: String,
     pub flags: u32,
-    /// `CField::OnLoadEffect` state: 1 loading, 2 running, 0 finished
+    /// `EffectControl(h, 0)`: 1 loading, 3 running (retail scripts wait for 3), 0 finished
     pub state: u8,
     pub ticks: u32,
+    /// generating / target sets (`SetEffParameter`: flags byte 0 / 1 = counts, bits 16-19 / 20-23 = kinds; kind 0 = field model numbers,
+    /// else 12-byte PS2-world positions)
+    pub gen: Vec<EffPlace>,
+    pub tar: Vec<EffPlace>,
+    /// the renderer runs this effect (`FxRunner` handle): its state then comes from the program, not from the timer
+    pub runner: Option<u32>,
+    /// the renderer looked at this slot already (started it, or found no program)
+    pub runner_tried: bool,
+}
+
+/// Where an effect is generated / aimed.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum EffPlace {
+    /// a field model (slot number)
+    Model(i32),
+    /// a PS2-world position
+    Pos([f32; 3]),
 }
 
 /// Ticks an effect is reported as loading / running before it ends (the real length lives in the .EFD).
@@ -446,6 +539,111 @@ pub struct FieldHost<'a> {
 }
 
 /// Raw bytes of the NUL-terminated string at script address `a` (Shift-JIS).
+/// `SaveMenuSection::JoinBattle(pc, set, pin)` (JP 0x00289a60, US 0x00287770): move member `pc` (already in the set, at or after the battle
+/// slots) to the end of the battle members (`+0x11` count, capacity `+0x10`); `pin` sets its bit in the pinned mask (`+0x1a`).
+pub fn join_battle(p: &mut sh2_menu::save::PartySet, pc: u8, pin: bool) -> bool {
+    if p.battle_count >= p.battle_max {
+        return false;
+    }
+    let n = (p.member_count.max(0) as usize).min(8);
+    let start = p.battle_count.max(0) as usize;
+    for k in start..n {
+        if p.members[k] == pc {
+            let mut j = k;
+            while j >= start && j > 0 {
+                if j == start {
+                    break;
+                }
+                p.members[j] = p.members[j - 1];
+                j -= 1;
+            }
+            p.members[start] = pc;
+            p.battle_count += 1;
+            if pin {
+                p.pinned_mask |= 1 << (pc & 15);
+            }
+            return true;
+        }
+    }
+    false
+}
+
+/// US 0x003f4fe0: the s16 at `GS + 0x46` (a mini-game / scene counter): `a >= -1` stores it, `a == -3` restores it from `GS + 0x66`; returns the old value.
+pub fn gs_word46(s: &mut GameSession, a: i32) -> i32 {
+    let Some(c) = s.save.field.find_mut(sh2_menu::save::FieldSave::TAG_GS) else { return -1 };
+    let (o, r) = (0x46 - 4, 0x66 - 4);
+    if c.payload.len() < r + 2 {
+        return -1;
+    }
+    let old = i16::from_le_bytes([c.payload[o], c.payload[o + 1]]) as i32;
+    if a >= -1 {
+        c.payload[o..o + 2].copy_from_slice(&(a as i16).to_le_bytes());
+        return old;
+    }
+    if a == -3 {
+        let v = [c.payload[r], c.payload[r + 1]];
+        c.payload[o..o + 2].copy_from_slice(&v);
+        return i16::from_le_bytes(v) as i32;
+    }
+    old
+}
+
+/// `CharacterEquip` on the demo-shaped save copy (record `+0x2d` weapon, `+0x2e` armour, `+0x2f..` accessories, `+0x32..` crests; bag counts).
+pub fn character_equip(s: &mut GameSession, pc: i32, kind: i32, item: i32, slot: i32, mode: i32) {
+    use sh2_menu::save::BtlSave;
+    if !(0..sh2_menu::save::PC_COUNT as i32).contains(&pc) {
+        return;
+    }
+    let rec = sh2_menu::save::PC_REC_BASE + pc as usize * sh2_menu::save::PC_REC_SIZE;
+    let bag = s.save.btl.bag() as usize * BtlSave::BAG_STRIDE;
+    let (first, n, count) = match kind {
+        2 => (0x2d, 1, Some(BtlSave::OFF_WEAPONS)),
+        3 => (0x2e, 1, Some(BtlSave::OFF_ARMOR)),
+        4 => (0x2f, 3, Some(BtlSave::OFF_ACCESSORIES)),
+        5 => (0x32, 8, None),
+        _ => return,
+    };
+    let (lo, hi) = if n > 1 && slot >= 0 { (slot.min(n - 1) as usize, slot.min(n - 1) as usize + 1) } else { (0, n as usize) };
+    let d = &mut s.save.btl.data;
+    let bump = |d: &mut Vec<u8>, idx: i8, delta: i32| {
+        if let (Some(base), true) = (count, idx >= 0) {
+            if let Some(c) = d.get_mut(base + bag + idx as usize) {
+                *c = (*c as i32 + delta).clamp(0, 99) as u8;
+            }
+        }
+    };
+    if mode == 0 {
+        for k in lo..hi {
+            let old = d[rec + first + k] as i8;
+            if old >= 0 {
+                d[rec + first + k] = 0xff;
+                bump(d, old, -1);
+            }
+        }
+    } else if mode == 1 && item >= 0 {
+        let free = (lo..hi).find(|&k| d[rec + first + k] as i8 == -1).unwrap_or(lo);
+        let old = d[rec + first + free] as i8;
+        bump(d, old, -1);
+        d[rec + first + free] = item as u8;
+        bump(d, item as i8, 1);
+    }
+}
+
+/// Set / clear bit `bit` of the flag byte of party record `pc` (`BTL0 + pc * 0xc0 + 0x3c` retail, `+0x44` in the demo-shaped copy).
+pub fn set_pc_flag(s: &mut GameSession, pc: u8, bit: u8, on: bool) {
+    if pc as usize >= sh2_menu::save::PC_COUNT {
+        return;
+    }
+    let o = sh2_menu::save::PC_REC_BASE + pc as usize * sh2_menu::save::PC_REC_SIZE;
+    if let Some(b) = s.save.btl.data.get_mut(o) {
+        if on {
+            *b |= bit;
+        } else {
+            *b &= !bit;
+        }
+    }
+}
+
 pub fn raw_cstr(ctx: &ExCtx<'_>, a: u32) -> Vec<u8> {
     let mut v = Vec::new();
     for i in 0..1024u32 {
@@ -633,7 +831,9 @@ impl FieldHost<'_> {
                             7 => a.cmd_done as i32,
                             8 => (a.hit_check as i32) * 2 + a.floor_check as i32,
                             9 => a.talking as i32,
-                            0xd => a.motion,
+                            // US 0x004fe990 -> 0x00509c40: index (1..54) of the playing motion's name in the standard motion table
+                            // (`fidl walk run sq_a ..`, FIELD.BIN 0x00610db4), 0 for any other motion
+                            0xd => standard_motion_index(a.motion, &a.motion_name),
                             _ => 0,
                         },
                     }
@@ -908,8 +1108,28 @@ impl FieldHost<'_> {
             // 0x20 MapJump(name, entry, ?)
             0x20 => {
                 if self.st.pending_jump.is_none() {
-                    let name = ascii(&raw_cstr(ctx, ctx.arg(0)));
+                    // `CField::MapJump(name)`: the pointer value 1 means `GetSavedMpsName(1)` (US 0x003f7c40: GS chunk +0x20 when set, else +0x10),
+                    // the map the player came from -- the exits of shops, houses and dungeon rooms entered from several places
+                    let given = if ctx.arg(0) == 1 { String::new() } else { ascii(&raw_cstr(ctx, ctx.arg(0))) };
+                    let name = if given.is_empty() {
+                        // fallbacks: the map this one was entered from, then GS +0x10 (`GetSavedMpsName` without a saved map), then this map
+                        let saved = self.session.as_deref().and_then(|s| s.save.field.previous_map()).filter(|m| !m.is_empty());
+                        let cur = self.session.as_deref().and_then(|s| s.save.field.current_map()).filter(|m| !m.is_empty());
+                        saved
+                            .or_else(|| (!self.st.prev_map.is_empty()).then(|| self.st.prev_map.clone()))
+                            .or(cur)
+                            .unwrap_or_else(|| self.sim.map.clone())
+                    } else {
+                        given
+                    };
+                    if ctx.arg(0) != 1 && name == self.sim.map {
+                        self.st.log.push(format!("MapJump: empty name (pointer {:#x}) -> {name}", ctx.arg(0)));
+                    }
                     self.st.pending_jump = Some((name, ctx.arg_i32(1)));
+                    // US 0x004f8998: `SSHSys+0x54 = 1` (GetFieldData(0xd) in the next map)
+                    if let Some(s) = self.session.as_deref_mut() {
+                        s.ssh_sys[0] = 1;
+                    }
                 }
                 // MapJumpA pauses the script; the map is torn down after the fade
                 ExResult::Yield(-1)
@@ -923,7 +1143,13 @@ impl FieldHost<'_> {
             0x22 => ExResult::Void,
             // 0x23 SetFieldData(sel, a, b)
             0x23 => {
-                self.set_field_data(ctx.arg_i32(0), ctx.arg_i32(1), ctx.arg_i32(2));
+                if ctx.arg_i32(0) == 0x2d {
+                    // SetFieldData(0x2d, pc, name*): `strcpy(BTL0 + pc * 0xc0 + 0x46, name)` (the record name)
+                    let name = raw_cstr(ctx, ctx.arg(2));
+                    self.set_pc_name(ctx.arg_i32(1), &name);
+                } else {
+                    self.set_field_data(ctx.arg_i32(0), ctx.arg_i32(1), ctx.arg_i32(2));
+                }
                 ExResult::Void
             }
             // 0x24 GetFieldData(sel, a, b) -> int
@@ -1289,6 +1515,14 @@ impl FieldHost<'_> {
                     None
                 };
                 self.audio(FieldAudio::SetObjSe { index: ctx.arg_i32(0), a: ctx.arg(1), b: ctx.arg(2), c: ctx.arg_i32(3), pos });
+                // round 5 CS hook: `CField::SetObjSE(slot, id, flags, n, FVector *points)` -> the audio layer's object sounds (id 0 clears the slot)
+                {
+                    let (slot, id, flags) = (ctx.arg_i32(0), ctx.arg(1), ctx.arg(2));
+                    let n = if flags & 0xf == 2 { ctx.arg_i32(3).clamp(0, 15) as usize } else { 1 };
+                    let pts: Vec<[f32; 3]> = if ctx.argc > 4 && ctx.arg(4) != 0 { ctx.arg_vec(4, 4 * n).chunks(4).map(|v| [v[0], v[1], v[2]]).collect() } else { Vec::new() };
+                    let rec = (id != 0).then(|| sh2_audio::objse::ObjSeRec::from_script(id, flags, &pts));
+                    sh2_audio::post(sh2_audio::AudioRequest::SetObjSe { slot, rec, one_shot: (flags >> 8) & 1 != 0 });
+                }
                 ExResult::Void
             }
             // 0x5d SetSoundData(which, a, b): 0 reverb, 1 flag, 2 stream fade, 3 query (-1 while a stream is busy)
@@ -1345,7 +1579,25 @@ impl FieldHost<'_> {
             // 0x60 StartEffect(name, flags, pos*, rot*) -> handle; 0x61 EffectControl(handle, cmd, a, b) -> int
             0x60 => {
                 let name = ascii(&raw_cstr(ctx, ctx.arg(0)));
-                self.st.effect_list.push(EffectSlot { name, flags: ctx.arg(1), state: 1, ticks: 0 });
+                let flags = ctx.arg(1);
+                let read = |ctx: &ExCtx<'_>, p: u32, n: u32, kind: u32| -> Vec<EffPlace> {
+                    if p == 0 {
+                        return vec![];
+                    }
+                    (0..n.min(16))
+                        .map(|i| {
+                            if kind == 0 {
+                                EffPlace::Model(ctx.mem.r8(p + i).unwrap_or(0) as i8 as i32)
+                            } else {
+                                let f = |k: u32| f32::from_bits(ctx.mem.r32(p + i * 12 + k * 4).unwrap_or(0));
+                                EffPlace::Pos([f(0), f(1), f(2)])
+                            }
+                        })
+                        .collect()
+                };
+                let gen = read(ctx, ctx.arg(2), flags & 0xff, (flags >> 16) & 0xf);
+                let tar = read(ctx, ctx.arg(3), (flags >> 8) & 0xff, (flags >> 20) & 0xf);
+                self.st.effect_list.push(EffectSlot { name, flags, state: 1, ticks: 0, gen, tar, runner: None, runner_tried: false });
                 ctx.set_ret(self.st.effect_list.len() as u32);
                 ExResult::Int
             }
@@ -1358,7 +1610,10 @@ impl FieldHost<'_> {
                     Some(state) => match ctx.arg_i32(1) {
                         1 => {
                             // RemoveEffect unlinks the node: later handles shift down
-                            self.st.effect_list.remove(idx);
+                            let e = self.st.effect_list.remove(idx);
+                            if let Some(h) = e.runner {
+                                self.st.effect_removed.push(h);
+                            }
                             0
                         }
                         0 => state as i32,
@@ -1370,12 +1625,26 @@ impl FieldHost<'_> {
             }
             0x62 => self.mces(ctx, first),
             // 0x63 SetRing(id, kind, a, b, c, name); 0x64 RingControl(..) / RingResult
-            0x63 => ExResult::Void,
+            // 0x63 SetRing(type, lap ms, ?, x, y, areas): the field Judgement Ring (US 0x004fad40); areas = "C<colour>S<start>E<end>..." per area
+            0x63 => {
+                let spec = if ctx.argc > 5 { ascii(&raw_cstr(ctx, ctx.arg(5))) } else { String::new() };
+                let areas = spec.matches('S').count() as i32;
+                let colours = ring_colours(&spec);
+                self.st.ring = Some(FieldRing { kind: ctx.arg_i32(0), lap_ms: ctx.arg_i32(1), areas, spec, colours });
+                ExResult::Void
+            }
+            // 0x64 RingControl(1, ..): run the ring and wait for its result (US 0x004f9948 -> 0x004fb3e0: `CField+0x8b0` once the ring is over).
+            // The port has no field ring screen yet: the ring is "played" at once with `ring_result` (default: every area hit = the area count).
             0x64 => {
                 if first {
                     return ExResult::Yield(-10);
                 }
-                ctx.set_ret(self.st.ring_result as u32);
+                // the JRing reports through its event 0x80 (`cbRing` US 0x004faf20 stores the result word at `CField+0x8b0`); for these
+                // "event" rings with coloured areas the scripts compare it with the colour codes 1..4: the colour of the area the pointer
+                // stopped in.  Without a ring screen the port answers the first area's colour (`ring_override` for tests / the walker)
+                let r = self.st.ring_override.unwrap_or_else(|| self.st.ring.as_ref().and_then(|r| r.colours.first().copied()).unwrap_or(0));
+                self.st.ring_result = r;
+                ctx.set_ret(r as u32);
                 ExResult::Int
             }
             0x65 => self.warp_op(ctx, first),
@@ -1412,25 +1681,79 @@ impl FieldHost<'_> {
                 ExResult::Void
             }
             0x68 => {
-                // CharacterEquip(pc, kind, slot, item, flags) -> 1 on success
-                self.st.equip_log.push([ctx.arg_i32(0), ctx.arg_i32(1), ctx.arg_i32(2), ctx.arg_i32(3), ctx.arg_i32(4)]);
+                // CharacterEquip(pc, kind, item, slot, mode) (US 0x003f4aa0): kind 2 weapon, 3 armour, 4 accessory (3 slots), 5 crest (8 slots), 7 dress;
+                // mode 0 takes the equipment off (slot < 0: every slot) and out of the bag, mode 1 gives `item` and puts it in the first free slot
+                let (pc, kind, item, slot, mode) = (ctx.arg_i32(0), ctx.arg_i32(1), ctx.arg_i32(2), ctx.arg_i32(3), ctx.arg_i32(4));
+                self.st.equip_log.push([pc, kind, item, slot, mode]);
+                if let Some(s) = self.session.as_deref_mut() {
+                    character_equip(s, pc, kind, item, slot, mode);
+                }
                 ctx.set_ret(1);
                 ExResult::Int
             }
-            // vibration 0x69-0x6e
+            // vibration 0x69-0x6e (JP 0x004b8710 StartVib / 0x004b8950 VibControl): the map's `GENERIC` "VIBRATION" block holds the sequences
+            // (`CVibeMan::GetSeqData(block, seq)`), run by `sh2_audio::vibe` (CS4); `tick_state` polls them, the plugin forwards the motor output
             0x69 | 0x6a => {
-                let ch = (ctx.arg_i32(0).max(0) as usize).min(3);
+                let (slot, seq, vol) = (ctx.arg_i32(0), ctx.arg_i32(1), ctx.arg_i32(2));
+                let ch = (slot.max(0) as usize).min(3);
                 self.st.vib_active[ch] = true;
+                if sub == 0x69 {
+                    let blob = self.sim.field.mps.as_ref().and_then(|m| m.generic().into_iter().find(|(n, _)| n.eq_ignore_ascii_case("VIBRATION")).map(|(_, b)| b.to_vec()));
+                    if let Some(sq) = blob.as_deref().and_then(sh2_audio::vibe::VibeBlob::parse).and_then(|b| b.sequence(seq.max(0) as usize)) {
+                        let mut v = sh2_audio::vibe::Vibe::start(sq, &mut self.st.vibe_man);
+                        v.set_master(vol.clamp(0, 0xff) as u8);
+                        self.st.vibes.insert(slot, v);
+                    }
+                }
                 ExResult::Void
             }
-            0x6b | 0x6c | 0x6d => {
-                let ch = (ctx.arg_i32(0).max(0) as usize).min(3);
-                self.st.vib_active[ch] = false;
+            // 0x6b StopVib(slot, fade ms): slot < 0 = all
+            0x6b => {
+                let (slot, fade) = (ctx.arg_i32(0), ctx.arg_i32(1));
+                if slot < 0 {
+                    if fade < 1 {
+                        self.st.vibes.clear();
+                    } else {
+                        for v in self.st.vibes.values_mut() {
+                            v.set_fader(0, fade as u32, true);
+                        }
+                    }
+                    self.st.vib_active = [false; 4];
+                } else {
+                    let playing = self.st.vibes.get(&slot).map(|v| v.playing).unwrap_or(false);
+                    if !playing || fade < 1 {
+                        self.st.vibes.remove(&slot);
+                    } else if let Some(v) = self.st.vibes.get_mut(&slot) {
+                        v.set_fader(0, fade as u32, true);
+                    }
+                    self.st.vib_active[(slot as usize).min(3)] = false;
+                }
                 ExResult::Void
             }
+            // 0x6c FadeVib(slot, volume, ms): slot < 0 = the mixer's master volume; 0x6d PauseVib(slot, on)
+            0x6c => {
+                let (slot, vol, ms) = (ctx.arg_i32(0), ctx.arg_i32(1), ctx.arg_i32(2));
+                if slot < 0 {
+                    self.st.vibe_man.volume = (vol.clamp(0, 0x80) / 2) as u8;
+                } else if let Some(v) = self.st.vibes.get_mut(&slot).filter(|v| v.playing) {
+                    v.set_fader(vol.clamp(0, 0x80) as u8, ms.max(0) as u32, false);
+                }
+                ExResult::Void
+            }
+            0x6d => {
+                let (slot, on) = (ctx.arg_i32(0), ctx.arg_i32(1) != 0);
+                if slot < 0 {
+                    self.st.vibe_man.muted = on;
+                } else if let Some(v) = self.st.vibes.get_mut(&slot) {
+                    v.pause(on);
+                }
+                ExResult::Void
+            }
+            // 0x6e IsVib(slot)
             0x6e => {
-                let ch = (ctx.arg_i32(0).max(0) as usize).min(3);
-                ctx.set_ret(self.st.vib_active[ch] as u32);
+                let slot = ctx.arg_i32(0);
+                let playing = self.st.vibes.get(&slot).map(|v| v.playing).unwrap_or(false);
+                ctx.set_ret(playing as u32);
                 ExResult::Int
             }
             // 0x6f DiskChange(disc, event): single disc image => completes at once
@@ -1658,15 +1981,27 @@ impl FieldHost<'_> {
                 ExResult::Int
             }
             0x2b => {
-                // sub 0: far plane, 1: name into a save-block slot, 2: location name
+                // US 0x004f8be0: sub 0: far plane; sub 1 (a, name): the name of party set `a` (`MENU + 0x84 + a * 0x20`, <= 14 chars, the team
+                // names of the story presets); sub 2 (name): `strcpy(CFieldSocket + 0x64, name)` = the socket's current map name -- the map the
+                // field reloads after the next battle / load (AR_15_U: N013 -> boss -> HUB_NA) -- and `CField+0x17a` bit 6
                 let m = ctx.arg_i32(0);
                 match m {
                     0 => self.st.retail.far_plane = ctx.arg_f32(2),
                     1 => {
-                        let n = ascii(&raw_cstr(ctx, ctx.arg(3)));
-                        self.st.retail.name_slots.insert(ctx.arg_i32(1), n);
+                        let raw = raw_cstr(ctx, ctx.arg(3));
+                        let set = ctx.arg_i32(1);
+                        let n = ascii(&raw);
+                        self.edit_set(set, |p| {
+                            let k = raw.iter().position(|&c| c == 0).unwrap_or(raw.len()).min(14);
+                            p.name = raw[..k].to_vec();
+                        });
+                        self.st.retail.name_slots.insert(set, n);
                     }
-                    2 => self.st.retail.location_name = ascii(&raw_cstr(ctx, ctx.arg(3))),
+                    2 => {
+                        let n = ascii(&raw_cstr(ctx, ctx.arg(3)));
+                        self.st.retail.location_name = n.clone();
+                        self.st.retail.socket_map = Some(n);
+                    }
                     _ => {}
                 }
                 ExResult::Void
@@ -1712,6 +2047,29 @@ impl FieldHost<'_> {
         // LoadCharacter + SetCmd(1): the model counts as loaded once the "read" finished; the placeholder loads at once
         let _ = slot;
         ExResult::Void
+    }
+
+    /// `InitSDB`: put the (carried) control model on entry point `entry` and show it.
+    pub fn show_at_entry(&mut self, slot: i32, entry: i32) {
+        self.disp_ep(slot, entry, 0, None);
+    }
+
+    /// Fallback for a scene that hands control back to a control slot that holds no model (seen: RU_00_U after the Louvre 1 scene, whose
+    /// start function never loads slot 0 on that branch): load `char_id` (the "controlled character" register byte 0) into the control
+    /// slot at the map's entry point and give it to the pad.  Returns true when it had to do so.  Unverified against the console (see r5_fs.md).
+    pub fn ensure_control_model(&mut self, char_id: i32) -> bool {
+        let ctrl = self.st.actors.ctrl;
+        if self.st.actors.get(ctrl as i32).map(|a| a.loaded).unwrap_or(false) {
+            return false;
+        }
+        self.st.actors.load(ctrl, &format!("{char_id:03}"), char_id, 0);
+        let entry = self.st.map_entry.max(0);
+        self.disp_ep(ctrl as i32, entry, 1, None);
+        if let Some(a) = self.st.actors.get_mut(ctrl as i32) {
+            a.manual = true;
+        }
+        self.st.log.push(format!("fallback: control model {char_id} loaded into slot {ctrl}"));
+        true
     }
 
     /// `CField::DispCharacterEP(slot, entry, motion, ..)` (JP 0x004b34e0)
@@ -1854,6 +2212,31 @@ impl FieldHost<'_> {
         }
     }
 
+    /// Edit party set `set` of the session's `MENU` block in place.
+    fn edit_set(&mut self, set: i32, f: impl FnOnce(&mut sh2_menu::save::PartySet)) {
+        let Some(s) = self.session.as_deref_mut() else { return };
+        let i = set.clamp(0, 6) as usize;
+        if let Some(mut p) = s.save.menu.party_set(i) {
+            f(&mut p);
+            s.save.menu.set_party_set(i, &p);
+        }
+    }
+
+    /// `SetFieldData(0x2d, pc, name)`: the name of party record `pc` (0x12 bytes, NUL padded).
+    fn set_pc_name(&mut self, pc: i32, name: &[u8]) {
+        let Some(s) = self.session.as_deref_mut() else { return };
+        if !(0..12).contains(&pc) {
+            return;
+        }
+        let o = sh2_menu::save::PC_REC_BASE + pc as usize * sh2_menu::save::PC_REC_SIZE + 0x0a;
+        let n = name.iter().position(|&c| c == 0).unwrap_or(name.len()).min(0x11);
+        if let Some(dst) = s.save.btl.data.get_mut(o..o + 0x12) {
+            dst.fill(0);
+            dst[..n].copy_from_slice(&name[..n]);
+        }
+        self.st.party_log.push(format!("SetName(pc {pc}, {:?})", String::from_utf8_lossy(&name[..n])));
+    }
+
     // ------------------------------------------------------------------ SetFieldData / GetFieldData (JP 0x004b1b70 / 0x004b24e0)
     fn set_field_data(&mut self, sel: i32, a: i32, b: i32) {
         match sel {
@@ -1905,25 +2288,168 @@ impl FieldHost<'_> {
                     fl.set_rot_y(a as f32);
                 }
             }
-            0x14 | 0x15 => {
-                if let Some(s) = self.session.as_deref_mut() {
-                    let mut set = s.save.menu.party_set(a.clamp(0, 4) as usize).unwrap_or_else(|| s.save.menu.party_set(0).unwrap());
-                    if sel == 0x14 {
-                        set.join(b as u8);
-                    } else {
-                        set.leave(b as u8);
-                    }
-                    s.save.menu.set_party_set(a.clamp(0, 4) as usize, &set);
+            // 0x0a ClearBattleTeam(set) (-1: sets 0..2), 0x0b JoinBattle(pc = a2 low 16 bits, set (-1: 0..2), pin flag = a2 >> 16): US 0x004fbad8
+            0x0a => {
+                for set in if a == -1 { 0..3 } else { a..a + 1 } {
+                    self.edit_set(set, |p| {
+                        p.battle_count = 0;
+                        p.pinned_mask = 0;
+                    });
                 }
+
             }
+            0x0b => {
+                let pc = (b & 0xffff) as i16 as i32;
+                let pin = (b >> 16) & 0xff != 0;
+                for set in if a == -1 { 0..3 } else { a..a + 1 } {
+                    self.edit_set(set, |p| {
+                        join_battle(p, pc as u8, pin);
+                    });
+                }
+                self.st.party_log.push(format!("JoinBattle(pc {pc}, set {a}, pin {pin})"));
+            }
+            0x12 => self.st.graveyard = a,
+            // 0x13 SceneInit(scene): retail `SceneInit` (US 0x003f7bc0) sets BTL0+3 bit 0 for scene > 0, then `SetSceneInit(scene, ..)`
+            0x13 => {
+                if let Some(s) = self.session.as_deref_mut() {
+                    if a > 0 && s.save.btl.data.len() > 3 {
+                        s.save.btl.data[3] |= 1;
+                    }
+                }
+                self.st.party_ops.push(PartyOp::SceneInit(a));
+                self.st.party_log.push(format!("SceneInit({a})"));
+            }
+            // 0x14 JoinParty(set a (-1 = sets 0..2), pc b) / 0x15 LeaveParty: US 0x004fbba0 / 0x004fbbe8.  Join also sets the record's "in the
+            // party" bit (`BTL0 + pc * 0xc0 + 0x3c` bit 1); leave writes that bit from `b >> 8` and uses `b & 0xff` as the member.
+            0x14 | 0x15 => {
+                let pc = (b & 0xff) as u8;
+                if let Some(s) = self.session.as_deref_mut() {
+                    let n = if s.save.build.is_retail() { 7 } else { 5 };
+                    let sets: Vec<usize> = if a < 0 { (0..3).collect() } else { vec![(a as usize).min(n - 1)] };
+                    if sel == 0x14 {
+                        // JoinParty: refused when a set is full (> 7) or already holds the member
+                        let ok = sets.iter().all(|&i| s.save.menu.party_set(i).map(|p| p.member_count <= 7 && !p.find_pc(pc)).unwrap_or(false));
+                        if ok {
+                            for &i in &sets {
+                                if let Some(mut p) = s.save.menu.party_set(i) {
+                                    p.join(pc);
+                                    s.save.menu.set_party_set(i, &p);
+                                }
+                            }
+                            if s.save.build.is_retail() {
+                                s.save.menu.set_joined(pc);
+                            }
+                            self.st.party_log.push(format!("JoinParty(set {a}, pc {pc})"));
+                        }
+                        set_pc_flag(s, pc, 2, true);
+                    } else {
+                        let ok = sets.iter().all(|&i| s.save.menu.party_set(i).map(|p| p.find_pc(pc)).unwrap_or(false));
+                        if ok {
+                            for &i in &sets {
+                                if let Some(mut p) = s.save.menu.party_set(i) {
+                                    p.leave(pc);
+                                    s.save.menu.set_party_set(i, &p);
+                                }
+                            }
+                            self.st.party_log.push(format!("LeaveParty(set {a}, pc {pc})"));
+                        }
+                        set_pc_flag(s, pc, 2, (b >> 8) & 1 != 0);
+                    }
+                }
+
+            }
+            // 0x16 SetCurrentPartySet(set a, b = lock | battle count << 8): US 0x004fbc38
             0x16 => {
                 if let Some(s) = self.session.as_deref_mut() {
-                    s.save.menu.data[sh2_menu::save::MenuSave::OFF_CUR_SET] = a.clamp(0, 4) as u8;
+                    s.save.menu.data[sh2_menu::save::MenuSave::OFF_SET_LOCK] = 0;
+                    s.save.menu.data[sh2_menu::save::MenuSave::OFF_CUR_SET] = a as u8;
+                    let count = (b >> 8) & 0xff;
+                    if count != 0 {
+                        // SetBattleCount(count, set): `+0x10` = count, `+0x11` clamped to it
+                        let i = (a.max(0) as usize).min(6);
+                        if let Some(mut p) = s.save.menu.party_set(i) {
+                            p.battle_max = count as i8;
+                            if p.battle_count > p.battle_max {
+                                p.battle_count = p.battle_max;
+                            }
+                            s.save.menu.set_party_set(i, &p);
+                        }
+                    }
                     s.save.menu.data[sh2_menu::save::MenuSave::OFF_SET_LOCK] = (b & 0xff) as u8;
                 }
+                self.st.party_log.push(format!("SetCurrentPartySet({a}, {b:#x})"));
             }
-            0x13 => {} // SceneInit(a): scenario tables
-            0x1e | 0x18 | 0x17 | 0xe | 0xf | 0x12 | 0x19 | 0x1a | 0x1f | 0x20 | 8 | 0xa | 0xb => {}
+            // 0x17: the `GS` chunk flag bit 0 = (a == 0); a == 2 also clears the Navi Map option bits (MENU+0x275 bits 2-3)
+            0x17 => {
+                self.st.gs_flag0 = a == 0;
+                if a == 2 {
+                    if let Some(s) = self.session.as_deref_mut() {
+                        s.save.menu.data[sh2_menu::save::MenuSave::OFF_OPT1] &= 0xf3;
+                    }
+                }
+            }
+            // 8: `SSHSys+0x56` (JP +0x52) = a: a lost battle returns to the field instead of the game over (consumed by the battle)
+            8 => {
+                if let Some(s) = self.session.as_deref_mut() {
+                    s.ssh_sys[2] = a as u8;
+                }
+            }
+            // 0x1f: `MENU+0x10` (retail location / save id); 0x25: `MENU+0x14` best progress (max; set outright on a fresh block); 0x38: `MENU+0x18`
+            0x1f => {
+                if let Some(s) = self.session.as_deref_mut() {
+                    s.save.menu.set_location_id(a as u32);
+                }
+            }
+            0x25 => {
+                if let Some(s) = self.session.as_deref_mut() {
+                    let o = sh2_menu::save::MenuSave::OFF_BEST_PROGRESS;
+                    let cur = i32::from_le_bytes(s.save.menu.data[o..o + 4].try_into().unwrap());
+                    if (s.save.menu.data[0] == 0 && s.save.menu.data[1] == 0) || cur < a {
+                        s.save.menu.data[o..o + 4].copy_from_slice(&a.to_le_bytes());
+                    }
+                }
+                self.st.retail.field_data_ex.insert(sel, (a, b));
+            }
+            0x38 => {
+                if let Some(s) = self.session.as_deref_mut() {
+                    let o = sh2_menu::save::MenuSave::OFF_LANGUAGE;
+                    s.save.menu.data[o..o + 4].copy_from_slice(&a.to_le_bytes());
+                }
+            }
+            // 0x20 PCAddInit(pc)
+            0x20 => {
+                self.st.party_ops.push(PartyOp::PcAdd(a));
+                self.st.party_log.push(format!("PCAddInit({a})"));
+            }
+            // 0x31: `MENU + 0x380 + a * 0x10` = b; 0x34: clear bytes +0x63..+0x67 of PC record a
+            0x31 => {
+                if let Some(s) = self.session.as_deref_mut() {
+                    if let Some(x) = s.save.menu.data.get_mut(0x380 + (a.max(0) as usize) * 0x10) {
+                        *x = b as u8;
+                    }
+                }
+                self.st.retail.field_data_ex.insert(sel, (a, b));
+            }
+            0x34 => {
+                if let Some(s) = self.session.as_deref_mut() {
+                    let o = sh2_menu::save::PC_REC_BASE + (a.clamp(0, 11) as usize) * sh2_menu::save::PC_REC_SIZE;
+                    for k in 0x63..0x68 {
+                        if let Some(x) = s.save.btl.data.get_mut(o + k) {
+                            *x = 0;
+                        }
+                    }
+                }
+            }
+            0x1e | 0x18 | 0x19 | 0x1a | 0xe | 0xf => {
+                self.st.retail.field_data_ex.insert(sel, (a, b));
+            }
+            // 0x2e: GS chunk word +0x46 (US 0x003f4fe0(a): set when a >= -1, a == -3 restores the copy at +0x66)
+            0x2e => {
+                if let Some(s) = self.session.as_deref_mut() {
+                    gs_word46(s, a);
+                }
+                self.st.retail.field_data_ex.insert(sel, (a, b));
+            }
             // retail-only selectors: recorded (their effects are presentation switches of the retail engine)
             0x24..=0x38 => {
                 self.st.retail.field_data_ex.insert(sel, (a, b));
@@ -1939,7 +2465,43 @@ impl FieldHost<'_> {
             0 => ((self.sim.field.flags_18c.0 & 0x1f) >> 2) as i32,
             1 => self.sim.field.event_boxes.as_ref().and_then(|e| e.boxes.iter().find(|x| x.id == a)).map(|x| ((x.flags & 0xf) ^ 1) as i32).unwrap_or(-1),
             2 => self.sim.field.event_boxes.as_ref().and_then(|e| e.boxes.iter().find(|x| x.id == a)).map(|x| ((x.flags & 0x3f) >> 4) as i32).unwrap_or(-1),
-            9 | 0xd => 0,
+            // 9: result of the last battle (`SSHSys+0x55`, JP +0x51, written by `SSHSys::cbBattleA`): 1 won, 0 lost (story goes on), -1 escaped
+            9 => self.session.as_deref().map(|s| s.ssh_sys[1] as i8 as i32).unwrap_or(1),
+            // 0xd: how the map was entered (`SSHSys+0x54`, JP +0x50): 1 = `MapJump`, 2 = back from a battle
+            0xd => self.session.as_deref().map(|s| s.ssh_sys[0] as i32).unwrap_or(0),
+            // 0x16: current party set (`MENU+0x80`); 0x1f: `MENU+0x10`; 0x25: `MENU+0x14`; 0x38: `MENU+0x18` (US 0x004fc170)
+            0x16 => self.session.as_deref().map(|s| s.save.menu.data[sh2_menu::save::MenuSave::OFF_CUR_SET] as i8 as i32).unwrap_or(0),
+            0x25 | 0x38 => {
+                let o = if sel == 0x25 { sh2_menu::save::MenuSave::OFF_BEST_PROGRESS } else { sh2_menu::save::MenuSave::OFF_LANGUAGE };
+                self.session.as_deref().map(|s| i32::from_le_bytes(s.save.menu.data[o..o + 4].try_into().unwrap())).unwrap_or(0)
+            }
+            // 0x29: position of PC `(a >> 8) & 0xff` in party set `a >> 16` (among the battle members when bit 0 of `a` is set), -1 when absent
+            0x29 => {
+                let Some(s) = self.session.as_deref() else { return -1 };
+                let (set, pc, battle) = ((a >> 16) as usize & 0xff, ((a >> 8) & 0xff) as u8, a & 1 != 0);
+                match s.save.menu.party_set(set.min(6)) {
+                    Some(p) => {
+                        let n = if battle { p.battle_max } else { p.member_count }.clamp(0, 8) as usize;
+                        p.members[..n].iter().position(|&m| m == pc).map(|i| i as i32).unwrap_or(-1)
+                    }
+                    None => -1,
+                }
+            }
+            // 0x2a: state of image object `b` (`CField + 0x9bc + b * 4`, the `LoadImage` / `DspImage` slots): 1 once it is loaded and shown
+            0x2a => {
+                let im = &self.st.ui.images[(b.max(0) as usize).min(7)];
+                (!im.name.is_empty() && im.shown) as i32
+            }
+            // 0x2e: the GS chunk word +0x46 (US 0x003f4fe0(-2) = read)
+            0x2e => self.session.as_deref_mut().map(|s| gs_word46(s, -2)).unwrap_or(-1),
+            // 0x36: always 2 (retail); 0x37: availability bits of world-map point `a` (`WM` chunk byte & 3)
+            0x36 => 2,
+            0x37 => self
+                .session
+                .as_deref()
+                .and_then(|s| s.save.field.find(sh2_menu::save::FieldSave::TAG_WM).and_then(|c| c.payload.get(0xc + a.max(0) as usize).copied()))
+                .map(|b| (b & 3) as i32)
+                .unwrap_or(0),
             0xc => self.session.as_deref_mut().map(|s| s.save.field.npc_library(a.max(0) as usize, b.clamp(0, 15) as u8) as i32).unwrap_or(0),
             0x10 => self.st.map_entry,
             0x1b => self.inventory_change(0x20, a as u32, 0),
@@ -1960,11 +2522,12 @@ impl FieldHost<'_> {
                 }
             }
             0x1d => (self.st.ticks * 1000 / 60) as i32,
-            0x1f => 0,
+            0x1f => self.session.as_deref().map(|s| s.save.menu.location_id() as i32).unwrap_or(0),
+            // 0x21: battle member `b` of party set `a` (JP 0x004b24e0 / US: compared with the battle count `+0x11`), -1 past the end
             0x21 => {
                 let Some(s) = self.session.as_deref() else { return -1 };
-                match s.save.menu.party_set(a.clamp(0, 4) as usize) {
-                    Some(set) if (b as i64) < set.member_count as i64 && (b as usize) < 8 => set.members[b as usize] as i8 as i32,
+                match s.save.menu.party_set((a as i8).clamp(0, 6) as usize) {
+                    Some(set) if (b as i64) < set.battle_count as i64 && (0..8).contains(&b) => set.members[b as usize] as i8 as i32,
                     _ => -1,
                 }
             }
@@ -2206,7 +2769,7 @@ impl FieldHost<'_> {
                         m.ticks = 0;
                         m.state = 1;
                         m.played.push(m.name.clone());
-                        log::info!("field: MCES movie {} is not played in this port (placeholder wait)", m.name);
+                        log::debug!("field: MCES {} started (the cut scene bridge plays it; headless: a placeholder wait)", m.name);
                     }
                     if ctx.arg_i32(3) < 0 {
                         return ExResult::Yield(-0x100);
@@ -2251,6 +2814,16 @@ impl FieldHost<'_> {
             return if self.st.menu_wait { ExResult::Yield(-1) } else { ExResult::Void };
         }
         let (k, a1) = (ctx.arg_i32(0), ctx.arg_i32(1));
+        // US 0x004fa578: a negative kind returns the message variable buffer `CField+0x2170` (the name typed in the name entry,
+        // `SpecialMenu(0x400)`), which the scripts `sprintf` into the dialogue
+        if k < 0 {
+            let bytes = self.st.name_buffer.clone();
+            let p = sh2_script::memory::SEG_HOST + ctx.mem.host.len() as u32;
+            ctx.mem.host.extend_from_slice(&bytes);
+            ctx.mem.host.push(0);
+            ctx.set_ret(p);
+            return ExResult::Int;
+        }
         match (k >> 8) & 0xf {
             0 => {
                 if k == 2 {
@@ -2288,9 +2861,26 @@ impl FieldHost<'_> {
                 self.st.menu_wait = true;
                 ExResult::Yield(-1)
             }
+            // (round 5 MN) retail name entry / Wolf Bout stamp: field screens, the script waits like for a shop
+            4 => {
+                self.st.menu_req = Some(MenuReq::NameEntry);
+                self.st.menu_wait = true;
+                ExResult::Yield(-1)
+            }
+            6 => {
+                self.st.menu_req = Some(MenuReq::WolfStamp { bout: a1 });
+                self.st.menu_wait = true;
+                ExResult::Yield(-1)
+            }
             5 => {
                 self.st.game_over = true;
                 self.st.menu_req = Some(MenuReq::GameOver);
+                ExResult::Yield(-1)
+            }
+            // US 0x004faab0: `CField+0x178` delete reason 2 -- the field is deleted and the socket hands over to scene 0x40 = the title
+            // (the end of the game: ED_00_U after the clear save, YO_00..02_U)
+            7 => {
+                self.st.menu_req = Some(MenuReq::EndToTitle);
                 ExResult::Yield(-1)
             }
             _ => ExResult::Void,
@@ -2382,6 +2972,26 @@ impl FieldHost<'_> {
 }
 
 /// `EncodeMotionName(const char*)` (JP 0x004bff50): a stable id for a motion name (the original packs up to 6 base-37 characters).
+/// The standard field motions (US FIELD.BIN 0x00610db4, 54 names; numeric motion ids are indices into it, 1 = `fidl`).
+pub const STANDARD_MOTIONS: [&str; 54] = [
+    "fidl", "walk", "run", "sq_a", "sq_b", "sq_c", "inve", "agre", "rejc", "ta_a", "ta_b", "ta_c", "he_a", "he_b", "he_c", "he_d", "la_a", "la_b", "la_c", "an_a",
+    "an_b", "an_c", "lk_a", "lk_b", "lk_c", "fac1", "fac2", "fac3", "fac4", "fac5", "fac6", "fac7", "fac8", "fac9", "faca", "facb", "facc", "bt_a", "bt_b", "bt_c",
+    "ltrn", "rtrn", "wake", "gi_a", "gi_b", "gi_c", "md_a", "md_b", "sd_a", "sd_b", "sd_c", "sd_d", "fdid", "facl",
+];
+
+/// `GetCharacterInfo(slot, 0xd)`: 1-based index of the motion in [`STANDARD_MOTIONS`], 0 when it is not one of them.
+pub fn standard_motion_index(id: i32, name: &str) -> i32 {
+    if !name.is_empty() {
+        let n = name.to_ascii_lowercase();
+        return STANDARD_MOTIONS.iter().position(|m| *m == n).map(|i| i as i32 + 1).unwrap_or(0);
+    }
+    if (1..=54).contains(&id) {
+        id
+    } else {
+        0
+    }
+}
+
 pub fn encode_motion_name(s: &str) -> i32 {
     let mut v: u32 = 0;
     for c in s.bytes().take(6) {
@@ -2491,13 +3101,21 @@ pub fn tick_state(st: &mut ScriptState, sim: &mut FieldSim) {
         }
     }
     // effects
-    for e in st.effect_list.iter_mut().filter(|e| e.state != 0) {
+    for e in st.effect_list.iter_mut().filter(|e| e.state != 0 && e.runner.is_none()) {
         e.ticks += 1;
         if e.ticks == EFFECT_LOAD_TICKS {
-            e.state = 2;
+            e.state = 3; // US EffectControl(h, 0) = node+0x14 & 7: scripts wait for 3 once the .EFD is loaded and playing (HE_24_N `while (EffectControl(h, 0) != 3)`)
         } else if e.ticks >= EFFECT_LOAD_TICKS + EFFECT_RUN_TICKS {
             e.state = 0;
         }
+    }
+    // vibration sequences (`CVibeMan::Polling`, 1/60 s)
+    if !st.vibes.is_empty() {
+        let ScriptState { vibes, vibe_man, .. } = st;
+        vibes.retain(|_, v| !v.poll(vibe_man, 17));
+        st.vib_out = st.vibe_man.mix(st.vibes.values());
+    } else {
+        st.vib_out = (0.0, false);
     }
     // windows
     st.ui.tick();

@@ -221,9 +221,25 @@ pub fn run_all(out: &std::path::Path, fresh: bool, _only: Option<&str>) {
         r.owner = "FS".into();
         sink.put(&r);
     }
+    // evidence of the FS headless story walk (`sh2_field --example story_walk -- --evidence tools/coverage/out/fs_story_walk.txt`): flags it set and
+    // maps it played from the new game on (added by round 5 FS)
+    let walk_txt = std::fs::read_to_string(out.join("fs_story_walk.txt")).unwrap_or_default();
+    let walk_flags: std::collections::HashMap<u32, String> = walk_txt
+        .lines()
+        .filter_map(|l| l.strip_prefix("flag "))
+        .filter_map(|l| l.split_once(' '))
+        .filter_map(|(f, m)| u32::from_str_radix(f.trim_start_matches("0x"), 16).ok().map(|f| (f, m.to_string())))
+        .collect();
+    let walk_maps: std::collections::HashSet<String> = walk_txt.lines().filter_map(|l| l.strip_prefix("map ")).map(|s| s.to_string()).collect();
     // chapters
     for (flag, name) in chapters() {
         let mut r = Row::new(format!("chapter flag {flag:#06x} {name}"));
+        if let Some(m) = walk_flags.get(&flag) {
+            r.status = "ok".into();
+            r.detail = format!("set in {m} by the FS story walk");
+            sink.put(&r);
+            continue;
+        }
         let ms = setters.get(&flag).cloned().unwrap_or_default();
         r.kv("set_by", ms.iter().take(6).cloned().collect::<Vec<_>>().join(","));
         if let Some(d2) = ms.iter().find_map(|m| needs_disc2(m).map(|x| format!("{m}: {x}"))) {
@@ -274,6 +290,8 @@ pub fn run_all(out: &std::path::Path, fresh: bool, _only: Option<&str>) {
         }
         if let Some(d) = dyn_reach.get(m) {
             r.kv("depth", d);
+        } else if walk_maps.contains(m) {
+            r.detail = "played by the FS story walk".into();
         } else if all_reach.contains_key(m) {
             r.status = "untested".into();
             r.detail = "reachable only through static references (story flags / branches the headless run does not take)".into();

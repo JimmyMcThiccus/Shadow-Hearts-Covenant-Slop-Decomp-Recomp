@@ -224,6 +224,7 @@ pub enum ActorEvent {
     Fire { event: u32, arg: i32, slot: usize },
 }
 
+#[derive(Clone)]
 pub struct ActorTable {
     pub slots: Vec<Option<Actor>>,
     pub bg: Vec<BgModel>,
@@ -241,7 +242,54 @@ impl Default for ActorTable {
     }
 }
 
+/// The character models that survive a map jump (`CField` is reused by `CFieldSocket`; `InitSDB`, US 0x004f7210, only clears the models'
+/// display, so a script may rely on slot 0 still holding the player it loaded on an earlier map).
+#[derive(Debug, Clone, Default)]
+pub struct CarriedActors {
+    pub slots: Vec<Option<Actor>>,
+    pub ctrl: usize,
+    pub count: usize,
+    /// the control model was displayed when the map was left (`InitSDB`: it is then shown again at the entry point)
+    pub ctrl_shown: bool,
+}
+
 impl ActorTable {
+    /// What `InitSDB` keeps for the next map: every loaded model, hidden (`ClearModel`), commands finished.
+    pub fn carry_over(&self) -> CarriedActors {
+        let ctrl_shown = self.get(self.ctrl as i32).map(|a| a.loaded && a.disp).unwrap_or(false);
+        let slots = self
+            .slots
+            .iter()
+            .map(|s| {
+                s.as_ref().filter(|a| a.loaded).map(|a| {
+                    let mut a = a.clone();
+                    a.disp = false;
+                    a.mv = None;
+                    a.cmd = Cmd::None;
+                    a.cmd_done = true;
+                    a.chain.clear();
+                    a.items.clear();
+                    a.attach = 0xff;
+                    a.talking = false;
+                    a.view_point = None;
+                    a
+                })
+            })
+            .collect();
+        CarriedActors { slots, ctrl: self.ctrl, count: self.count, ctrl_shown }
+    }
+
+    /// Install carried models into a fresh table (before the new map's script runs).
+    pub fn take_carry(&mut self, c: CarriedActors) {
+        for (i, s) in c.slots.into_iter().enumerate() {
+            if i < self.slots.len() {
+                self.slots[i] = s;
+            }
+        }
+        self.ctrl = c.ctrl;
+        self.count = self.count.max(c.count);
+    }
+
     pub fn get(&self, slot: i32) -> Option<&Actor> {
         if slot < 0 {
             return None;
@@ -282,10 +330,18 @@ impl ActorTable {
         }
         let same = self.slots[slot].as_ref().map(|a| a.loaded && char_id != -1 && a.char_id == char_id).unwrap_or(false);
         if same {
+            // JP 0x004b30d0 same model: `ClrCharacter(slot, 0)`, `CharRemoveItem`, detach, `CFieldModel::Reset(slot == 0)` -- the model is kept
+            // (no reload) but hidden and reset; slot 0 gets the pad again
+            let manual = slot == 0 || slot == self.ctrl;
             let a = self.slots[slot].as_mut().unwrap();
             a.event_id = event_id;
             a.mv = None;
             a.items.clear();
+            a.attach = 0xff;
+            a.disp = false;
+            a.manual = manual;
+            a.talking = false;
+            a.view_point = None;
             a.cmd = Cmd::Load;
             a.cmd_done = true;
             return;
@@ -614,8 +670,15 @@ impl ActorTable {
                                 Self::finish_cmd(a, &mut events, s);
                             }
                         }
-                    } else if a.cmd == Cmd::Motion {
-                        Self::finish_cmd(a, &mut events, s);
+                    } else {
+                        if a.cmd == Cmd::Motion {
+                            Self::finish_cmd(a, &mut events, s);
+                        }
+                        // a one-shot motion with nothing queued falls back to the idle move motion (`fidl`): scripts wait for it with
+                        // `while (GetCharacterInfo(slot, 0xd) != 1)` (IF_11_U after Karin's "ta_c")
+                        // (left = 0, not looping: a queued `SetMotion(.., 1 / 2)` replaces it at once, as after any ended motion)
+                        a.motion = a.move_motions[0].max(1);
+                        a.motion_name.clear();
                     }
                 }
             }

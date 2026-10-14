@@ -53,7 +53,7 @@ pub enum Phase {
     Handover,
 }
 
-#[derive(Resource)]
+#[derive(Clone, Resource)]
 pub struct FieldRuntime {
     pub sim: FieldSim,
     pub vm: CScript,
@@ -157,6 +157,20 @@ pub fn build_runtime_with(
     entry: i32,
     session: &GameSession,
 ) -> Option<FieldRuntime> {
+    build_runtime_carry(pkb, enc_table, tables, map, entry, session, None)
+}
+
+/// [`build_runtime_with`] after a `MapJump`: the models of the previous map survive (`CField::InitSDB`, US 0x004f7210, reuses the `CField`
+/// and only hides its models; a displayed control model is shown again at the entry point).
+pub fn build_runtime_carry(
+    pkb: &PkbSet,
+    enc_table: Option<[u8; 3]>,
+    tables: Option<std::sync::Arc<FieldTables>>,
+    map: &str,
+    entry: i32,
+    session: &GameSession,
+    carry: Option<crate::script_actors::CarriedActors>,
+) -> Option<FieldRuntime> {
     let mps = pkb.read(&format!("FIELD/MPS/{map}.MPS"))?;
     let mut sim = match FieldSim::new(map, mps, entry) {
         Ok(s) => s,
@@ -200,6 +214,19 @@ pub fn build_runtime_with(
         },
         None => log::warn!("field: no script for {map}"),
     }
+    if let Some(c) = carry {
+        let shown = c.ctrl_shown;
+        st.actors.take_carry(c);
+        if shown && entry >= 0 {
+            let ctrl = st.actors.ctrl as i32;
+            let mut host = FieldHost { st: &mut st, sim: &mut sim, session: None };
+            host.show_at_entry(ctrl, entry);
+            // the shown control model is under pad control again on the new map (corridor maps such as AP_10_U never call `SetManual`)
+            if let Some(a) = st.actors.get_mut(ctrl) {
+                a.manual = true;
+            }
+        }
+    }
     // BG models of the map (addressed 0x80|index by the script)
     if let Some(m) = sim.field.mps.as_ref().and_then(|m| m.models().ok()) {
         st.bg_models = m.len();
@@ -233,13 +260,24 @@ fn enter_field(
     mut session: ResMut<GameSession>,
     mut pad: ResMut<GamePad>,
     mut menu: ResMut<InGameMenu>,
+    sys: Option<Res<SshSys>>,
+    mut carry: ResMut<FieldCarry>,
 ) {
+    // `SSHSys::cbBattleA` (JP 0x003b6d90) keeps the result in `SSHSys+0x50..` (`SshSys::btl_result`); the scripts read it through
+    // `GetFieldData(9)` / `(0xd)` (the session mirror `ssh_sys`)
+    if req.entry == FieldRequest::RESTORE {
+        if let Some(s) = sys.as_deref() {
+            session.ssh_sys[0] = s.btl_result[0];
+            session.ssh_sys[1] = s.btl_result[1];
+            session.ssh_sys[2] = s.btl_result[2];
+        }
+    }
     // `CFieldSocket::fieldOverlay`: the map name WORLDMAP hands over to the world map instead of `CField`
     if req.map == crate::worldmap::WORLDMAP_NAME {
         commands.remove_resource::<FieldRuntime>();
         return;
     }
-    session.map = req.map.clone();
+    let prev_map = std::mem::replace(&mut session.map, req.map.clone());
     pad.swallow();
     menu.open = false;
     menu.request = false;
@@ -247,8 +285,14 @@ fn enter_field(
         log::error!("field: no disc data");
         return;
     };
-    match build_runtime_with(&d.pkb, d.enc_table, Some(d.tables.clone()), &req.map, req.entry, &session) {
+    let carried = carry.0.take().filter(|_| req.entry != FieldRequest::RESTORE);
+    match build_runtime_carry(&d.pkb, d.enc_table, Some(d.tables.clone()), &req.map, req.entry, &session, carried) {
         Some(mut rt) => {
+            // re-entering the same map (battle return, reload) keeps the map it was first entered from
+            if prev_map != req.map {
+                carry.1 = prev_map;
+            }
+            rt.st.prev_map = carry.1.clone();
             rt.cover.to_clear(30);
             log::info!(
                 "field: entered {} (entry {}), {} event boxes, encounter rate {}",
@@ -266,8 +310,87 @@ fn enter_field(
     }
 }
 
-fn exit_field(mut commands: Commands, rt: Option<ResMut<FieldRuntime>>, mut session: ResMut<GameSession>, mut canvas: ResMut<UiCanvas>) {
+/// FX X2: the field's `StartEffect` programs (`FIELD/EFF/<name>`) run on `sh2_gfx::effects::runner::FxRunner` (drawn by the effect renderer); the
+/// script sees the program's state (`EffectControl(h, 0)`: 1 loading, 3 running, 0 ended).  Without the renderer the host's timer answers.
+fn drive_field_effects(rt: Option<ResMut<FieldRuntime>>, runner: Option<ResMut<sh2_gfx::effects::runner::FxRunner>>, data: Option<Res<FieldData>>) {
+    use sh2_gfx::effects::runner::RunState;
+    use sh2_gfx::effects::scene::FxActor;
+    let (Some(mut rt), Some(mut runner), Some(data)) = (rt, runner, data) else { return };
+    let rt = &mut *rt;
+    for h in std::mem::take(&mut rt.st.effect_removed) {
+        runner.remove(h);
+    }
+    let place = |st: &crate::host::ScriptState, p: &crate::host::EffPlace| -> Option<FxActor> {
+        match *p {
+            crate::host::EffPlace::Pos(v) => Some(FxActor::at(Vec3::from_array(v), 30.0)),
+            crate::host::EffPlace::Model(n) => st.actors.get(n).filter(|a| a.loaded).map(|a| FxActor::at(Vec3::from_array(a.pos), 30.0)),
+        }
+    };
+    for i in 0..rt.st.effect_list.len() {
+        let (gen, tar) = {
+            let e = &rt.st.effect_list[i];
+            (e.gen.iter().filter_map(|p| place(&rt.st, p)).collect::<Vec<_>>(), e.tar.iter().filter_map(|p| place(&rt.st, p)).collect::<Vec<_>>())
+        };
+        let e = &mut rt.st.effect_list[i];
+        match e.runner {
+            None if e.state != 0 && !e.runner_tried => {
+                e.runner_tried = true;
+                let file = format!("FIELD/EFF/{}", e.name.to_ascii_uppercase());
+                if let Some(bytes) = data.pkb.read(&file) {
+                    if let Some(h) = runner.start(&e.name, bytes, gen, tar) {
+                        e.runner = Some(h);
+                    }
+                }
+            }
+            Some(h) => {
+                runner.set_env(h, gen, tar);
+                e.state = match runner.state(h) {
+                    Some(RunState::Loading) => 1,
+                    Some(RunState::Running) => 3,
+                    Some(RunState::Finished) | None => 0,
+                };
+            }
+            _ => {}
+        }
+    }
+    for (key, bank, id) in runner.drain_sounds() {
+        sh2_audio::post(sh2_audio::AudioRequest::PlayEffectSe { key: format!("FLDFX:{key}"), bank, id });
+    }
+}
+
+fn clear_field_effects(runner: Option<ResMut<sh2_gfx::effects::runner::FxRunner>>) {
+    if let Some(mut r) = runner {
+        r.clear();
+    }
+}
+
+/// The field's vibration sequences (ops 0x69..0x6e) -> `sh2_menu::vibration::VibrationRequest` pulses (CS4).
+fn forward_field_vibration(rt: Option<Res<FieldRuntime>>, out: Option<ResMut<Messages<sh2_menu::vibration::VibrationRequest>>>) {
+    let (Some(rt), Some(mut out)) = (rt, out) else { return };
+    let (big, small) = rt.st.vib_out;
+    if big > 0.0 || small {
+        out.write(sh2_menu::vibration::VibrationRequest { strength: if big > 0.0 { big } else { 1.0 }, ms: 50 });
+    }
+}
+
+/// Models kept from the map that was left by a `MapJump` (see [`build_runtime_carry`]).
+#[derive(Resource, Default)]
+pub struct FieldCarry(pub Option<crate::script_actors::CarriedActors>, pub String);
+
+fn exit_field(
+    mut commands: Commands,
+    rt: Option<ResMut<FieldRuntime>>,
+    mut session: ResMut<GameSession>,
+    mut canvas: ResMut<UiCanvas>,
+    req: Res<FieldRequest>,
+    mut carry: ResMut<FieldCarry>,
+) {
+    carry.0 = None;
     if let Some(mut rt) = rt {
+        // `CFieldSocket` reuses the `CField` for a map jump (not for a battle / the world map / the title)
+        if req.entry != FieldRequest::RESTORE && req.map != crate::worldmap::WORLDMAP_NAME && matches!(rt.phase, Phase::Handover) && !rt.st.game_over {
+            carry.0 = Some(rt.st.actors.carry_over());
+        }
         // SaveScriptRegister
         let n = rt.vm.n_regs.min(session.regs.len());
         for i in 0..n {
@@ -355,12 +478,20 @@ pub fn field_logic_tick(
     mut wm_req: ResMut<crate::worldmap::WorldMapRequest>,
     mut screens: ResMut<crate::fscreen::FieldScreens>,
     keys: Option<Res<ButtonInput<KeyCode>>>,
+    // round 5 FX: the encounter shatter (`BtlIn`, sh2_gfx::effects::btlin)
+    (mut btlin, cfg): (Option<ResMut<sh2_gfx::effects::btlin::BtlInFx>>, Option<Res<AppConfig>>),
 ) {
     let Some(mut rt) = rt else { return };
     let rt = &mut *rt;
+    // `CField::StartBattle` -> `CaptureBtlIn`: the frame shatters (falls back to the white flash without the disc tables)
+    let mut shatter = |boss: bool| btlin.as_deref_mut().map(|b| b.capture(&disc_root(cfg.as_deref()), boss)).unwrap_or(false);
     // a shop / tailor / ... screen was closed: the script that opened it continues (`cbShop(3)` -> `CField::Pause(1)`)
     if screens.take_finished() {
         rt.st.menu_wait = false;
+        // the name entry's result goes to the message variable buffer (`CField+0x2170`, read by `SpecialMenu(-1)`)
+        if let Some(n) = screens.name_result.clone() {
+            rt.st.name_buffer = n.into_bytes();
+        }
         if let Some((map, entry)) = screens.jump.take() {
             rt.st.pending_jump = Some((map, entry));
         }
@@ -458,8 +589,10 @@ pub fn field_logic_tick(
                     SimEvent::Battle { monster_set } => {
                         // CheckEncount > 0 -> ScriptSuspend -> InvokeBattle
                         rt.vm.pause(true);
-                        rt.cover.color = [255, 255, 255];
-                        rt.cover.to_opaque(20);
+                        if !shatter(false) {
+                            rt.cover.color = [255, 255, 255];
+                            rt.cover.to_opaque(20);
+                        }
                         rt.phase = Phase::BattleFlash { timer: 24, monster_set, over: BattleOverride::default() };
                         break;
                     }
@@ -493,8 +626,10 @@ pub fn field_logic_tick(
             if matches!(rt.phase, Phase::Run) {
                 if let Some(b) = rt.st.battle.take() {
                     rt.vm.pause(true);
-                    rt.cover.color = [255, 255, 255];
-                    rt.cover.to_opaque(20);
+                    if !shatter(b.boss) {
+                        rt.cover.color = [255, 255, 255];
+                        rt.cover.to_opaque(20);
+                    }
                     rt.phase = Phase::BattleFlash {
                         timer: 24,
                         monster_set: b.monster_set.clamp(0, 0xffff) as u16,
@@ -511,7 +646,12 @@ pub fn field_logic_tick(
                     rt.phase = Phase::Leaving { timer: 24, map, entry };
                 } else if let Some(req) = rt.st.menu_req.take() {
                     match req {
-                        MenuReq::Main { .. } | MenuReq::Sub { .. } | MenuReq::Tutorial { .. } | MenuReq::CmdScene { .. } => {
+                        // (round 5 MN) retail `InvokeCmdScene(a, b)`: the Graveyard soul charge screen
+                        MenuReq::CmdScene { a, b } => {
+                            log::info!("field: soul charge {a} / {b} requested");
+                            screens.req = Some(crate::fscreen::ScreenReq::SoulCharge { a, b });
+                        }
+                        MenuReq::Main { .. } | MenuReq::Sub { .. } | MenuReq::Tutorial { .. } => {
                             menu.request = true;
                         }
                         MenuReq::Save => {
@@ -523,6 +663,12 @@ pub fn field_logic_tick(
                             log::info!("field: shop {id} requested");
                             screens.req = Some(crate::fscreen::ScreenReq::Shop { id });
                         }
+                        MenuReq::NameEntry => {
+                            screens.req = Some(crate::fscreen::ScreenReq::NameEntry { kind: 1, current: String::new() });
+                        }
+                        MenuReq::WolfStamp { bout } => {
+                            screens.req = Some(crate::fscreen::ScreenReq::WolfStamp { bout });
+                        }
                         MenuReq::Tailor => {
                             log::info!("field: tailor requested");
                             screens.req = Some(crate::fscreen::ScreenReq::Tailor);
@@ -531,12 +677,19 @@ pub fn field_logic_tick(
                             sys.set_api(SshApi::GameOver);
                             rt.phase = Phase::Handover;
                         }
+                        MenuReq::EndToTitle => {
+                            log::info!("field: SpecialMenu(7): the field ends, back to the title");
+                            sys.request_title();
+                            rt.phase = Phase::Handover;
+                        }
                     }
                 }
             }
         }
         Phase::BattleFlash { timer, monster_set, over } => {
-            if timer > 0 {
+            // the shatter overlay covers the frame as soon as its capture is in: hand over right away (`CField::Polling` deletes the field the next tick)
+            let covered = btlin.as_deref().map(|b| b.covering()).unwrap_or(false);
+            if timer > 0 && !covered {
                 rt.phase = Phase::BattleFlash { timer: timer - 1, monster_set, over };
             } else {
                 // SSHSys::StartBattle(&btlParam, field)
@@ -571,9 +724,13 @@ pub fn field_logic_tick(
                     pc,
                 };
                 session.chr_pos = Some(ChrPos { map: rt.map.clone(), pos: rt.sim.player.pos, yaw: rt.sim.player.yaw });
-                sys.start_battle(Some(param), Some(&rt.map));
+                // op 0x2b sub 2 renamed the socket's map: the battle returns there (`CFieldSocket+0x64`)
+                let back = rt.st.retail.socket_map.clone().unwrap_or_else(|| rt.map.clone());
+                // `SetFieldData(8)`: a defeat in this battle returns to the field (`SSHSys+0x52`, read by `cbBattleA`)
+                sys.btl_result[2] = session.ssh_sys[2];
+                sys.start_battle(Some(param), Some(&back));
                 sys.start_battle(None, None);
-                field_req.map = rt.map.clone();
+                field_req.map = back;
                 field_req.entry = FieldRequest::RESTORE;
                 rt.phase = Phase::Handover;
                 log::info!("field: encounter -> battle (monster set {monster_set}) at {:?}", rt.sim.player.pos);
@@ -769,7 +926,10 @@ fn draw_field_ui(rt: &FieldRuntime, canvas: &mut UiCanvas) {
             bevy_ui::text(&mut g, t.x as f32, t.y as f32, &format!("{:02}:{:02}.{}", secs / 60, secs % 60, t.count % 10), 2, Rgba::NEUTRAL, true);
         }
         // HUD
-        bevy_ui::text(&mut g, 8.0, 4.0, &rt.map, 4, Rgba::new(0x80, 0xc0, 0xff, 0x60), true);
+        // dev map-name label: hidden while a cut scene / movie plays over the field (CS3)
+        if rt.st.mces.state == 0 && std::env::var_os("SH2_HIDE_MAP_LABEL").is_none() {
+            bevy_ui::text(&mut g, 8.0, 4.0, &rt.map, 4, Rgba::new(0x80, 0xc0, 0xff, 0x60), true);
+        }
         if rt.debug {
             bevy_ui::text(
                 &mut g,
@@ -990,13 +1150,21 @@ impl Plugin for FieldPlugin {
         let rendering = app.is_plugin_added::<::bevy::pbr::PbrPlugin>();
         app.add_plugins((MenuOverlayPlugin, crate::worldmap_plugin::WorldMapPlugin, crate::fscreen::FieldScreensPlugin, crate::points::PointsPlugin))
             .init_resource::<FieldAudioQueue>()
+            .init_resource::<FieldCarry>()
             .init_resource::<crate::worldmap::WorldMapRequest>()
             .add_systems(Startup, load_field_data)
             .add_systems(OnEnter(Scene::Field), enter_field)
             .add_systems(OnExit(Scene::Field), exit_field)
             .add_systems(
                 FixedUpdate,
-                (field_script_tick.in_set(GameSet::Script), field_logic_tick.in_set(GameSet::Logic), field_camera_tick.in_set(GameSet::Camera)).run_if(in_state(Scene::Field)),
+                (
+                    field_script_tick.in_set(GameSet::Script),
+                    crate::party::apply_party_ops_system.in_set(GameSet::Script).after(field_script_tick),
+                    forward_field_vibration.in_set(GameSet::Script).after(field_script_tick),
+                    field_logic_tick.in_set(GameSet::Logic),
+                    field_camera_tick.in_set(GameSet::Camera),
+                )
+                    .run_if(in_state(Scene::Field)),
             );
         if rendering {
             if !app.is_plugin_added::<crate::bevy::FieldMapPlugin>() {
@@ -1015,6 +1183,11 @@ impl Plugin for FieldPlugin {
             if !app.is_plugin_added::<crate::cutscene_plugin::CutscenePlugin>() {
                 app.add_plugins(crate::cutscene_plugin::CutscenePlugin);
             }
+            // FX X2: field effect programs (`StartEffect`)
+            if !app.is_plugin_added::<sh2_gfx::effects::runner::FxRunnerPlugin>() {
+                app.add_plugins(sh2_gfx::effects::runner::FxRunnerPlugin);
+            }
+            app.add_systems(Update, drive_field_effects.run_if(in_state(Scene::Field))).add_systems(OnExit(Scene::Field), clear_field_effects);
             // the radar in the top-left corner (`CNaviMap`)
             if !app.is_plugin_added::<crate::navimap_plugin::NaviMapPlugin>() {
                 app.add_plugins(crate::navimap_plugin::NaviMapPlugin);

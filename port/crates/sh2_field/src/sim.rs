@@ -92,6 +92,7 @@ pub enum SimEvent {
     MenuRequest,
 }
 
+#[derive(Clone)]
 pub struct FieldSim {
     pub map: String,
     pub field: Field,
@@ -297,7 +298,7 @@ impl FieldSim {
                 let (s, c) = self.player.yaw.sin_cos();
                 let q = [p[0] + s * PROBE_DIST, p[1], p[2] + c * PROBE_DIST];
                 if let Some(e) = &self.field.event_boxes {
-                    let h = e.hit_check(q, HitMode::KindNonZero);
+                    let h = e.hit_check(q, HitMode::All);
                     if h >= 0 && self.evt_mask & e.boxes[h as usize].flags & 4 != 0 {
                         ev.push(SimEvent::Examine(e.event_num(h)));
                     }

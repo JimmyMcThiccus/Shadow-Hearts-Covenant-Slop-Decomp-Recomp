@@ -141,4 +141,9 @@ impl ScriptImage {
     pub fn find_event(&self, kind: u16, id: u32) -> Option<u16> {
         self.events.iter().filter(|s| s.kind == kind).flat_map(|s| s.entries.iter()).find(|e| e.id == id).map(|e| e.func)
     }
+
+    /// Every event id of table `kind`.
+    pub fn event_ids(&self, kind: u16) -> Vec<u32> {
+        self.events.iter().filter(|s| s.kind == kind).flat_map(|s| s.entries.iter()).map(|e| e.id).collect()
+    }
 }

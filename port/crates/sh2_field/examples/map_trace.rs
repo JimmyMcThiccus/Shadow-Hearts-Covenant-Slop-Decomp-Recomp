@@ -25,6 +25,9 @@ fn step(rt: &mut FieldRuntime, session: &mut GameSession, tick: u32) {
 fn main() {
     let a: Vec<String> = std::env::args().skip(1).collect();
     let us = a.iter().any(|x| x == "--us");
+    if us {
+        sh2_core::boot::set_active_region(sh2_core::boot::Region::Us);
+    }
     let get = |k: &str| a.iter().position(|x| x == k).and_then(|i| a.get(i + 1)).cloned();
     let map = a.iter().find(|x| !x.starts_with("--") && x.chars().next().map(|c| c.is_ascii_uppercase()).unwrap_or(false)).cloned().expect("MAP");
     let entry: i32 = get("--entry").and_then(|v| v.parse().ok()).unwrap_or(0);
