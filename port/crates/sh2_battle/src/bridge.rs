@@ -33,6 +33,64 @@ pub struct BattleSetup {
     /// `MONSTERParam` ids whose library bit a victory sets (retail battle-result list `BtlSocket+0x316`, minus the records with
     /// `MONSTERParam+0x14` bit 6)
     pub library_ids: Vec<u16>,
+    /// `MONSETTbl` flags >> 2 (retail `CBattle+0x4866`, JP `bNoEvade`): 1 / 2 = the "Battle Basics" / "Combos" tutorial fights, 3 = an
+    /// event fight without ambush, 4 = no enemy ambush, 5 = forced enemy ambush (see [`check_gambit`])
+    pub battle_type: u8,
+}
+
+/// Accessory id whose wearer prevents enemy ambushes (`CheckGambit`: an equipped accessory `== 'I'` (73)).
+pub const ACC_NO_AMBUSH: i8 = 73;
+
+/// `CBattle::CheckGambit` (retail SH2US_BATTLE.BIN 0x4df640, integer form of JP 0x004bf000): who gets the first strike.
+///
+/// * battle type (`MONSETTbl` flags >> 2) 4: the enemies cannot ambush; 5: the enemies always ambush (chance 20000 / 10000) and the party never
+///   strikes first; any other non-zero type: nobody (tutorials / event fights).  A unit with `bFlagsA` bit 4 also cancels it (not modelled).
+/// * per side: `chance = 500 + 600 * avg(LUC) / 99 + rand() % 400` (in 1/10000), the side with the higher average AGL is rolled first
+///   (`rand() % 10000 <= chance`), a side needs at least two members; an `ACC_NO_AMBUSH` accessory in the party blocks the enemy roll.
+pub fn check_gambit(battle_type: u8, fighters: &[Fighter], anti_ambush: bool, rand: &mut dyn FnMut() -> u32) -> Ambush {
+    let mut no_enemy = anti_ambush;
+    let mut no_party = false;
+    match battle_type {
+        0 => {}
+        4 => no_enemy = true,
+        5 => no_party = true,
+        _ => return Ambush::None,
+    }
+    let side = |enemy: bool| {
+        let v: Vec<&Fighter> = fighters.iter().filter(|f| f.is_enemy == enemy).collect();
+        let n = v.len() as i64;
+        let agl: i64 = v.iter().map(|f| f.agl.max(0) as i64).sum();
+        let luc: i64 = v.iter().map(|f| f.luc.max(0) as i64).sum();
+        (n, agl, luc)
+    };
+    let (np, ap, lp) = side(false);
+    let (ne, ae, le) = side(true);
+    if np == 0 || ne == 0 {
+        return Ambush::None;
+    }
+    let mut r = |m: u32| (rand() % m) as i64;
+    let pc_chance = 500 + (lp * 600 / np) / 99 + r(400);
+    let mut en_chance = 500 + (le * 600 / ne) / 99 + r(400);
+    if battle_type == 5 {
+        en_chance = 20000;
+    }
+    let pc_try = |r: &mut dyn FnMut(u32) -> i64| r(10000) <= pc_chance && np >= 2 && !no_party;
+    let en_try = |r: &mut dyn FnMut(u32) -> i64| r(10000) <= en_chance && ne >= 2 && !no_enemy;
+    if ap * 10000 / np >= ae * 10000 / ne {
+        if pc_try(&mut r) {
+            Ambush::PcFirst
+        } else if en_try(&mut r) {
+            Ambush::EnemyFirst
+        } else {
+            Ambush::None
+        }
+    } else if en_try(&mut r) {
+        Ambush::EnemyFirst
+    } else if pc_try(&mut r) {
+        Ambush::PcFirst
+    } else {
+        Ambush::None
+    }
 }
 
 /// `LevelTable` backed by SSHDAT `PC_L`.
@@ -170,7 +228,11 @@ pub fn build_setup(data: &BattleData, session: &GameSession, pcs: &[u8], monster
         2 => EscapeMode::Always,
         _ => EscapeMode::Normal,
     };
-    Some(BattleSetup { fighters, names, pc_ids: ids, escape, ambush: Ambush::None, formation: set.formation, set: monster_set, library_ids })
+    // first strike / ambush (`CheckGambit`, after `PCEntry` / `MonsterEntry`)
+    let anti = pcs.iter().filter_map(|&pc| session.save.btl.pc(pc as usize)).any(|r| r.accessories.contains(&ACC_NO_AMBUSH));
+    let battle_type = set.battle_type();
+    let ambush = if std::env::var_os("SH2_BATTLE_NO_AMBUSH").is_some() { Ambush::None } else { check_gambit(battle_type, &fighters, anti, rand) };
+    Some(BattleSetup { fighters, names, pc_ids: ids, escape, ambush, formation: set.formation, set: monster_set, library_ids, battle_type })
 }
 
 /// Level-ups caused by one battle: `(pc id, old level, new level)`.

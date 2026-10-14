@@ -426,4 +426,39 @@ mod tests {
         // the floor proper stays at y = 0
         assert!(b.model.atomics.iter().filter(|a| a.name == "FL_A").all(|a| a.geometry.positions.iter().all(|p| p[1].abs() < 0.01)));
     }
+
+    /// Round 5 BE: every battle background of the US disc loads (model, `DAT`, `mbs` chunks), its `LIGHT` chunk decodes and its `EFFECT` records
+    /// build background effects; prints the per-stage summary (`cargo test -p sh2_battle every_us_bbg -- --nocapture`).
+    #[test]
+    fn every_us_bbg_loads() {
+        let Ok(dir) = std::env::var("SH2_US_DISC_DIR") else { return };
+        let Ok(d) = Sh2Disc::open(dir) else { return };
+        let mut n = 0;
+        let mut unsupported = std::collections::BTreeMap::new();
+        for id in 0..=255u32 {
+            if d.0.info().search_file(&format!("BTLDATA/BBG/{id:03}.BBG")).is_none() {
+                continue;
+            }
+            let b = load_bbg(&d, id).unwrap_or_else(|| panic!("bbg {id} does not load"));
+            assert!(!b.model.atomics.is_empty(), "bbg {id}: no atomics");
+            assert!(b.dims.iter().all(|v| v.is_finite() && *v > 0.0), "bbg {id}: DAT {:?}", b.dims);
+            let fx = sh2_gfx::effects::bgfx::BgFx::new(&effect_records(&b.sbd), 1);
+            for (_, k) in &fx.unsupported {
+                *unsupported.entry(*k).or_insert(0) += 1;
+            }
+            eprintln!(
+                "bbg {id:03}: {} atomics, DAT {:?}, {} lights, {} fx ({} unsupported), fog {}, bgcolor {:?}",
+                b.model.atomics.len(),
+                b.dims,
+                b.sbd.lights.len(),
+                fx.len(),
+                fx.unsupported.len(),
+                b.fog.is_some(),
+                b.bg_color
+            );
+            n += 1;
+        }
+        eprintln!("{n} BBGs; unsupported effect types {unsupported:?}");
+        assert!(n >= 90, "only {n} BBG files");
+    }
 }

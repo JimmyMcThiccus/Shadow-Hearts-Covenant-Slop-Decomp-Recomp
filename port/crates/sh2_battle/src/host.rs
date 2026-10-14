@@ -59,6 +59,48 @@ pub struct BtlHost {
     pub mp_cost_pct: i32,
     /// the active Tarot card as the damage rules see it (`CBattle+0x407c..`, `GetSAtkDamage` / `GetSkillPAtkDamage` card 8), synced by the plugin from `Battle::gmod`
     pub gm: rules::GlobalMod,
+    /// round 5 BE -- per fighter slot: the body CHR number (`BtlChr+0xec`, AI conditions 0x3c / 0x3f, `AIGetValue` 10)
+    pub models: Vec<i32>,
+    /// per fighter slot: status bits the unit is immune to (`MONSTERParam+0x32..0x34`, see [`monster_status_immunity`])
+    pub immune: Vec<u32>,
+    /// per fighter slot: `MONSTERParam+0x32` resist classes `(physical, magic)` (0 normal, 1 immune, 2 half, 3 absorb), enemies only
+    pub resist: Vec<(u8, u8)>,
+    /// the actor of the current / previous turn (`CBattle+0x3f82`, AI condition 0x3b)
+    pub cur_actor: i32,
+    pub prev_actor: i32,
+    /// the AIS scripts and `GetTarget` follow the retail (US) rules
+    pub us: bool,
+    /// per fighter slot: soul reward `MONSTERParam+0x2c`
+    pub souls: Vec<u16>,
+    /// per fighter slot: the boss death program `EFFECT/BD_%03d.EFD` of its CHR exists (retail phase 0x13, `DataReadEntry(0xc, 0xe, chr)`)
+    pub bd_fx: Vec<bool>,
+    /// engine-started effect programs requested by the battle (path, caster slot, target slot): `BD_%03d.EFD` when such a boss falls,
+    /// `UNION.EFD` for the last boss's special turn (`LastBossFunc`); the plugin drains it into `effects_bridge::ExtraFx`
+    pub engine_fx: Vec<(String, usize, usize)>,
+}
+
+/// Status bits a monster cannot receive: retail `AIIfFunc` case 0x3a / `GetTarget` criterion 130 decode `MONSTERParam+0x32..0x34` into the
+/// status word (`+0x34` bits 0..5 -> 0x1 0x2 0x4 0x8 0x20 0x80, `+0x32` bits 4..7 -> 0x800..0x4000, `+0x33` bits 0..4 -> 0x8000..0x80000,
+/// `+0x33` bit 5 -> 0x100).
+pub fn monster_status_immunity(rec: &[u8]) -> u32 {
+    let (b32, b33, b34) = (rec[0x32] as u32, rec[0x33] as u32, rec[0x34] as u32);
+    let mut m = 0u32;
+    for (bit, v) in [(0, 0x1), (1, 0x2), (2, 0x4), (3, 0x8), (4, 0x20), (5, 0x80)] {
+        if b34 & (1 << bit) != 0 {
+            m |= v;
+        }
+    }
+    for (bit, v) in [(4, 0x800), (5, 0x1000), (6, 0x2000), (7, 0x4000)] {
+        if b32 & (1 << bit) != 0 {
+            m |= v;
+        }
+    }
+    for (bit, v) in [(0, 0x8000), (1, 0x10000), (2, 0x20000), (3, 0x40000), (4, 0x80000), (5, 0x100)] {
+        if b33 & (1 << bit) != 0 {
+            m |= v;
+        }
+    }
+    m
 }
 
 /// `PCParam+0x84` in the 0xc0 byte `BTL0` party record (PCParam is the record shifted by 0x3c, see `structs::pcparam::AFFINITY`).
@@ -124,7 +166,63 @@ impl BtlHost {
             combo: vec![],
             mp_cost_pct: 100,
             gm: rules::GlobalMod::default(),
+            models: vec![0; slots],
+            immune: vec![0; slots],
+            resist: vec![(0, 0); slots],
+            cur_actor: -1,
+            prev_actor: -1,
+            us: false,
+            souls: vec![0; slots],
+            bd_fx: vec![false; slots],
+            engine_fx: vec![],
         }
+    }
+
+    /// `MonsterInit` / `AIInit` for every monster slot of `setup`: skill ids (`+0x16 / +0x18`), the physical-attack flag, the body model, the
+    /// status immunity and resist classes, and the AIS brain (`MONSTERParam+0x20` -> `BTLDATA/AIS/M%03d_%03d.AIS`, retail token dialect on the
+    /// US data).  PCs get their model number from `pc_models`.  Returns the number of scripted monsters.
+    pub fn setup_monsters(&mut self, data: &crate::data::BattleData, setup: &crate::bridge::BattleSetup, read: &dyn Fn(&str) -> Option<Vec<u8>>, pc_models: &dyn Fn(u8) -> i32) -> usize {
+        self.us = data.raw_us.is_some();
+        let dialect = if self.us { crate::ai::Dialect::Us } else { crate::ai::Dialect::Jp };
+        let mut scripted = 0;
+        for (i, f) in setup.fighters.iter().enumerate() {
+            if !f.is_enemy {
+                if let Some(Some(pc)) = setup.pc_ids.get(i) {
+                    self.models[i] = pc_models(*pc);
+                }
+                continue;
+            }
+            let Some(rec) = data.dat.record(crate::data::SEC_MONSTER, f.char_id.max(0) as usize, 0x38) else { continue };
+            let m = crate::data::MonsterParam::parse(rec);
+            self.skills[i] = (i16::from_le_bytes([rec[0x16], rec[0x17]]), i16::from_le_bytes([rec[0x18], rec[0x19]]));
+            self.atk_flag[i] = data.dat.record(crate::data::SEC_PATK, m.attack_table as usize, 0x18).map(|r| r[1] != 0).unwrap_or(true);
+            self.models[i] = m.chr_model as i32;
+            self.immune[i] = monster_status_immunity(rec);
+            self.resist[i] = (m.phys_resist(), m.magic_resist());
+            self.souls[i] = m.sp_reward;
+            self.bd_fx[i] = read(&format!("EFFECT/BD_{:03}.EFD", m.chr_model)).is_some();
+            let ai = i32::from_le_bytes([rec[0x20], rec[0x21], rec[0x22], rec[0x23]]);
+            if let Some(b) = read(&crate::ai::ais_path(ai, false)) {
+                self.brains[i] = crate::ai::AiScript::parse(&b, dialect).map(|s| AiBrain::new(Some(s)));
+                if self.brains[i].is_some() {
+                    scripted += 1;
+                }
+            }
+        }
+        scripted
+    }
+
+    /// Resist classes of fighter `t` against a hit (`physical` = `GetPAtkDamage` / `GetSkillPAtkDamage`, else `GetSAtkDamage`): monsters use
+    /// `MONSTERParam+0x32` for every element (retail `GetPAtkDamage` 0x64e060: `*resist = pParam[0x32] & 3` for an enemy defender).
+    pub fn resist_of(&self, t: usize, physical: bool) -> [rules::Resist; 6] {
+        let cls = self.resist.get(t).map(|r| if physical { r.0 } else { r.1 }).unwrap_or(0);
+        let r = match cls {
+            1 => rules::Resist::Immune,
+            2 => rules::Resist::Half,
+            3 => rules::Resist::Absorb,
+            _ => rules::Resist::Normal,
+        };
+        [r; 6]
     }
 
     fn next(&mut self) -> i32 {
@@ -161,6 +259,12 @@ impl BtlHost {
                         last_target: -1,
                         atk_flag: self.atk_flag.get(i).copied().unwrap_or(true),
                         flags_fe: 0,
+                        model: self.models.get(i).copied().unwrap_or(0),
+                        element: x.element.0,
+                        guarding: x.status.iter().any(|m| m.kind == rules::modkind::GUARD_PART || m.kind == rules::modkind::GUARD_FULL),
+                        immune: self.immune.get(i).copied().unwrap_or(0) | pc_immunity(&x.status, &x.passives),
+                        // a timed record (buff / debuff with a duration) is what the retail dispel record 'N' removes
+                        buffed: x.status.iter().any(|m| m.turns > 0 && m.kind != rules::modkind::STATUS),
                     }
                 }
                 None => AiChr::default(),
@@ -182,7 +286,7 @@ impl BtlHost {
             if !me.is_enemy && c.sp < 1 && !matches!(c.char_id, 8..=10) {
                 continue;
             }
-            let bad = c.status.iter().any(|m| m.kind == 0x47 && (m.value & 0x24) != 0);
+            let bad = c.status.iter().any(|m| m.kind == rules::modkind::STATUS && (m.value & 0x24) != 0);
             if bad {
                 continue;
             }
@@ -266,6 +370,12 @@ impl Rng for Rn<'_> {
     }
 }
 
+/// Status bits a unit is protected against: the protection records (`'T'` duration type 2, port kind `modkind::STATUS_PROTECT`) of its
+/// status list and of the passives of its accessories.
+fn pc_immunity(status: &[StatMod], passives: &[StatMod]) -> u32 {
+    status.iter().chain(passives).filter(|m| m.kind == rules::modkind::STATUS_PROTECT).fold(0, |a, m| a | m.value as u32)
+}
+
 fn views<'a>(a: &'a Fighter, d: &'a Fighter) -> (rules::AttackerView<'a>, rules::DefenderView<'a>) {
     let aview = rules::AttackerView {
         is_enemy: a.is_enemy,
@@ -297,8 +407,31 @@ fn views<'a>(a: &'a Fighter, d: &'a Fighter) -> (rules::AttackerView<'a>, rules:
 }
 
 impl Host for BtlHost {
+    fn event(&mut self, e: &crate::flow::BattleEvent) {
+        match e {
+            crate::flow::BattleEvent::TurnStart { chr } => {
+                self.prev_actor = self.cur_actor;
+                self.cur_actor = *chr as i32;
+            }
+            // retail phase 0x13 (CBattle::Polling US 0x46d478): a fallen boss whose CHR has a `BD_%03d.EFD` plays it (SE 2000 first)
+            crate::flow::BattleEvent::Defeated { chr } if self.bd_fx.get(*chr).copied().unwrap_or(false) => {
+                let m = self.models.get(*chr).copied().unwrap_or(0);
+                self.engine_fx.push((format!("EFFECT/BD_{m:03}.EFD"), *chr, *chr));
+            }
+            _ => {}
+        }
+    }
+
     fn friendship(&self, a: usize, b: usize) -> i32 {
         self.friend(a, b)
+    }
+
+    fn defender_resist(&self, t: usize, physical: bool) -> [rules::Resist; 6] {
+        self.resist_of(t, physical)
+    }
+
+    fn monster_soul(&self, k: usize) -> u16 {
+        self.souls.get(k).copied().unwrap_or(0)
     }
 
     fn fusion_info(&self, id: i32) -> Option<(String, u32, i32)> {
@@ -319,6 +452,7 @@ impl Host for BtlHost {
         let tables = self.tables.ai_tables();
         let (combo_pend, combo_cnt) = (self.combo_pend, self.combo_cnt);
         let combo_target = self.combo_target(actor, f);
+        let (prev_actor, combo_n, us) = (self.prev_actor, self.combo.len() as i16, self.us);
         let bag = |_: usize| false;
         let mut rng = Rn(self);
         let decision = {
@@ -326,7 +460,19 @@ impl Host for BtlHost {
             let mut brain = rng.0.brains.get_mut(actor).and_then(|b| b.take());
             let d = match brain.as_mut() {
                 Some(b) => {
-                    let mut env = AiEnv { chrs: &chrs, tables: &tables, rng: &mut rng, combo_pending: combo_pend || combo_cnt, turn_pend_mask: combo_pend, combo_count: combo_cnt, combo_target, bag: &bag };
+                    let mut env = AiEnv {
+                        chrs: &chrs,
+                        tables: &tables,
+                        rng: &mut rng,
+                        combo_pending: combo_pend || combo_cnt,
+                        turn_pend_mask: combo_pend,
+                        combo_count: combo_cnt,
+                        combo_target,
+                        bag: &bag,
+                        prev_actor,
+                        combo_n,
+                        us,
+                    };
                     Some(b.decide(&mut env, actor))
                 }
                 None => None,
@@ -353,12 +499,19 @@ impl Host for BtlHost {
             Some(d) => {
                 host.ai_scripted += 1;
                 match d {
-                    AiDecision::Attack { target, shape } => MenuEvent::Attack { actor: me, target, kind: shape.clamp(0, 3), skill: -1 },
+                    AiDecision::Attack { target, shape } => MenuEvent::Attack { actor: me, target, kind: if (0..=3).contains(&shape) { shape } else { 0 }, skill: -1 },
                     AiDecision::SkillAttack { target, skill } | AiDecision::MonsterSkill { skill, target } => MenuEvent::Special { a: skill, b: target, enemy_like: true },
                     AiDecision::Item { item, target } => MenuEvent::Item { item, target },
                     AiDecision::ItemAction { id, target, attack_kind: None } => MenuEvent::Magic { id, target },
                     AiDecision::ItemAction { target, attack_kind: Some(_), .. } => MenuEvent::Attack { actor: me, target, kind: 0, skill: -1 },
-                    AiDecision::Move { .. } | AiDecision::Escape { .. } | AiDecision::Guard | AiDecision::LastBoss | AiDecision::Leave => MenuEvent::Guard { actor: me },
+                    // AIS 0x27: Link with an ally (`GetMoveTarget`), phase 7 -- the flow's Link phase forms the combo
+                    AiDecision::Move { target, .. } if target >= 0 && (target as usize) < f.len() && target != me => MenuEvent::Link { actor: me, target },
+                    // AIS 0x2a: `LastBossFunc` -- `EFFECT/UNION.EFD` with the core and its parts, then `LastBossSpecial` re-arranges them; the turn ends
+                    AiDecision::LastBoss => {
+                        host.engine_fx.push(("EFFECT/UNION.EFD".to_string(), actor, actor));
+                        MenuEvent::Guard { actor: me }
+                    }
+                    AiDecision::Move { .. } | AiDecision::Escape { .. } | AiDecision::Guard | AiDecision::Leave => MenuEvent::Guard { actor: me },
                     AiDecision::Nothing | AiDecision::PcSkill { .. } => unreachable!(),
                 }
             }
@@ -414,31 +567,52 @@ impl Host for BtlHost {
         let offensive = rec.is_offensive();
         let damage_recs: Vec<&EffRec> = recs.iter().filter(|r| r.kind == 1 || r.kind == 2).collect();
         if offensive && tgt.hp > 0 {
-            // damage skill / spell: `GetSkillPAtkDamage` (kind 1) or `GetSAtkDamage` (kind 2 and the HP-magic kinds)
-            let physical = damage_recs.first().map(|r| r.kind == 1).unwrap_or(false);
-            let element = damage_recs.first().map(|r| if r.element >= 6 { me.element } else { rules::Element(r.element) }).unwrap_or(me.element);
-            let power = (rec.power as f32 / 100.0).clamp(0.5, 4.0);
-            let (mut av, dv) = views(&me, &tgt);
-            // a spell cast inside a Link combo gets the friendship boost (`GetSAtkDamage`: `mult += friendship(attacker, leader) * 0.2 / 10000`)
-            let combo_active = !self.combo.is_empty() && !me.is_enemy;
-            if combo_active {
-                if let Some(&leader) = self.combo.first() {
-                    if leader != actor {
-                        av.friendship_with_leader = self.friend(actor, leader);
+            // damage skill / spell: `GetSkillPAtkDamage` (kind 1) or `GetSAtkDamage` (kind 2); a record without damage words (Instant Death, status /
+            // debuff skills) deals no damage -- retail `EffectDamageSet` only runs the damage functions for kinds 1 / 2
+            if !damage_recs.is_empty() {
+                let physical = damage_recs.first().map(|r| r.kind == 1).unwrap_or(false);
+                let element = damage_recs.first().map(|r| if r.element >= 6 { me.element } else { rules::Element(r.element) }).unwrap_or(me.element);
+                let power = (rec.power as f32 / 100.0).clamp(0.5, 4.0);
+                let (mut av, mut dv) = views(&me, &tgt);
+                if tgt.is_enemy {
+                    // monster resist classes `MONSTERParam+0x32` (retail `GetSAtkDamage` / `GetSkillPAtkDamage`), then the flow-side 0x24 fold
+                    dv.resist = self.resist_of(t, physical);
+                }
+                // a spell cast inside a Link combo gets the friendship boost (`GetSAtkDamage`: `mult += friendship(attacker, leader) * 0.2 / 10000`)
+                let combo_active = !self.combo.is_empty() && !me.is_enemy;
+                if combo_active {
+                    if let Some(&leader) = self.combo.first() {
+                        if leader != actor {
+                            av.friendship_with_leader = self.friend(actor, leader);
+                        }
                     }
                 }
+                let gm = self.gm;
+                let mut rn = Rn(self);
+                let hit = rules::MagicHit { power, power2: 1.0, flat_bonus: 0, element, turn_no: 0, combo_active, combo_friend_bonus: 0, fusion_flat: 0, gm };
+                let r = if physical { rules::skill_physical_damage(&av, &dv, &hit, &mut rn) } else { rules::magic_damage(&av, &dv, &hit, &mut rn) };
+                out.push((t, r.damage.round() as i32));
             }
-            let gm = self.gm;
-            let mut rn = Rn(self);
-            let hit = rules::MagicHit { power, power2: 1.0, flat_bonus: 0, element, turn_no: 0, combo_active, combo_friend_bonus: 0, fusion_flat: 0, gm };
-            let r = if physical { rules::skill_physical_damage(&av, &dv, &hit, &mut rn) } else { rules::magic_damage(&av, &dv, &hit, &mut rn) };
-            out.push((t, r.damage.round() as i32));
-            // status words of the same record
-            let st: Vec<EffRec> = recs.iter().filter(|r| r.kind == 0x47 || r.kind == 0x48).copied().collect();
-            if !st.is_empty() {
-                if let Some(Some(f)) = fighters.get_mut(t) {
+            // the other records of the same skill (statuses, debuffs, instant death, cuts, drains ...) through `EffectCodeFunc`; monsters are immune to the
+            // bits of `MONSTERParam+0x32..0x34`
+            let rest: Vec<EffRec> = recs.iter().filter(|r| r.kind != 1 && r.kind != 2).copied().collect();
+            if !rest.is_empty() {
+                let imm = if tgt.is_enemy { self.immune.get(t).copied().unwrap_or(0) } else { 0 };
+                let env = crate::actions::EcEnv { immune: imm, pc: if tgt.is_enemy { -1 } else { tgt.char_id }, ..Default::default() };
+                if let Some(Some(f)) = fighters.get(t).cloned().map(|x| x) {
+                    let mut copy = f.clone();
                     let mut rn = Rn(self);
-                    apply_records(&st, f, &mut rn);
+                    let ap = crate::actions::effect_code(&rest, &mut copy, &env, &mut rn);
+                    if let Some(Some(f)) = fighters.get_mut(t) {
+                        f.mp = copy.mp;
+                        f.sp = copy.sp;
+                        f.status = copy.status.clone();
+                    }
+                    // HP changes of these records (instant death, cuts, drains) go through the flow as damage
+                    let dhp = if ap.fell && copy.hp <= 0 { tgt.hp } else { -ap.hp };
+                    if dhp != 0 {
+                        out.push((t, dhp));
+                    }
                 }
             }
         } else if !offensive || tgt.hp <= 0 {

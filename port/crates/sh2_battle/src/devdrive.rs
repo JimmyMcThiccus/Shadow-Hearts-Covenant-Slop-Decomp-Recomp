@@ -29,7 +29,7 @@ use crate::ui::{Page, Root};
 
 #[derive(Resource, Default)]
 pub struct DevDrive {
-    set: u8,
+    set: u16,
     shots: Option<std::path::PathBuf>,
     cmds: Vec<String>,
     turn: usize,
@@ -215,6 +215,13 @@ fn drive(
     db: Option<Res<crate::plugin::BattleDb>>,
 ) {
     dd.ticks += 1;
+    // hard frame cap (round 5 rule: every dev-drive run must end by itself): `SH2_BATTLE_MAX_TICKS`, default 30000 ticks (~8 min at 60 Hz)
+    let cap = std::env::var("SH2_BATTLE_MAX_TICKS").ok().and_then(|v| v.parse::<u64>().ok()).unwrap_or(30_000);
+    if dd.ticks > cap {
+        log::warn!("devdrive: frame cap {cap} reached, exiting");
+        exit.write(AppExit::Success);
+        return;
+    }
     inj.raw = 0;
     // screenshots queued by the previous frames
     if let Some(name) = dd.queue.pop() {

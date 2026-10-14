@@ -34,7 +34,6 @@ use sh2_menu::plugin::Cover;
 use sh2_menu::session::{GameSession, RowTable};
 
 use crate::actions::ActionTables;
-use crate::ai::{AiBrain, AiScript, Dialect};
 use crate::bridge::{self, BattleSetup, LevelUps};
 use crate::hud_result;
 use crate::camera::{BtlCamera, CamChr, CamInput, CamRequest};
@@ -337,6 +336,8 @@ pub struct BattleRuntime {
     /// damage numbers, total hit panels, status icons and the textured ring (`hud_hits`)
     pub hits: crate::hud_hits::HitFx,
     sparks: Vec<Spark>,
+    /// FX round 5 hook: weapon hits `(target, critical)` of this frame for the retail hit bursts (`effects_bridge::effmdl_battle_hooks`, `PAtkHitSet` `EffMdl`s)
+    pub weapon_hits: Vec<(usize, bool)>,
     anims: Vec<Anim>,
     pub cover: Cover,
     pub ticks: u64,
@@ -546,8 +547,7 @@ fn enter_battle(
     // monsters: rewards from the retail table when the demo record has none, AI scripts, skill lists
     let mut host = BtlHost::new(seed as u32, tables.0.clone(), n);
     let mut us_used = 0;
-    let mut scripted = 0;
-    for (i, f) in setup.fighters.iter_mut().enumerate() {
+    for f in setup.fighters.iter_mut() {
         if !f.is_enemy {
             continue;
         }
@@ -558,18 +558,12 @@ fn enter_battle(
                 us_used += 1;
             }
         }
-        host.skills[i] = (i16::from_le_bytes([rec[0x16], rec[0x17]]), i16::from_le_bytes([rec[0x18], rec[0x19]]));
-        host.atk_flag[i] = db.0.dat.record(23, m.attack_table as usize, 0x18).map(|r| r[1] != 0).unwrap_or(true);
-        let ai = i32::from_le_bytes([rec[0x20], rec[0x21], rec[0x22], rec[0x23]]);
-        if let Some(files) = files.as_ref() {
-            if let Ok(b) = files.disc.read(&crate::ai::ais_path(ai, false)) {
-                host.brains[i] = AiScript::parse(&b, Dialect::Jp).map(|sc| AiBrain::new(Some(sc)));
-                if host.brains[i].is_some() {
-                    scripted += 1;
-                }
-            }
-        }
     }
+    // round 5 BE: skills, attack flag, body models, status immunity / resist classes and the AIS brains (retail token dialect on the US disc)
+    let scripted = match files.as_ref() {
+        Some(files) => host.setup_monsters(&db.0, &setup, &|p| files.disc.read(p).ok(), &|pc| session.save.btl.pc(pc as usize).map(|r| r.model_nums[0] as i32).unwrap_or(0)),
+        None => 0,
+    };
     host.load_friendship(&setup.pc_ids, &|id| session.save.btl.pc(id as usize).map(|r| r.raw));
     let ambush = setup.ambush;
     let mut battle = Battle::new(host, setup.fighters.clone(), setup.ambush, setup.escape, seed);
@@ -578,6 +572,8 @@ fn enter_battle(
     // development aids: `SH2_TAROT_CARD=<id>` / `SH2_TAROT_VARIANT=<0..3>` force the draw (Lucia's saved cards are not checked)
     battle.tarot.force_card = std::env::var("SH2_TAROT_CARD").ok().and_then(|v| v.parse().ok());
     battle.tarot.force_variant = std::env::var("SH2_TAROT_VARIANT").ok().and_then(|v| v.parse().ok());
+    // round 5 BP hook: the party-side engine (PC stat pipeline, resists, guard stances, items / magic / skills, statuses, score counters)
+    crate::flow::party_setup(&mut battle, &db.0, tables.0.clone(), &session, &setup.pc_ids);
     let mut cover = Cover::opaque([255, 255, 255]);
     cover.to_clear(24);
     log::info!("battle: start set {} ({n} fighters, {scripted} AIS scripts, {us_used} US reward rows, background {})", setup.set, req.param.w0);
@@ -616,6 +612,7 @@ fn enter_battle(
             h
         },
         sparks: vec![],
+        weapon_hits: vec![],
         anims: vec![Anim::default(); n],
         cover,
         ticks: 0,
@@ -867,6 +864,8 @@ fn build_menu(rt: &BattleRuntime, actor: usize, session: &GameSession, cx: &Cx) 
             k.mp = rt.battle.tarot.mp_cost(k.mp);
         }
     }
+    // round 5 BP hook: Seal, `DecMPp` costs, combo chains, combo magic
+    rt.battle.menu_extras(actor, &mut b);
     let menu = BtlMenu::new(b);
     // `BtlMenu` ctor: the cursor path of the actor's last command is restored unless the option (`MENU+0x274` >> 6) is set
     if session.save.menu.battle_cursor_memory() {
@@ -900,12 +899,19 @@ fn begin_action_fx(rt: &mut BattleRuntime, cx: &Cx) {
     }
     rt.fx = None;
     let mut started = false;
-    if info.effect_id >= 0 {
+    // the retail `EffectFunc` effect choice (`raw >= 1000` -> `raw - 1000`, 137 none, the 135 / 222 / 229 variants): effects_bridge::retail_effect_id
+    let eid = if sh2_core::boot::is_retail() {
+        let rnd = (rt.fx_started as u32).wrapping_mul(2654435761) >> 7;
+        crate::effects_bridge::retail_effect_id(info.effect_id, crate::effects_bridge::EffectChoice { rand: rnd, check_6a6af0: true, ..Default::default() }).unwrap_or(-1)
+    } else {
+        info.effect_id
+    };
+    if eid >= 0 {
         if let Some(files) = cx.files {
-            if let Ok(bytes) = files.disc.read(&efd_path(info.effect_id)) {
+            if let Ok(bytes) = files.disc.read(&efd_path(eid)) {
                 let p = |i: usize| rt.positions.get(i).copied().unwrap_or(Vec3::ZERO);
                 let ctx = FxContext { gen: vec![p(actor)], targets: vec![p(info.target)], height: 17.0 };
-                match FxProgram::new(info.effect_id, bytes, ctx) {
+                match FxProgram::new(eid, bytes, ctx) {
                     Ok(prog) => {
                         log::info!("battle: effect {:03} for '{}' ({} bytes)", info.effect_id, info.name, prog.assets.file.len());
                         rt.fx = Some(FxPlay { prog, acc: 0.0, hit: false, info: info.clone(), banks: Default::default() });
@@ -973,6 +979,23 @@ fn fx_env(rt: &BattleRuntime, info: &ActionInfo) -> FxEnv {
     FxEnv { gen: vec![get(info.actor)], targets: vec![get(info.target)], scene_lights: rt.scene_lights.clone() }
 }
 
+/// Drain `BtlHost::engine_fx` into the engine-program runner (`effects_bridge::ExtraFx`, FX X4).
+fn start_engine_fx(rt: Option<ResMut<BattleRuntime>>, extra: Option<ResMut<crate::effects_bridge::ExtraFx>>, disc: Option<Res<Sh2Disc>>) {
+    let (Some(mut rt), Some(mut extra), Some(disc)) = (rt, extra, disc) else { return };
+    // opt-in until the program camera of `BD_%03d.EFD` hands the view back (FX request 13: with it on, the victory shots look at the floor)
+    let off = std::env::var_os("SH2_BATTLE_ENGINE_FX").is_none();
+    for (path, gen, tar) in std::mem::take(&mut rt.battle.host.engine_fx) {
+        if off {
+            continue;
+        }
+        let tag = if path.contains("UNION") { "union" } else { "bd" };
+        if extra.start(&disc, &path, tag, gen, tar).is_some() && tag == "bd" {
+            // the boss's death program is watched: the victory waits a little for it (retail phase 0x13 steps)
+            rt.wait = rt.wait.max(2.5);
+        }
+    }
+}
+
 /// Run the effect clock (30 Hz) and collect its events.
 fn step_fx(rt: &mut BattleRuntime, dt: f32) {
     let mut shakes = vec![];
@@ -993,13 +1016,20 @@ fn step_fx(rt: &mut BattleRuntime, dt: f32) {
                     FxEvent::Sound { bank, id } => sounds.push((fx.prog.id, bank, id)),
                     FxEvent::Shake { power } => shakes.push(power),
                     FxEvent::CameraControl(on) => rt.fx_cam_control = on,
-                    e @ (FxEvent::CharMotion { .. } | FxEvent::ActorAlpha { .. } | FxEvent::ActorColor { .. } | FxEvent::ActorShow { .. } | FxEvent::ActorRoot { .. } | FxEvent::ChangeFusion | FxEvent::BackgroundShow(_)) => rt.fx_actor_events.push(e),
+                    e @ (FxEvent::CharMotion { .. } | FxEvent::ActorAlpha { .. } | FxEvent::ActorColor { .. } | FxEvent::ActorShow { .. } | FxEvent::ActorRoot { .. } | FxEvent::ChangeFusion | FxEvent::BackgroundShow(_) | FxEvent::HitMark { .. } | FxEvent::MagicStart { .. } | FxEvent::MagicMotionEnd { .. }) => rt.fx_actor_events.push(e),
+                    e @ FxEvent::StreamBgm { .. } => {
+                        crate::effects_bridge::forward_audio_event(&e);
+                    }
                     _ => {}
                 }
             }
         }
         rt.fx_cam = if rt.fx_cam_control { fx.prog.view().camera } else { None };
         done = fx.prog.finished;
+        // a program that started its own music (`sbgCreate` / `sbgPlay`) has it faded by the effect's destructor (FX X5)
+        if done && fx.prog.host.scene.stream.take().is_some() {
+            sh2_audio::post(sh2_audio::AudioRequest::FadeStreamBgm { time: 500 });
+        }
         for (id, bank, local) in &sounds {
             if !fx.banks.contains_key(bank) {
                 if let Some(b) = fx.prog.sound_bank(*bank) {
@@ -1148,6 +1178,17 @@ fn consume_events(rt: &mut BattleRuntime, text: &BtlText) -> Option<(Option<rule
                 rt.wait = rt.wait.max(2.3);
             }
             BattleEvent::SanityDrop { .. } | BattleEvent::PhaseChanged(_) | BattleEvent::ComboLink { .. } => {}
+            // party-side engine reports (BP): shown by their presentation code when it lands; ignored here meanwhile
+            // round 5 BP hook: floating MP / SP / status texts, "Miss", the berserk / paralysed messages
+            BattleEvent::Party(p) => {
+                let fighters = &rt.setup.fighters;
+                let names = &rt.setup.names;
+                let msg = crate::hud_hits::party_event_texts(&mut rt.hits, &p, &|i| fighters.get(i).map(|f| f.is_enemy).unwrap_or(true), &|i| names.get(i).cloned().unwrap_or_default(), text);
+                if let Some(t) = msg {
+                    rt.mes.post(hud_result::MesKind::Center, hud_result::MesClose::TimedOrButton, &t);
+                    rt.wait = rt.wait.max(2.3);
+                }
+            }
         }
     }
     if victory.is_some() || defeat || escaped {
@@ -1186,6 +1227,7 @@ fn show_damage(rt: &mut BattleRuntime, text: &BtlText, target: usize, amount: i3
         }
         if amount > 0 && rt.fx.is_none() && !matches!(rt.battle.phase, Phase::Effect | Phase::Fusion | Phase::RingSkill | Phase::Aroma) {
             rt.sparks.push(Spark { target, t: 0.0, critical });
+            rt.weapon_hits.push((target, critical));
         }
         if let Some(a) = rt.anims.get_mut(target) {
             a.hit = 0.4;
@@ -1303,6 +1345,8 @@ pub fn battle_tick(
             *s = [p.x, p.y, p.z];
         }
     }
+    // round 5 BP hook: the area shapes of the party-side engine measure on the same positions
+    rt.battle.positions = rt.positions.iter().map(|p| [p.x, p.y, p.z]).collect();
     let keys = pad.menu_keys();
     let win_motion = if rt.win_done { hud_result::WinMotion::Done } else if rt.win_playing { hud_result::WinMotion::Playing } else { hud_result::WinMotion::Unknown };
     match &mut rt.stage {
@@ -1360,6 +1404,8 @@ pub fn battle_tick(
                 crate::devdrive::boost_reward(reward.as_mut());
                 let ups = bridge::apply_end(&mut session, &tbl, &rt.setup, &rt.battle.fighters, reward.as_ref());
                 write_back_friendship(&mut session, rt);
+                // round 5 BP hook: Score counters, Pillage items, Cash Steal
+                crate::flow::apply_battle_end(&rt.battle, &mut session, reward.is_some());
                 report.exp = reward.as_ref().map(|r| r.exp_total).unwrap_or(0);
                 report.cash = reward.as_ref().map(|r| r.cash).unwrap_or(0);
                 report.items = reward.as_ref().map(|r| r.items.clone()).unwrap_or_default();
@@ -1694,7 +1740,12 @@ fn run_battle(rt: &mut BattleRuntime, pad: &GamePad, ring_view: &mut RingView, k
                 (Some(pc), Some(db)) => db.0.ring_areas(pc as usize, hits.max(1) as usize),
                 _ => vec![],
             };
-            let custom = pc.and_then(|pc| ring_custom(session, pc));
+            // round 5 BP hook (R1): the Ring Customize settings of the retail record (`sh2_menu::ringcustom`: widths, ring type)
+            let br = match (pc, cx.db) {
+                (Some(pc), Some(db)) => Some(crate::actions::attack_ring(&db.0, session, pc)),
+                _ => None,
+            };
+            let custom = br.as_ref().and_then(|b| b.custom);
             // development aid: `SH2_BATTLE_RING=special` photographs the special-command ring colours on a weapon attack (`hud_hits` notes);
             // `SH2_BATTLE_RING=cure` the one-zone (60, 60, 15) Cure ring of the live capture `01l`
             let ring = match std::env::var("SH2_BATTLE_RING").ok().as_deref() {
@@ -1703,6 +1754,14 @@ fn run_battle(rt: &mut BattleRuntime, pad: &GamePad, ring_view: &mut RingView, k
                 _ if areas.is_empty() => RingRun::start(hits, rt.seed >> 3),
                 _ => RingRun::start_areas_custom(&areas, 1.6, rt.seed >> 3, custom),
             };
+            let mut ring = ring;
+            // round 5 BP hook (R1): `JRing+0x41` bits 2..3 ring type (practice / technical / gamble; the auto ring = 1)
+            if let Some(b) = br.as_ref().filter(|b| b.ring_type != 0) {
+                ring.ring.kind = b.ring_type.min(3);
+                if ring.ring.kind == sh2_gfx::effects::jring::KIND_GAMBLE {
+                    ring.ring.make_gamble_area();
+                }
+            }
             *ring_view = ring.view();
             rt.ring = Some(ring);
         }
@@ -2670,10 +2729,16 @@ impl Plugin for BattlePlugin {
                 .add_plugins(crate::stage::StagePlugin) // E1 hook: stage lights + background effects
                 .init_resource::<crate::effects_bridge::FxActorState>()
                 .init_resource::<crate::effects_bridge::FusionVis>()
+                .init_resource::<crate::effects_bridge::ExtraFx>() // FX round 5 hook: engine-started effect programs (FU_* fusion, UNION, BD_*)
+                .init_resource::<crate::effects_bridge::EffMdlQueue>() // FX round 5 hook: BTL_001 effect models (hit bursts, cast circle)
+                .init_resource::<crate::effects_bridge::BtlEffArt>()
+                .add_systems(Update, (crate::effects_bridge::effmdl_battle_hooks, crate::effects_bridge::drive_effmdls).chain().after(crate::effects_bridge::apply_fx_actor_events).run_if(in_state(Scene::Battle)))
                 .add_systems(OnEnter(Scene::Battle), spawn_battle_scene.after(enter_battle))
+                // round 5 BE: the engine-started programs the battle asks for (boss deaths `BD_%03d.EFD`, the last boss's `UNION.EFD`)
+                .add_systems(Update, start_engine_fx.before(crate::effects_bridge::step_extra_fx).run_if(in_state(Scene::Battle)))
                 .add_systems(
                     Update,
-                    (sync_positions, snapshot_actors, drive_camera.after(crate::models::spawn_battle_models), sync_battle_render, draw_ring, publish_fx, crate::effects_bridge::apply_fx_actor_events.after(crate::models::drive_battle_models), crate::effects_bridge::apply_fx_roots.after(crate::effects_bridge::apply_fx_actor_events), crate::effects_bridge::fusion_presentation.after(crate::models::drive_battle_models)).run_if(in_state(Scene::Battle)),
+                    (sync_positions, snapshot_actors, drive_camera.after(crate::models::spawn_battle_models), sync_battle_render, draw_ring, publish_fx, crate::effects_bridge::apply_fx_actor_events.after(crate::models::drive_battle_models), crate::effects_bridge::apply_fx_roots.after(crate::effects_bridge::apply_fx_actor_events), (crate::effects_bridge::step_extra_fx, crate::effects_bridge::fusion_presentation).chain().after(crate::models::drive_battle_models).before(drive_camera)).run_if(in_state(Scene::Battle)),
                 );
         }
     }
