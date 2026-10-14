@@ -30,6 +30,31 @@ pub struct BgFxRecord {
     pub param: Vec<u8>,
 }
 
+/// Alpha fade of one element (`EffectAlpha`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct ItemFade {
+    cur: f32,
+    target: f32,
+    step: f32,
+}
+
+impl Default for ItemFade {
+    fn default() -> Self {
+        ItemFade { cur: 1.0, target: 1.0, step: 0.0 }
+    }
+}
+
+impl ItemFade {
+    fn step(&mut self, frames: f32) {
+        let d = self.target - self.cur;
+        if frames <= 0.0 || d == 0.0 {
+            return;
+        }
+        let m = (self.step * frames).min(d.abs());
+        self.cur += m.copysign(d);
+    }
+}
+
 /// The camera as the effect classes see it (`CApp::camera`): position and forward axis in PS2 world space, far plane (`CApp::camera + 0x384`).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct BgCamera {
@@ -393,6 +418,8 @@ enum Item {
 /// All background effects of one stage / map (`BgEffectMan` set).
 pub struct BgFx {
     items: Vec<(u16, Item)>,
+    /// per-item alpha fades ([`Self::fade_slot`]), parallel to `items` (empty = all 1)
+    fades: Vec<ItemFade>,
     pub unsupported: Vec<(u16, u16)>,
     rng: super::jring::XorShift,
     /// `FpPrim::SetAlphaPower`: global alpha of the whole set (1.0)
@@ -410,7 +437,77 @@ pub mod tex {
     pub const FLARE: u8 = 10;
 }
 
+/// The `FpFlareParam` of a `fefCreateFlare(pos, rgba, size, pull, rate, min, amp, phase, n, flag0, flag1, dir, &handle)` call (JP 0x00325940): the same object as the
+/// type 3 background flare, the parameters arrive unpacked (`+0x14 size`, `+0x18 pull`, `+0x1c rate`, `+0x20 min`, `+0x24 amp`, `+0x28 phase`, `+0x2c n`).
+#[derive(Clone, Debug)]
+pub struct FefFlare {
+    pub pos: Vec3,
+    /// GS scale 0..128 (the script's floats)
+    pub color: Vec4,
+    pub size: f32,
+    pub pull: f32,
+    pub rate: f32,
+    pub min: f32,
+    pub amp: f32,
+    pub phase: f32,
+    pub n: usize,
+    /// bit 0: random colour (the record's `hi & 0x10`), bit 1: directional
+    pub flags: u32,
+    pub dir: Vec4,
+}
+
 impl BgFx {
+    /// An effect script's `fefCreateSmoke` (JP 0x00325240 -> `FpSmoke::CreateEffect(FpSmokeParam*)`): one looping smoke emitter.
+    pub fn from_smoke(par: &super::fp::FpSmokeParam, seed: u32) -> BgFx {
+        let mut rng = super::jring::XorShift((seed.max(1) as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
+        let em = super::fp::SmokeEmitter::create(par, true, &mut rng);
+        BgFx { items: vec![(0, Item::Smoke(Smoke { em }))], unsupported: vec![], rng, alpha: 1.0, visible: true, fades: vec![] }
+    }
+
+    /// An effect script's `fefCreateFlare` (JP 0x00325940 -> `FpFlare::CreateEffect(FpFlareParam*)`).
+    pub fn from_flare(f: &FefFlare, seed: u32) -> BgFx {
+        let mut rng = super::jring::XorShift((seed.max(1) as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
+        let min = if f.min == 0.0 { 0.8 } else { f.min };
+        let max = 1.0;
+        let r = f.amp * (rand_01(&mut rng) * 2.0 - 1.0);
+        let (b, step) = if f.phase <= 0.5 {
+            (max - (f.phase - 0.5) * (max - min) * 2.0, f.rate * -0.001 * (r + 1.0))
+        } else {
+            (min + f.phase * (max - min) * 2.0, f.rate * 0.001 * (r + 1.0))
+        };
+        let fl = Flare {
+            pos: f.pos,
+            color: f.color,
+            size: f.size,
+            pull: f.pull,
+            rate: f.rate,
+            min,
+            max,
+            brightness: b,
+            step,
+            amp: f.amp,
+            n: f.n.max(1),
+            facing: if f.flags & 2 != 0 { f.dir } else { Vec4::ZERO },
+            random_colour: f.flags & 1 != 0,
+            alpha_out: f.color.w,
+            rgb: f.color.truncate(),
+            visible: true,
+        };
+        BgFx { items: vec![(0, Item::Flare(fl))], unsupported: vec![], rng, alpha: 1.0, visible: true, fades: vec![] }
+    }
+
+    /// `FpPrim::SetPos1` of the objects created by an effect script (`fefSetPos`, `fefRetail3008`): smoke emits from the new place, flares move.
+    pub fn set_pos(&mut self, pos: Vec3) {
+        for (_, it) in self.items.iter_mut() {
+            match it {
+                Item::Smoke(s) => s.em.set_pos(pos.to_array()),
+                Item::Flare(f) => f.pos = pos,
+                Item::Flame(f) => f.pos = pos,
+                _ => {}
+            }
+        }
+    }
+
     /// Create the effects of the records that `CBgElement::Create` would pass to `BgEffectMan::CreateEffect` (records with the enable bit clear are skipped by the caller).
     pub fn new(records: &[BgFxRecord], seed: u32) -> BgFx {
         let mut rng = super::jring::XorShift((seed.max(1) as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
@@ -446,10 +543,12 @@ impl BgFx {
                         unsupported.push((r.slot, r.kind));
                     }
                 }
+                // `CreateFpEffect` accepts 210 and creates nothing (US / JP)
+                210 => {}
                 k => unsupported.push((r.slot, k)),
             }
         }
-        BgFx { items, unsupported, rng, alpha: 1.0, visible: true }
+        BgFx { items, unsupported, rng, alpha: 1.0, visible: true, fades: vec![] }
     }
 
     pub fn len(&self) -> usize {
@@ -459,6 +558,21 @@ impl BgFx {
         self.items.is_empty()
     }
 
+    /// `CFieldBG::EffectAlpha(id, alpha, time)` -> `BgEffectMan::EffectAlpha` -> element vtable `+0x34`: fade the alpha of every element created from
+    /// the records whose `s16 +0` (slot) is `slot` to `alpha` (1.0 = as authored) over `frames` 30 Hz frames (0 = at once).
+    pub fn fade_slot(&mut self, slot: u16, alpha: f32, frames: f32) {
+        if self.fades.len() < self.items.len() {
+            self.fades.resize(self.items.len(), ItemFade::default());
+        }
+        for (i, (s, _)) in self.items.iter().enumerate() {
+            if *s == slot {
+                let f = &mut self.fades[i];
+                f.target = alpha.max(0.0);
+                f.step = if frames > 0.0 { (f.target - f.cur).abs() / frames } else { f32::INFINITY };
+            }
+        }
+    }
+
     /// Advance by `frames` effect frames (1.0 = one 1/30 s tick) with the camera at `cam` (PS2 world, used by the flare visibility test).
     pub fn step(&mut self, frames: f32, cam: Vec3) {
         self.step_cam(frames, &BgCamera { pos: cam, ..BgCamera::default() });
@@ -466,6 +580,9 @@ impl BgFx {
 
     /// [`Self::step`] with the full camera (the fog classes fade by the camera's forward axis and far plane).
     pub fn step_cam(&mut self, frames: f32, cam: &BgCamera) {
+        for f in &mut self.fades {
+            f.step(frames);
+        }
         let rng: &mut dyn Rand = &mut self.rng;
         for (_, it) in &mut self.items {
             match it {
@@ -489,7 +606,8 @@ impl BgFx {
             return out;
         }
         let uv = [Vec2::new(0.0, 0.0), Vec2::new(0.0, 1.0), Vec2::new(1.0, 0.0), Vec2::new(1.0, 1.0)];
-        for (_, it) in &self.items {
+        for (i, (_, it)) in self.items.iter().enumerate() {
+            let alpha = self.alpha * self.fades.get(i).map(|f| f.cur).unwrap_or(1.0);
             match it {
                 Item::Flame(f) => {
                     let tex = if f.candle { tex::CANDLE } else { tex::TORCH };
@@ -501,7 +619,7 @@ impl BgFx {
                         let offs = [rot(Vec2::new(-h.x, -h.y)), rot(Vec2::new(-h.x, h.y)), rot(Vec2::new(h.x, -h.y)), rot(Vec2::new(h.x, h.y))];
                         // a particle whose period is exactly 0 divides 0 / 0 (`tail = period * 0.1`): the PS2 FPU saturates, the port zeroes the alpha instead of propagating a NaN
                         let fin = |v: f32| if v.is_finite() { v } else { 0.0 };
-                        let a = fin(d.color.w * self.alpha).clamp(0.0, 128.0);
+                        let a = fin(d.color.w * alpha).clamp(0.0, 128.0);
                         out.push(BgQuad { tex, center: d.pos, offs, uv, rgba: Vec4::new(fin(d.color.x), fin(d.color.y), fin(d.color.z), a), billboard: true, pull: 0.0, additive: true, screen: false, ztest: true });
                     }
                 }
@@ -509,7 +627,7 @@ impl BgFx {
                     if !f.visible {
                         continue;
                     }
-                    let a = (f.alpha_out * self.alpha).clamp(0.0, 128.0);
+                    let a = (f.alpha_out * alpha).clamp(0.0, 128.0);
                     let n = f.n;
                     let half = f.size * 0.5;
                     let cell = f.size / n as f32;
@@ -535,19 +653,19 @@ impl BgFx {
                         });
                     }
                 }
-                Item::Fog(f) => f.quads(self.alpha, &mut out),
-                Item::Funsui(f) => f.quads(self.alpha, &mut out),
-                Item::Lenz6(l) => l.quads(self.alpha, &mut out),
-                Item::Lenz(l) => l.quads(self.alpha, &mut out),
-                Item::Mote(m) => m.quads(self.alpha, &mut out),
-                Item::Rain(r) => r.quads(self.alpha, &mut out),
+                Item::Fog(f) => f.quads(alpha, &mut out),
+                Item::Funsui(f) => f.quads(alpha, &mut out),
+                Item::Lenz6(l) => l.quads(alpha, &mut out),
+                Item::Lenz(l) => l.quads(alpha, &mut out),
+                Item::Mote(m) => m.quads(alpha, &mut out),
+                Item::Rain(r) => r.quads(alpha, &mut out),
                 Item::Smoke(s) => {
                     for p in s.em.p.iter().filter(|p| p.t > 0.0 && p.t <= p.period) {
                         let h = Vec2::new(p.size[0] * 0.5 * p.scale, p.size[1] * 0.5 * p.scale);
                         let (sn, cs) = p.rot_z.sin_cos();
                         let rot = |q: Vec2| Vec2::new(q.x * cs - q.y * sn, q.x * sn + q.y * cs);
                         let offs = [rot(Vec2::new(-h.x, -h.y)), rot(Vec2::new(-h.x, h.y)), rot(Vec2::new(h.x, -h.y)), rot(Vec2::new(h.x, h.y))];
-                        let a = (p.alpha * self.alpha).clamp(0.0, 128.0);
+                        let a = (p.alpha * alpha).clamp(0.0, 128.0);
                         out.push(BgQuad {
                             tex: tex::SMOKE,
                             center: Vec3::from(p.pos),
@@ -738,5 +856,28 @@ mod tests {
         let fx = BgFx::new(&[BgFxRecord { slot: 9, kind: 299, param: vec![0; 64] }], 1);
         assert_eq!(fx.unsupported, vec![(9, 299)]);
         assert!(fx.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod fade_tests {
+    use super::*;
+
+    #[test]
+    fn fade_slot_ramps_the_alpha() {
+        let rec = BgFxRecord { slot: 7, kind: 201, param: vec![0; 64] };
+        let mut fx = BgFx::new(&[rec], 3);
+        let before = fx.quads().iter().map(|q| q.rgba.w).fold(0.0f32, f32::max);
+        fx.fade_slot(7, 0.0, 10.0);
+        fx.fade_slot(8, 0.0, 10.0);
+        for _ in 0..5 {
+            fx.step(1.0, Vec3::ZERO);
+        }
+        assert!((fx.fades[0].cur - 0.5).abs() < 1e-4);
+        for _ in 0..6 {
+            fx.step(1.0, Vec3::ZERO);
+        }
+        assert_eq!(fx.fades[0].cur, 0.0);
+        assert!(fx.quads().iter().all(|q| q.rgba.w == 0.0), "before {before}");
     }
 }

@@ -11,12 +11,14 @@
 //! * [`render`]   Bevy drawing of an [`scene::FxView`] (`EffectRenderPlugin`, `FxLive`)
 //! * [`jring`]    the Judgement Ring (battle input mechanic) — pure logic, unit tested
 //! * [`bgfx`]      background effects of stages / maps (`EFFECT` chunk: `FpTorch` / `FpCandle` / `FpFlare` / `FpSmoke`)
+//! * [`program`]  a running effect program (`FxProgram` = EFMG + VEC machine + [`program::FxHost`]), used by battle, field and cut scenes
 //! * [`compat`]   local stand-ins for types owned by other sections
 //!
 //! Rendering (GS packet building, `getPacket`/`MakePacket`) is deliberately **not** ported here: the
 //! logic modules produce plain data (vertex positions, UVs, colours) for the Bevy layer ([`render`]).
 
 pub mod bbp;
+pub mod btlin;
 pub mod bgfx;
 pub mod bng;
 pub mod bgfx_misc;
@@ -28,12 +30,15 @@ pub mod efmg;
 pub mod fp;
 pub mod jring;
 pub mod lenz;
+pub mod locus;
 pub mod mote207;
 pub mod motion;
 pub mod pathcalc;
+pub mod program;
 pub mod puti;
 pub mod rain206;
 pub mod render;
+pub mod runner;
 pub mod sbd;
 pub mod scene;
 pub mod screenfx;

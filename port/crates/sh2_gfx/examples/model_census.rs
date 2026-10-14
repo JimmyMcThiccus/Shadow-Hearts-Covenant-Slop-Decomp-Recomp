@@ -37,7 +37,7 @@ fn main() {
                         for a in &m.atomics {
                             *special.entry(a.b15 >> 4).or_default() += 1;
                             if a.b15 >> 4 != 0 && std::env::var_os("SH2_CENSUS_SPECIAL").is_some() {
-                                println!("special {} atomic {:?} model {tag}@{off:x}", a.b15 >> 4, a.name);
+                                println!("special {} atomic {:?} tex {} tex2 {} ntex {} flags {:#x} model {tag}@{off:x}", a.b15 >> 4, a.name, a.texture, a.texture2, m.textures.len(), a.flags);
                             }
                             match a.kind {
                                 AtomicKind::Billboard => *bill.entry(tag.clone()).or_default() += 1,
@@ -61,6 +61,9 @@ fn main() {
                     let is_char = path.starts_with("FIELD/MODEL/") || path.starts_with("BTLDATA/CHR/");
                     for ev in &m.events {
                         if ev.name.len() < 2 || !ev.name.chars().all(|c| c.is_ascii_alphanumeric() || c == ' ' || c == '_') { continue; }
+                        if std::env::var("SH2_CENSUS_EVENT").ok().as_deref() == Some(ev.name.trim()) {
+                            println!("event {} motion {:?} bone {} keys {} in {path}", ev.name, m.name, ev.bone, ev.key_count);
+                        }
                         let e = events.entry(format!("{}{}", if is_char { "C " } else { "  " }, ev.name)).or_default();
                         e.0 += 1;
                         e.1 += ev.key_count as usize;

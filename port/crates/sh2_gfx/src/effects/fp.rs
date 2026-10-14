@@ -267,6 +267,11 @@ impl SmokeEmitter {
         e
     }
 
+    /// `FpSmoke::SetPos1` (JP 0x002a8740): new particles are emitted from `pos` (PS2 world).
+    pub fn set_pos(&mut self, pos: [f32; 3]) {
+        self.pos = pos;
+    }
+
     /// Override the colour / alpha ramp starts with absolute frame counts (`FpSmoke::Create(void*)` with the retail `c4` / `c8` scalars; the percentage
     /// parameters of `FpSmokeParam` are converted to frames by [`SmokeEmitter::create`]).
     pub fn set_fade_frames(&mut self, c4: i32, c8: i32) {

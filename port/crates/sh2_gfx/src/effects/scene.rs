@@ -177,7 +177,10 @@ impl FxEnv {
 #[derive(Clone, Debug)]
 pub enum FxEvent {
     /// `btlEffectDamageSet(side, idx, ...)`: apply the action's result to target `index` now
-    Damage { side: i32, index: i32 },
+    ///
+    /// `power` / `extra` = the call's `args[7]` / `args[8]` (`EffectDamageSet(.., param_7, param_8)`: the hit's power percentage of the action, e.g. 30 for one
+    /// hit of a three-hit spell -> `GetSAtkDamage(ring, param_7 / 100, ..)`, and the second integer)
+    Damage { side: i32, index: i32, power: i32, extra: i32 },
     /// `ssePlaySe(bank, id)`: `bank` = effect sound section number
     Sound { bank: u32, id: u32 },
     /// stop a looping sound
@@ -216,9 +219,23 @@ pub enum FxEvent {
     /// retail `btlIdleMotionReset(side, idx, mode)` (id 1135, `IdelMotionReset`): re-select the idle / low-HP idle motion (mode 0 = only when needed,
     /// 1 = start it now, other = queue it after the current motion)
     IdleReset { side: i32, idx: i32, mode: i32 },
+    /// `sbg*`: the effect's own stream music (`EFFECT/EFXnnn.SSV`, `StreamBGM`): load / play / stop (fade frames) / volume
+    StreamBgm { op: StreamOp },
     /// `fefCreate*` / `fefRetail3010` / `fefSetPos`: an F-particle (`FpSmoke` / `FpFlare` / `FpThunder` / `FpTorch`) was created or moved; the
     /// renderer-side owner mirrors the scene's F-particle table
     Particle { handle: u32 },
+}
+
+/// What an `sbg*` call asks of the stream player.
+#[derive(Clone, Debug, PartialEq)]
+pub enum StreamOp {
+    /// `sbgCreate`: disc path of the `*.SSV` (`EFFECT/EFX081.SSV`)
+    Load(String),
+    Play,
+    /// `sbgStop(h, fade)` (`StreamBGM::Stop(fade, 0)`), `sbgDelete` = fade 0
+    Stop { fade: i32 },
+    /// `sbgSetVolume(h, volume)` (0..127)
+    Volume(i32),
 }
 
 // ------------------------------------------------------------------------------------------------------------------
@@ -234,6 +251,9 @@ pub enum Parent {
     Actor { side: i32, idx: i32, frame: String },
     /// another effect model (handle) frame
     Model { handle: u32, frame: String },
+    /// a model of the host scene found by name (`lsdGetModel` / `lsdAttach`, ids 2900 / 2901: a cut scene model, `FindLsdModel` + `searchFrame` +
+    /// `Frame::chainModel`), see [`FxScene::named_models`]
+    Named { name: String, frame: String },
 }
 
 pub struct FxModel {
@@ -302,6 +322,11 @@ pub struct FxCamera {
     pub motion: Option<CameraMotion>,
     /// `EFCM` header byte 10 & 3 == 1: the keys are in the space of a model
     pub relative: bool,
+    /// `EFCM` header byte 10 & 3 (`EffectCamera +0xc & 3`, `GetInter` / `GetPos` JP 0x003085c0 / 0x00308a30): 0 = the parent's root rotation and the frame's world
+    /// position captured when the camera starts, 1 = both followed every frame, 2 = captured rotation + the frame's height at the start, x / z followed
+    pub space: u8,
+    /// mode 0 / 2: the captured (root rotation, frame position)
+    pub captured: Option<(Mat4, Vec3)>,
     pub parent: Parent,
     pub playing: bool,
     pub mode: i32,
@@ -571,6 +596,16 @@ pub struct FxView {
     pub fade: Option<([f32; 3], f32)>,
     /// `colSetLightColor` active: scale of the scene lights (1 = untouched)
     pub scene_light_scale: Option<f32>,
+    /// draw every screen sprite (`spr*`, all layers) and the `bfd*` fader in 3D as camera overlays (owners without a 2D canvas: [`super::runner::FxRunner`]);
+    /// `false`: only the layers below 5 are drawn in 3D, the owner draws the rest (`sh2_battle::effects_bridge::draw_view_2d`)
+    pub sprites_3d: bool,
+    /// `shrSetBackColor` (rgb 0..1 of the bytes / 255)
+    pub back_color: Option<[f32; 3]>,
+    /// `camSetFogColor` (rgb 0..1) / `camSetFogParam` (near, far)
+    pub fog_color: Option<[f32; 3]>,
+    pub fog_param: Option<(f32, f32)>,
+    /// `fef*` F-particle quads (`COMMON/CMNEFF.DAT` textures), PS2 world
+    pub fp_quads: Vec<super::bgfx::BgQuad>,
 }
 
 // ------------------------------------------------------------------------------------------------------------------
@@ -628,7 +663,52 @@ pub struct FxScene {
     pub blurs: Vec<FxBlur>,
     pub gunyas: Vec<FxGunya>,
     pub barin: Option<FxBarin>,
+    /// models of the host scene the script may look up by name (`lsdGetModel`): `(name, skeleton in PS2 world)`, refreshed by the owner (cut scene player) every
+    /// tick; empty = unknown (attached effect models then stay at the origin as before)
+    pub named_models: Vec<(String, FxActor)>,
+    /// names handed out by `lsdGetModel` (handle = `LSD_HANDLE + index`)
+    lsd_names: Vec<String>,
+    /// `shrSetBackColor`: the clear colour (rgba bytes 0..255) while the effect overrides it
+    pub back_color: Option<[f32; 4]>,
+    /// `camSetFogColor` / `camSetFogParam` (bytes 0..255 / near, far) while the effect overrides the camera fog
+    pub fog_color: Option<[f32; 4]>,
+    pub fog_param: Option<(f32, f32)>,
+    /// `fef*` F-particles (`EffectCore +0x5b0` table: `FpSmoke`, `FpFlare`)
+    pub fparts: Vec<FxFParticle>,
+    /// `blrCreateLine` objects (`EffectCore +0x57c` table)
+    pub line_blurs: Vec<FxLineBlur>,
+    /// `sbgCreate` stream path (`EffectCore +0x600`)
+    pub stream: Option<String>,
+    /// `VEC +0x24c`: set by `btlSetWait` (1126), read by `btlGetWait` (1127); 0 when the program starts (`VEC::VEC`)
+    pub wait_flag: bool,
+    /// the program polled `btlGetWait` after its own `btlSetWait`: it only idles until the battle (`BattleNext` -> the action sequence) deletes it
+    pub parked: bool,
 }
+
+/// `LineBlur` (JP 0x00326860): from the centre to every pixel of the rectangle's border a GS line (`PRIM` 0x151 = LINE | TME | ABE | FST, colour
+/// (0x92, 0x92, 0x92, 0x48), `ALPHA` 0x44) is drawn with the frame as its texture and the UV `centre + (p - centre) * power` (`GetUV`): the lines fill the rectangle
+/// with the frame zoomed by `power` about `centre`, blended at 0x48 / 0x80 -- the same full-screen feedback as `EffectBlur` with the window
+/// `centre + (corner - centre) * power`.
+#[derive(Clone, Debug)]
+pub struct FxLineBlur {
+    pub handle: u32,
+    pub centre: [f32; 2],
+    pub power: f32,
+    /// x0, x1, y0, y1 (`SetBlurRect`)
+    pub rect: [f32; 4],
+    pub show: bool,
+}
+
+/// One `fefCreate*` object of the effect (`tagFpPrimInfo` at `EffectCore +0x5b0 + i * 8`).
+pub struct FxFParticle {
+    pub handle: u32,
+    pub fx: super::bgfx::BgFx,
+    pub ztest: bool,
+    pub layer: i32,
+}
+
+/// Handles of `lsdGetModel` (`FindLsdModel` returns a `Model*`; scripts only pass it on to `lsdAttach`).
+pub const LSD_HANDLE: u32 = 0x5000_0000;
 
 fn name_family(name: &'static str) -> &'static str {
     let n = name.find(|c: char| c.is_ascii_uppercase()).unwrap_or(name.len());
@@ -734,6 +814,16 @@ impl FxScene {
             blurs: vec![],
             gunyas: vec![],
             barin: None,
+            named_models: vec![],
+            lsd_names: vec![],
+            back_color: None,
+            fog_color: None,
+            fog_param: None,
+            fparts: vec![],
+            line_blurs: vec![],
+            stream: None,
+            wait_flag: false,
+            parked: false,
         }
     }
 
@@ -775,6 +865,7 @@ impl FxScene {
                 }
                 self.model_frame_world(env, *handle, frame, depth + 1)
             }
+            Parent::Named { name, frame } => self.named_models.iter().find(|(n, _)| n.eq_ignore_ascii_case(name)).map(|(_, a)| a.frame(frame)).unwrap_or(Mat4::IDENTITY),
         }
     }
 
@@ -820,6 +911,27 @@ impl FxScene {
         }
     }
 
+    /// Rotation of the parent *model's root* (`Frame +0x90 -> Model +0x160`, translation zeroed) and the world position of its frame (`Frame::getWorldPos`).
+    fn parent_root_and_pos(&self, env: &FxEnv, p: &Parent) -> (Mat4, Vec3) {
+        let strip = |m: Mat4| {
+            let mut r = m;
+            r.w_axis = Vec4::W;
+            r
+        };
+        match p {
+            Parent::None => (Mat4::IDENTITY, Vec3::ZERO),
+            Parent::Actor { side, idx, frame } => match env.actor(*side, *idx) {
+                Some(a) => (strip(a.world), a.frame(frame).w_axis.truncate()),
+                None => (Mat4::IDENTITY, Vec3::ZERO),
+            },
+            Parent::Named { name, frame } => match self.named_models.iter().find(|(n, _)| n.eq_ignore_ascii_case(name)) {
+                Some((_, a)) => (strip(a.world), a.frame(frame).w_axis.truncate()),
+                None => (Mat4::IDENTITY, Vec3::ZERO),
+            },
+            Parent::Model { handle, frame } => (strip(self.model_world(env, *handle)), self.model_frame_world(env, *handle, frame, 0).w_axis.truncate()),
+        }
+    }
+
     fn parent_of(kind: i32, idx: i32, frame: String) -> Parent {
         match kind {
             0 | 1 => Parent::Actor { side: kind, idx, frame },
@@ -833,6 +945,13 @@ impl FxScene {
     /// `EffectCore::AddTimeAll`: models, cameras, lights, ribbons, the fader.
     pub fn advance(&mut self, env: &FxEnv) {
         self.tick += 1;
+        // F-particles: one 30 Hz frame (`FpPrim::Calculate` through the `PutiManager` poll)
+        {
+            let cam = super::bgfx::BgCamera::default();
+            for p in self.fparts.iter_mut() {
+                p.fx.step_cam(1.0, &cam);
+            }
+        }
         let dt_models = self.add.0[1];
         let dt_lights = self.add.0[2];
         for m in self.models.iter_mut() {
@@ -945,10 +1064,18 @@ impl FxScene {
         // `EffectCamera::LookAt` (JP 0x003080b0): the first vector of a key (`GetInter`, +0) is the point looked at, the second (`GetPos`, +0x10) is the eye
         let mut target = Vec3::new(k.pos[0], k.pos[1], k.pos[2]);
         let mut eye = Vec3::new(k.target[0], k.target[1], k.target[2]);
-        if c.relative {
-            let w = self.parent_world(env, &c.parent, 0);
-            eye = w.transform_point3(eye);
-            target = w.transform_point3(target);
+        if c.parent != Parent::None {
+            // `GetInter` / `GetPos`: key' = (model root rotation, translation zeroed) * key + the frame's world position -- the bone's own rotation is not used
+            let (rot, pos) = match (c.space, c.captured) {
+                (1, _) | (_, None) => self.parent_root_and_pos(env, &c.parent),
+                (2, Some((r, p0))) => {
+                    let (_, live) = self.parent_root_and_pos(env, &c.parent);
+                    (r, Vec3::new(live.x, p0.y, live.z))
+                }
+                (_, Some((r, p0))) => (r, p0),
+            };
+            eye = rot.transform_vector3(eye) + pos;
+            target = rot.transform_vector3(target) + pos;
         }
         let fov = if k.fov == 0 { 512.0 } else { k.fov as f32 };
         Some(FxCamPose { eye, target, fov, roll: k.roll, ended })
@@ -1050,7 +1177,16 @@ impl FxScene {
             quads,
             lines,
             camera: self.camera_pose(env),
-            blurs: self.blurs.iter().filter(|b| b.show).map(|b| (b.rgba, b.uv)).collect(),
+            blurs: self
+                .blurs
+                .iter()
+                .filter(|b| b.show)
+                .map(|b| (b.rgba, b.uv))
+                .chain(self.line_blurs.iter().filter(|b| b.show).map(|b| {
+                    let (c, p) = (b.centre, b.power);
+                    ([146.0, 146.0, 146.0, 72.0], [c[0] - c[0] * p, c[1] - c[1] * p, c[0] + (511.0 - c[0]) * p, c[1] + (447.0 - c[1]) * p])
+                }))
+                .collect(),
             swirl: self.gunyas.iter().find(|g| g.show).map(|g| g.angle()),
             shatter: self.barin.as_ref().filter(|b| b.barin.shown).map(|b| {
                 b.barin
@@ -1062,6 +1198,20 @@ impl FxScene {
             }),
             fade,
             scene_light_scale,
+            sprites_3d: false,
+            back_color: self.back_color.map(|c| [c[0] / 255.0, c[1] / 255.0, c[2] / 255.0]),
+            fog_color: self.fog_color.map(|c| [c[0] / 255.0, c[1] / 255.0, c[2] / 255.0]),
+            fog_param: self.fog_param,
+            fp_quads: {
+                let mut q = vec![];
+                for p in &self.fparts {
+                    for mut x in p.fx.quads() {
+                        x.ztest = p.ztest;
+                        q.push(x);
+                    }
+                }
+                q
+            },
         }
     }
 
@@ -1471,7 +1621,8 @@ impl FxScene {
                 out_mat(v, a, 3, m4);
             }
             1708 => out_vec(v, a, 0, Vec4::new(0.0, 0.0, 0.0, 128.0)),
-            1709 => *self.ignored.entry("shrSetBackColor").or_default() += 1,
+            // shrSetBackColor(rgba) (JP 0x003156d0): `GsxCamera::SetBgColor` = the clear colour of the frame (bytes 0..255)
+            1709 => self.back_color = Some(avec(v, a, 0).to_array()),
             1710 => {}
             1400 => {
                 let (k, i) = (ai(v, a, 0), ai(v, a, 1));
@@ -1541,12 +1692,28 @@ impl FxScene {
                 self.events.push(FxEvent::MagicMotionEnd { side: k, idx: i });
             }
             1114 => self.events.push(FxEvent::BackgroundShow(ai(v, a, 0) != 0)),
+            1108 => {
+                // btlChangeBattleBG(mode, model) (JP 0x00311d20): mode != 0 swaps the stage model out of the OT and the effect model in (drawn as the
+                // background), mode 0 the other way round
+                let (mode, h) = (ai(v, a, 0), ai(v, a, 1) as u32);
+                self.events.push(FxEvent::BackgroundShow(mode == 0));
+                if let Some(m) = self.model_mut(h) {
+                    m.visible = mode != 0;
+                }
+            }
             1115 => {
                 let p = avec(v, a, 1);
                 self.events.push(FxEvent::HitMark { kind: ai(v, a, 0), pos: p.truncate() });
             }
-            1126 => self.events.push(FxEvent::Next),
-            1127 => out_u32(v, a, 0, 1),
+            // `btlSetWait`: flag + `BattleNext`; `btlGetWait` answers the flag (JP 0x00312b00 / 0x00312b40)
+            1126 => {
+                self.wait_flag = true;
+                self.events.push(FxEvent::Next);
+            }
+            1127 => {
+                out_u32(v, a, 0, self.wait_flag as u32);
+                self.parked |= self.wait_flag;
+            }
             // ---------------------------------------------------------------- col (scene light colours)
             1500 => {
                 let lights = self.scene_light_override.clone().unwrap_or_else(|| env.scene_lights.clone());
@@ -1674,15 +1841,16 @@ impl FxScene {
             1200 => {
                 let idx = ai(v, a, 0);
                 let sec = self.assets.section(kind::CAMERA, idx as u8);
-                let relative = sec.map(|s| s.get(10).map(|b| b & 3 == 1).unwrap_or(false)).unwrap_or(false);
+                let space = sec.and_then(|s| s.get(10)).map(|b| b & 3).unwrap_or(0);
+                let relative = space == 1;
                 let motion = sec.and_then(CameraMotion::parse);
                 let h = self.handle();
-                self.cameras.push(FxCamera { handle: h, motion, relative, parent: Parent::None, playing: false, mode: 0 });
+                self.cameras.push(FxCamera { handle: h, motion, relative, space, captured: None, parent: Parent::None, playing: false, mode: 0 });
                 out_u32(v, a, 1, h);
             }
             1210 => {
                 let h = self.handle();
-                self.cameras.push(FxCamera { handle: h, motion: None, relative: false, parent: Parent::None, playing: false, mode: 0 });
+                self.cameras.push(FxCamera { handle: h, motion: None, relative: false, space: 0, captured: None, parent: Parent::None, playing: false, mode: 0 });
                 out_u32(v, a, 4, h);
             }
             1201 | 1204 | 1215 => {
@@ -1690,8 +1858,10 @@ impl FxScene {
                 let (h, k, i) = (ai(v, a, 0) as u32, ai(v, a, 1), ai(v, a, 2));
                 let frame = if id == 1204 { astr(v, a, 3) } else { String::new() };
                 let p = Self::parent_of(k, i, frame);
+                let cap = self.parent_root_and_pos(env, &p);
                 if let Some(c) = self.cameras.iter_mut().find(|c| c.handle == h) {
                     c.parent = p;
+                    c.captured = Some(cap);
                     c.playing = true;
                     if let Some(m) = c.motion.as_mut() {
                         m.time = 0.0;
@@ -1715,7 +1885,14 @@ impl FxScene {
                 }
             }
             1205 => out_mat(v, a, 1, Mat4::IDENTITY),
-            1206 | 1207 | 1209 => *self.ignored.entry("camFog").or_default() += 1,
+            // camSetFogColor(rgba) / camSetFogParam(near, far) / camSetFogOriginal (JP 0x0030fb70 / 0x0030fd70 / 0x0030fe90): the game camera's fog, restored to
+            // the values the core saved at its creation (`EffectCore +0x438 / +0x43c / +0x440`)
+            1206 => self.fog_color = Some(avec(v, a, 0).to_array()),
+            1207 => self.fog_param = Some((af(v, a, 0), af(v, a, 1))),
+            1209 => {
+                self.fog_color = None;
+                self.fog_param = None;
+            }
             1211 | 1212 | 1214 => {}
             1213 => {
                 // camSetVibPower(h, mode, pos, power, ...)
@@ -1987,17 +2164,104 @@ impl FxScene {
                 }
             }
             // ---------------------------------------------------------------- fef (F-particles; see `bgfx` for the implemented classes)
-            3000 | 3006 | 3007 | 3010 => {
-                // fefCreateSmoke / Flare / Thunder / (retail) Torch: no shipped effect calls them (US corpus: 0 calls); accepted with a handle, not drawn
+            3000 => {
+                // fefCreateSmoke(pos, vel, wind, rgba0, rgba1, size0, size1, period, count, wind %, fade-in %, fade-out %, &handle) (JP 0x00325240): the arguments
+                // fill an `FpSmokeParam` (+0x40 = argument 8, +0x44 = argument 7) -> `FpSmoke::CreateEffect`
+                use super::compat::{FVector as CV, Rgba32};
+                let col = |vm: &VmMem<'_>, k: usize| {
+                    let c = avec(vm, a, k);
+                    let b = |x: f32| (x as i32 & 0xff) as u8;
+                    Rgba32::new(b(c.x), b(c.y), b(c.z), b(c.w))
+                };
+                let (p0, p1, p2) = (avec(v, a, 0), avec(v, a, 1), avec(v, a, 2));
+                let par = super::fp::FpSmokeParam {
+                    pos: CV::new(p0.x, p0.y, p0.z, 1.0),
+                    vel: CV::new(p1.x, p1.y, p1.z, 1.0),
+                    wind: CV::new(p2.x, p2.y, p2.z, 0.0),
+                    col0: col(v, 3),
+                    col1: col(v, 4),
+                    size0: af(v, a, 5),
+                    size1: af(v, a, 6),
+                    period: ai(v, a, 7).clamp(1, 100_000),
+                    count: ai(v, a, 8).clamp(0, 400),
+                    wind_pct: ai(v, a, 9) as u8,
+                    fade_in_pct: ai(v, a, 10) as u8,
+                    fade_out_pct: ai(v, a, 11) as u8,
+                    flags: 0,
+                    extra: 0,
+                };
+                let h = self.handle();
+                let fx = super::bgfx::BgFx::from_smoke(&par, h ^ self.tick);
+                self.fparts.push(FxFParticle { handle: h, fx, ztest: true, layer: 0 });
+                out_u32(v, a, 12, h);
+            }
+            3006 => {
+                // fefCreateFlare(pos, rgba, size, pull, rate, min, amp, phase, n, flag0, flag1, dir, &handle) (JP 0x00325940)
+                let f = super::bgfx::FefFlare {
+                    pos: avec(v, a, 0).truncate(),
+                    color: avec(v, a, 1),
+                    size: af(v, a, 2),
+                    pull: af(v, a, 3),
+                    rate: af(v, a, 4),
+                    min: af(v, a, 5),
+                    amp: af(v, a, 6),
+                    phase: af(v, a, 7),
+                    n: ai(v, a, 8).clamp(1, 8) as usize,
+                    flags: (ai(v, a, 9) as u32 & 1) | ((ai(v, a, 10) as u32 & 1) << 1),
+                    dir: avec(v, a, 11),
+                };
+                let h = self.handle();
+                let fx = super::bgfx::BgFx::from_flare(&f, h ^ self.tick);
+                self.fparts.push(FxFParticle { handle: h, fx, ztest: true, layer: 0 });
+                out_u32(v, a, 12, h);
+            }
+            3007 | 3010 => {
+                // fefCreateThunder / (retail) fefCreateTorch: no shipped program calls them (census: 0); accepted with a handle, not drawn
                 *self.ignored.entry("fef").or_default() += 1;
                 *self.ignored_ids.entry(id).or_default() += 1;
                 let h = self.handle();
-                // fef*: the handle is the last argument
                 out_u32(v, a, a.len().saturating_sub(1), h);
             }
-            3008 | 3009 => {
-                *self.ignored.entry("fef").or_default() += 1;
-                *self.ignored_ids.entry(id).or_default() += 1;
+            3001 => {
+                // fefDelete(handle)
+                let h = ai(v, a, 0) as u32;
+                self.fparts.retain(|p| p.handle != h);
+            }
+            3002 => {
+                // fefSetLayer(handle, layer): `FpPrim::setLayer` (the OT layer; drawing order only)
+                let (h, l) = (ai(v, a, 0) as u32, ai(v, a, 1));
+                if let Some(p) = self.fparts.iter_mut().find(|p| p.handle == h) {
+                    p.layer = l;
+                }
+            }
+            3003 => {
+                // fefSetZTest(handle, on): `FpPrim::setZtest` (0x73001 / 0x33001)
+                let (h, on) = (ai(v, a, 0) as u32, ai(v, a, 1) != 0);
+                if let Some(p) = self.fparts.iter_mut().find(|p| p.handle == h) {
+                    p.ztest = on;
+                }
+            }
+            3004 => {
+                // fefSetAlphaPower(handle, power): `FpPrim::SetAlphaPower(power, 0)` = the prim's alpha at once (the faded variant is never used by scripts)
+                let (h, al) = (ai(v, a, 0) as u32, af(v, a, 1));
+                if let Some(p) = self.fparts.iter_mut().find(|p| p.handle == h) {
+                    p.fx.alpha = al.max(0.0);
+                    p.fx.visible = al > 0.0;
+                }
+            }
+            3005 | 3008 => {
+                // fefSetPos(handle, pos) / retail fefSetPos2 (JP 0x003267a0 / US 0x0035e3b0): `SetPos1`
+                let (h, pos) = (ai(v, a, 0) as u32, avec(v, a, 1).truncate());
+                if let Some(p) = self.fparts.iter_mut().find(|p| p.handle == h) {
+                    p.fx.set_pos(pos);
+                }
+            }
+            3009 => {
+                // retail fefSetActive(handle, on) (US 0x0035e4a0, vtable +0x50)
+                let (h, on) = (ai(v, a, 0) as u32, ai(v, a, 1) != 0);
+                if let Some(p) = self.fparts.iter_mut().find(|p| p.handle == h) {
+                    p.fx.visible = on;
+                }
             }
             // ---------------------------------------------------------------- cus (BBPLineModel, `effects/bbp.rs`)
             1000 => {
@@ -2033,18 +2297,109 @@ impl FxScene {
                     c.shown = on;
                 }
             }
-            2107..=2112 | 3001..=3005 | 2300..=2303 | 3300..=3305 | 2900..=2902 => {
-                *self.ignored.entry("misc").or_default() += 1;
-                *self.ignored_ids.entry(id).or_default() += 1;
-                if matches!(id, 3300) {
-                    let h = self.handle();
-                    out_u32(v, a, 0, h);
-                } else if id == 2107 {
-                    // blrCreateLine(x, y, power, &handle): `LineBlur` (never used by the shipped effects)
-                    let h = self.handle();
-                    out_u32(v, a, 3, h);
+            // ---------------------------------------------------------------- lsd (JP 0x003250a0..: effect models chained to cut scene model frames)
+            2900 => {
+                // lsdGetModel(name, &model) = FindLsdModel(name)
+                let name = astr(v, a, 0);
+                let i = match self.lsd_names.iter().position(|n| n.eq_ignore_ascii_case(&name)) {
+                    Some(i) => i,
+                    None => {
+                        self.lsd_names.push(name.clone());
+                        self.lsd_names.len() - 1
+                    }
+                };
+                if !self.named_models.iter().any(|(n, _)| n.eq_ignore_ascii_case(&name)) {
+                    *self.ignored_ids.entry(id).or_default() += 1;
+                }
+                out_u32(v, a, 1, LSD_HANDLE + i as u32);
+            }
+            2901 => {
+                // lsdAttach(model, lsd model, frame): searchFrame(lsd model, frame)->chainModel(effect model)
+                let (h, lsd, frame) = (ai(v, a, 0) as u32, ai(v, a, 1) as u32, astr(v, a, 2));
+                let name = lsd.checked_sub(LSD_HANDLE).and_then(|i| self.lsd_names.get(i as usize)).cloned();
+                if let (Some(name), Some(m)) = (name, self.model_mut(h)) {
+                    m.parent = Parent::Named { name, frame };
                 }
             }
+            2902 => {
+                // lsdDetach(model): unChainModel
+                let h = ai(v, a, 0) as u32;
+                if let Some(m) = self.model_mut(h) {
+                    m.parent = Parent::None;
+                }
+            }
+            // ---------------------------------------------------------------- fld (field effects, JP 0x0031f330..: `CField::StartEffect` gen / target sets)
+            2300 => {
+                // fldGetPos(kind, idx, &pos): EffectCore +0x30 + idx * 0x10 (kind 0, the generating positions) / +0x80 (kind 1, the targets)
+                let (k, i) = (ai(v, a, 0), ai(v, a, 1));
+                if k == 0 || k == 1 {
+                    let p = env.actor(k, i).map(|x| x.pos).unwrap_or(Vec3::ZERO);
+                    out_vec(v, a, 2, p.extend(1.0));
+                }
+            }
+            2301 => {
+                // fldGetGTCount(kind, &n): EffectCore +0xdc (kind 0) / +0xd8 (kind 1)
+                let n = match ai(v, a, 0) {
+                    0 => env.gen.len(),
+                    1 => env.targets.len(),
+                    _ => 0,
+                };
+                out_u32(v, a, 1, n as u32);
+            }
+            2302 | 2303 => {
+                // fldAttachBG / fldAttachBG2(model, a, b, frame): `FindFieldModel(a, b)` -> `searchFrame` -> model +0x518 / `chainModel`; the host lists the field
+                // models as `named_models` entries "fld:<a>:<b>"
+                let (h, x, y, frame) = (ai(v, a, 0) as u32, ai(v, a, 1), ai(v, a, 2), astr(v, a, 3));
+                let name = format!("fld:{x}:{y}");
+                if !self.named_models.iter().any(|(n, _)| *n == name) {
+                    *self.ignored_ids.entry(id).or_default() += 1;
+                }
+                if let Some(m) = self.model_mut(h) {
+                    m.parent = Parent::Named { name, frame };
+                }
+            }
+            // ---------------------------------------------------------------- blr*Line (`LineBlur`, JP 0x00326860..: a radial zoom blur of the frame)
+            2107 => {
+                // blrCreateLine(cx, cy, power, &handle)
+                let h = self.handle();
+                self.line_blurs.push(FxLineBlur { handle: h, centre: [ai(v, a, 0) as f32, ai(v, a, 1) as f32], power: af(v, a, 2), rect: [0.0, 512.0, 0.0, 448.0], show: false });
+                out_u32(v, a, 3, h);
+            }
+            2108..=2112 => {
+                let h = ai(v, a, 0) as u32;
+                if id == 2111 {
+                    self.line_blurs.retain(|b| b.handle != h);
+                } else if let Some(i) = self.line_blurs.iter().position(|b| b.handle == h) {
+                    let (p1, p2) = (ai(v, a, 1), ai(v, a, 2));
+                    let pf = af(v, a, 1);
+                    let (p3, p4) = (ai(v, a, 3), ai(v, a, 4));
+                    let b = &mut self.line_blurs[i];
+                    match id {
+                        2108 => b.show = p1 != 0,
+                        2109 => b.power = pf,
+                        2110 => b.centre = [p1 as f32, p2 as f32],
+                        _ => b.rect = [p1 as f32, p2 as f32, p3 as f32, p4 as f32],
+                    }
+                }
+            }
+            // ---------------------------------------------------------------- sbg (`StreamBGM` of the effect, JP 0x00327c10..: `EFFECT/EFXnnn.SSV` music of the big specials)
+            3300 => {
+                // sbgCreate(path, &handle): `SetPathname` + `StreamBGM::Create` + `Preload` (EffectCore +0x600)
+                let path = astr(v, a, 0);
+                let h = self.handle();
+                self.events.push(FxEvent::StreamBgm { op: StreamOp::Load(path.clone()) });
+                self.stream = Some(path);
+                out_u32(v, a, 1, h);
+            }
+            3301 => self.events.push(FxEvent::StreamBgm { op: StreamOp::Play }),
+            3302 => self.events.push(FxEvent::StreamBgm { op: StreamOp::Stop { fade: ai(v, a, 1) } }),
+            3303 => {
+                self.events.push(FxEvent::StreamBgm { op: StreamOp::Stop { fade: 0 } });
+                self.stream = None;
+            }
+            3304 => self.events.push(FxEvent::StreamBgm { op: StreamOp::Volume(ai(v, a, 1)) }),
+            // sbgGetReady(h, &ready): `StreamBGM::isReady` -- the host streams from memory: ready at once
+            3305 => out_u32(v, a, 1, 1),
             // ---------------------------------------------------------------- pth (calculation paths, JP 0x00324000..)
             2700 => {
                 // pthCreate(capacity, life, &handle): `CPath::Create(n, life * 1/30)`

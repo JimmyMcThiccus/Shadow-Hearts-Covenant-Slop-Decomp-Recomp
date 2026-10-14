@@ -15,7 +15,7 @@ use ::bevy::prelude::*;
 use ::bevy::shader::Shader;
 use sh2_formats::model::Model;
 
-use super::scene::{FxQuadView, FxRibbonView, FxSprite, FxView};
+use super::scene::{FxQuadView, FxRibbonView, FxView};
 use super::screenfx::{Sh2BlurFx, Sh2ShatterFx, Sh2SwirlFx};
 use crate::bevy::image::decoded_image;
 use crate::bevy::model::{spawn_animated_model_ex, AnimatedModel, GpuCtx, ModelMaterials};
@@ -35,25 +35,6 @@ pub struct FxRoot;
 struct Pooled {
     entity: Option<Entity>,
     mesh: Handle<Mesh>,
-}
-
-#[derive(Resource, Default)]
-struct FxEntities {
-    root: Option<Entity>,
-    effect_id: i32,
-    models: HashMap<u32, Entity>,
-    ribbons: HashMap<u32, Pooled>,
-    quads_alpha: Pooled,
-    quads_add: Pooled,
-    /// `cus*` line models (all shown `BBPLineModel`s in one additive mesh)
-    lines: Pooled,
-    /// back overlays (`sprShow` layers below the effect models): camera-attached quads per sprite handle
-    overlays: HashMap<u32, (Entity, Handle<Sh2Material>)>,
-    overlay_mesh: Handle<Mesh>,
-    cache: HashMap<(i32, u8), (Arc<Model>, ModelMaterials)>,
-    tex_cache: HashMap<(i32, u8), Handle<Image>>,
-    /// scene light before the effect touched it
-    base_light: Option<Sh2SceneLight>,
 }
 
 fn blend_of(b: BlendKind) -> Sh2Blend {
@@ -152,11 +133,62 @@ fn quads_mesh(quads: &[&FxQuadView], mesh: &mut Mesh) {
     mesh.insert_indices(Indices::U32(idx));
 }
 
+/// Per-view entities (one per running effect program).
+#[derive(Default)]
+struct SlotEnts {
+    root: Option<Entity>,
+    models: HashMap<u32, Entity>,
+    ribbons: HashMap<u32, Pooled>,
+    quads_alpha: Pooled,
+    quads_add: Pooled,
+    lines: Pooled,
+    overlays: HashMap<u32, (Entity, Handle<Sh2Material>)>,
+    cache: HashMap<(i32, u8), (Arc<Model>, ModelMaterials)>,
+    tex_cache: HashMap<(i32, u8), Handle<Image>>,
+    /// `fef*` F-particle quads by (CMNEFF texture, additive, depth tested)
+    fp_groups: HashMap<(u8, bool, bool), Pooled>,
+    fp_images: HashMap<(u8, bool), Handle<Image>>,
+    seen: bool,
+}
+
+impl SlotEnts {
+    fn despawn(&mut self, commands: &mut Commands) {
+        if let Some(r) = self.root.take() {
+            commands.entity(r).despawn();
+        }
+        for (_, p) in self.fp_groups.drain() {
+            if let Some(e) = p.entity {
+                commands.entity(e).despawn();
+            }
+        }
+        for (_, (e, _)) in self.overlays.drain() {
+            commands.entity(e).despawn();
+        }
+    }
+}
+
+/// Drawing state of all running effects plus the shared bits (scene light before the effects touched it, overlay quad).
+#[derive(Resource, Default)]
+struct FxSlots {
+    slots: HashMap<i32, SlotEnts>,
+    overlay_mesh: Handle<Mesh>,
+    base_light: Option<Sh2SceneLight>,
+    /// fog / clear colour before an effect overrode them (`camSetFog*`, `shrSetBackColor`)
+    base_fog: Option<crate::bevy::Sh2Fog>,
+    base_clear: Option<ClearColor>,
+}
+
+/// Further effect views drawn at the same time as [`FxLive`] (cut scene `.EFD` tracks running side by side, field `StartEffect`s, engine battle effects).
+/// Every view is keyed by `view.assets.id`; two views with the same id share entities, so owners give concurrent programs distinct ids.
+#[derive(Resource, Default)]
+pub struct FxLiveSet(pub Vec<FxView>);
+
 #[allow(clippy::too_many_arguments)]
 fn sync_fx(
     mut commands: Commands,
     live: Res<FxLive>,
-    mut ents: ResMut<FxEntities>,
+    set: Option<Res<FxLiveSet>>,
+    mut st: ResMut<FxSlots>,
     settings: Option<Res<Sh2RenderSettings>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut images: ResMut<Assets<Image>>,
@@ -165,50 +197,245 @@ fn sync_fx(
     mut anims: Query<&mut AnimatedModel>,
     cams: Query<(Entity, &Camera, &Projection), With<Camera3d>>,
     cam_tf: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
+    mut fog: Option<ResMut<crate::bevy::Sh2Fog>>,
+    mut clear: Option<ResMut<ClearColor>>,
+    cmn: Option<Res<super::bgfx_render::CmnEffTextures>>,
 ) {
     let Some(settings) = settings else { return };
-    let Some(view) = live.0.as_ref() else {
+    // ---- camera fog / clear colour overrides (`camSetFogColor` / `camSetFogParam` / `shrSetBackColor`), restored when no effect sets them
+    {
+        let views: Vec<&FxView> = live.0.iter().chain(set.as_ref().map(|s| s.0.iter()).into_iter().flatten()).collect();
+        let fc = views.iter().rev().find_map(|v| v.fog_color);
+        let fp = views.iter().rev().find_map(|v| v.fog_param);
+        if let Some(f) = fog.as_mut() {
+            if fc.is_some() || fp.is_some() {
+                let base = *st.base_fog.get_or_insert(**f);
+                let mut out = base;
+                if let Some(c) = fc {
+                    out.color = Vec3::from_array(c);
+                }
+                if let Some((n, fa)) = fp {
+                    out.near = n;
+                    out.far = fa.max(n + 1.0);
+                    out.enabled = true;
+                }
+                if **f != out {
+                    **f = out;
+                }
+            } else if let Some(base) = st.base_fog.take() {
+                **f = base;
+            }
+        }
+        let bc = views.iter().rev().find_map(|v| v.back_color);
+        if let Some(c) = clear.as_mut() {
+            match bc {
+                Some(rgb) => {
+                    if st.base_clear.is_none() {
+                        st.base_clear = Some((**c).clone());
+                    }
+                    c.0 = Color::linear_rgb(rgb[0], rgb[1], rgb[2]);
+                }
+                None => {
+                    if let Some(base) = st.base_clear.take() {
+                        **c = base;
+                    }
+                }
+            }
+        }
+    }
+    let views: Vec<&FxView> = live.0.iter().chain(set.as_ref().map(|s| s.0.iter()).into_iter().flatten()).collect();
+    let cam = cams.iter().filter(|(_, c, _)| c.is_active).min_by_key(|(_, c, _)| c.order);
+    if views.is_empty() {
         // nothing running: tear everything down, restore the light
-        if let Some(r) = ents.root.take() {
-            commands.entity(r).despawn();
+        if st.slots.is_empty() && st.base_light.is_none() {
+            return;
         }
-        ents.models.clear();
-        ents.ribbons.clear();
-        ents.quads_alpha = Pooled::default();
-        ents.quads_add = Pooled::default();
-        ents.lines = Pooled::default();
-        ents.cache.clear();
-        ents.tex_cache.clear();
-        for (_, (e, _)) in ents.overlays.drain() {
-            commands.entity(e).despawn();
+        for (_, mut s) in st.slots.drain() {
+            s.despawn(&mut commands);
         }
-        if let (Some(base), Some(l)) = (ents.base_light.take(), light.as_mut()) {
+        if let (Some(base), Some(l)) = (st.base_light.take(), light.as_mut()) {
             **l = base;
         }
         for (e, _, _) in &cams {
             commands.entity(e).remove::<(Sh2BlurFx, Sh2SwirlFx, Sh2ShatterFx)>();
         }
         return;
-    };
-    // a different effect: start over
-    if ents.root.is_some() && ents.effect_id != view.assets.id {
-        if let Some(r) = ents.root.take() {
-            commands.entity(r).despawn();
-        }
-        ents.models.clear();
-        ents.ribbons.clear();
-        ents.quads_alpha = Pooled::default();
-        ents.quads_add = Pooled::default();
-        ents.lines = Pooled::default();
-        ents.cache.clear();
-        ents.tex_cache.clear();
     }
+    if st.overlay_mesh == Handle::default() {
+        st.overlay_mesh = meshes.add(Rectangle::new(1.0, 1.0));
+    }
+    let overlay_mesh = st.overlay_mesh.clone();
+    let cam_rot = cam_tf.iter().filter(|(c, _)| c.is_active).min_by_key(|(c, _)| c.order).map(|(_, g)| g.to_scale_rotation_translation().1).unwrap_or(Quat::IDENTITY);
+    let cam_pos = cam_tf.iter().filter(|(c, _)| c.is_active).min_by_key(|(c, _)| c.order).map(|(_, g)| g.translation()).unwrap_or(Vec3::ZERO);
+    let cmn = cmn.map(|c| c.0.clone());
+    for s in st.slots.values_mut() {
+        s.seen = false;
+    }
+    for view in &views {
+        let slot = st.slots.entry(view.assets.id).or_default();
+        slot.seen = true;
+        sync_view(&mut commands, view, slot, &settings, &mut meshes, &mut images, &mut mats, &mut anims, cam, cam_rot, &overlay_mesh);
+        sync_fparticles(&mut commands, view, slot, &settings, &mut meshes, &mut images, &mut mats, cam, cam_rot, cam_pos, cmn.as_ref());
+    }
+    let gone: Vec<i32> = st.slots.iter().filter(|(_, s)| !s.seen).map(|(k, _)| *k).collect();
+    for k in gone {
+        if let Some(mut s) = st.slots.remove(&k) {
+            s.despawn(&mut commands);
+        }
+    }
+
+    // ---- screen space passes (`blr*` frame feedback, `gny*` swirl, `bng*` shatter): components of the main 3D camera
+    if let Some((cam_e, _, _)) = cam {
+        let mut b = Sh2BlurFx::default();
+        let mut any_blur = false;
+        for v in &views {
+            for (rgba, uv) in &v.blurs {
+                b.push(*rgba, *uv);
+                any_blur = true;
+            }
+        }
+        if any_blur {
+            commands.entity(cam_e).insert(b);
+        } else {
+            commands.entity(cam_e).remove::<Sh2BlurFx>();
+        }
+        match views.iter().find_map(|v| v.swirl) {
+            Some(angle) => {
+                commands.entity(cam_e).insert(Sh2SwirlFx { p: Vec4::new(angle, 1.0, 0.0, 0.0) });
+            }
+            None => {
+                commands.entity(cam_e).remove::<Sh2SwirlFx>();
+            }
+        }
+        match views.iter().find_map(|v| v.shatter.as_ref()) {
+            Some(shards) => {
+                let mut fx = Sh2ShatterFx::default();
+                for sh in shards {
+                    fx.push(&sh.verts, sh.shade);
+                }
+                commands.entity(cam_e).insert(fx);
+            }
+            None => {
+                commands.entity(cam_e).remove::<Sh2ShatterFx>();
+            }
+        }
+    }
+
+    // ---- lights (all views)
+    if let Some(l) = light.as_mut() {
+        let base = st.base_light.get_or_insert_with(|| (**l).clone()).clone();
+        let mut out = base.clone();
+        if let Some(s) = views.iter().find_map(|v| v.scene_light_scale) {
+            out.ambient *= s;
+            for c in out.colors.iter_mut() {
+                *c *= s;
+            }
+        }
+        for (slot, fl) in (1..3).zip(views.iter().flat_map(|v| v.lights.iter()).filter(|l| l.kind != 3)) {
+            let to = (p2b(fl.pos) - Vec3::new(0.0, 15.0, 0.0)).normalize_or_zero();
+            if to != Vec3::ZERO {
+                out.dirs[slot] = to;
+                out.colors[slot] = (fl.color / 128.0).clamp(Vec3::ZERO, Vec3::splat(1.5));
+            }
+        }
+        for fl in views.iter().flat_map(|v| v.lights.iter()).filter(|l| l.kind == 3) {
+            out.ambient += (fl.color / 128.0).clamp(Vec3::ZERO, Vec3::splat(1.0)) * 0.5;
+        }
+        if **l != out {
+            **l = out;
+        }
+    }
+}
+
+/// The `fef*` F-particles of a view (`FpSmoke` / `FpFlare` quads with the `COMMON/CMNEFF.DAT` textures), drawn like the background effects
+/// (`bgfx_render::quads_to_mesh`).
+#[allow(clippy::too_many_arguments)]
+fn sync_fparticles(
+    commands: &mut Commands,
+    view: &FxView,
+    ents: &mut SlotEnts,
+    settings: &Sh2RenderSettings,
+    meshes: &mut Assets<Mesh>,
+    images: &mut Assets<Image>,
+    mats: &mut Assets<Sh2Material>,
+    cam: Option<(Entity, &Camera, &Projection)>,
+    cam_rot: Quat,
+    cam_pos: Vec3,
+    cmn: Option<&Arc<Vec<super::bgfx_render::CmnTex>>>,
+) {
+    let Some(root) = ents.root else { return };
+    let mut by_key: HashMap<(u8, bool, bool), Vec<&super::bgfx::BgQuad>> = HashMap::new();
+    if cmn.is_some() {
+        for q in &view.fp_quads {
+            by_key.entry((q.tex, q.additive, q.ztest)).or_default().push(q);
+        }
+    }
+    let gone: Vec<(u8, bool, bool)> = ents.fp_groups.keys().copied().filter(|k| !by_key.contains_key(k)).collect();
+    for k in gone {
+        if let Some(p) = ents.fp_groups.remove(&k) {
+            if let Some(e) = p.entity {
+                commands.entity(e).despawn();
+            }
+        }
+    }
+    let Some(cmn) = cmn else { return };
+    let (fov_y, near) = match cam.map(|c| c.2) {
+        Some(Projection::Perspective(p)) => (p.fov, p.near),
+        _ => (0.75, 1.0),
+    };
+    let tan_v = (fov_y * 0.5).tan().max(1e-3);
+    let sv = super::bgfx_render::ScreenView { depth: (near * 4.0).max(2.0), focal: Vec2::new(256.0 / (tan_v * 4.0 / 3.0), 224.0 / tan_v) };
+    // `quads_to_mesh` builds Bevy world positions; the slot root flips PS2 -> Bevy, so the meshes hang off the world (no parent)
+    let _ = root;
+    for (key, list) in by_key {
+        let (tex, additive, ztest) = key;
+        let Some(ct) = cmn.get(tex as usize) else { continue };
+        let img = match ents.fp_images.get(&(tex, additive)) {
+            Some(h) => h.clone(),
+            None => {
+                let rgba = super::bgfx_render::cmn_rgba(ct, additive);
+                let h = images.add(crate::bevy::image::rgba_image(ct.w, ct.h, rgba, settings.filter));
+                ents.fp_images.insert((tex, additive), h.clone());
+                h
+            }
+        };
+        match ents.fp_groups.get(&key) {
+            Some(p) => {
+                if let Some(mut m) = meshes.get_mut(&p.mesh) {
+                    super::bgfx_render::quads_to_mesh(&list, cam_rot, cam_pos, &mut m, true, &sv);
+                }
+            }
+            None => {
+                let mat = mats.add(Sh2Material::textured(Some(img)).with_blend(if additive { Sh2Blend::Add } else { Sh2Blend::Normal }, None).with_fog(false).with_ztest_off(!ztest));
+                let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
+                super::bgfx_render::quads_to_mesh(&list, cam_rot, cam_pos, &mut mesh, true, &sv);
+                let mh = meshes.add(mesh);
+                let e = commands.spawn((Name::new("fx_fparticles"), Mesh3d(mh.clone()), MeshMaterial3d(mat), Transform::default(), Visibility::default(), ::bevy::camera::visibility::NoFrustumCulling)).id();
+                ents.fp_groups.insert(key, Pooled { entity: Some(e), mesh: mh });
+            }
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn sync_view(
+    commands: &mut Commands,
+    view: &FxView,
+    ents: &mut SlotEnts,
+    settings: &Sh2RenderSettings,
+    meshes: &mut Assets<Mesh>,
+    images: &mut Assets<Image>,
+    mats: &mut Assets<Sh2Material>,
+    anims: &mut Query<&mut AnimatedModel>,
+    cam: Option<(Entity, &Camera, &Projection)>,
+    cam_rot: Quat,
+    overlay_mesh: &Handle<Mesh>,
+) {
     let root = match ents.root {
         Some(r) => r,
         None => {
-            let r = commands.spawn((Name::new("fx_root"), FxRoot, Transform::from_rotation(Quat::from_rotation_x(std::f32::consts::PI)), Visibility::default())).id();
+            let r = commands.spawn((Name::new(format!("fx_root_{}", view.assets.id)), FxRoot, Transform::from_rotation(Quat::from_rotation_x(std::f32::consts::PI)), Visibility::default())).id();
             ents.root = Some(r);
-            ents.effect_id = view.assets.id;
             r
         }
     };
@@ -246,14 +473,14 @@ fn sync_fx(
                 let key = (view.assets.id, m.section);
                 if !ents.cache.contains_key(&key) {
                     let Some(model) = view.assets.model(m.section) else { continue };
-                    let mut gpu = GpuCtx { meshes: &mut meshes, images: &mut images, materials: &mut mats, filter: settings.filter };
+                    let mut gpu = GpuCtx { meshes: &mut *meshes, images: &mut *images, materials: &mut *mats, filter: settings.filter };
                     let mm = ModelMaterials::new(&model, &mut gpu);
                     ents.cache.insert(key, (model, mm));
                 }
                 let (model, mm) = ents.cache.get(&key).cloned().unwrap();
-                let mut gpu = GpuCtx { meshes: &mut meshes, images: &mut images, materials: &mut mats, filter: settings.filter };
+                let mut gpu = GpuCtx { meshes: &mut *meshes, images: &mut *images, materials: &mut *mats, filter: settings.filter };
                 let motions: Vec<_> = view.assets.motions().iter().cloned().collect();
-                let e = spawn_animated_model_ex(&mut commands, root, model, motions, &mm, &mut gpu, tf, &format!("fx_model_{}", m.handle), false);
+                let e = spawn_animated_model_ex(commands, root, model, motions, &mm, &mut gpu, tf, &format!("fx_model_{}", m.handle), false);
                 ents.models.insert(m.handle, e);
             }
         }
@@ -297,9 +524,9 @@ fn sync_fx(
     }
 
     // ---- polygon quads
-    for (add, pooled) in [(false, 0usize), (true, 1usize)].map(|(a, i)| (a, i)) {
+    for add in [false, true] {
         let qs: Vec<&FxQuadView> = view.quads.iter().filter(|q| (q.blend == BlendKind::Additive) == add).collect();
-        let slot = if pooled == 0 { &mut ents.quads_alpha } else { &mut ents.quads_add };
+        let slot = if !add { &mut ents.quads_alpha } else { &mut ents.quads_add };
         if qs.is_empty() {
             if let Some(e) = slot.entity.take() {
                 commands.entity(e).despawn();
@@ -320,7 +547,6 @@ fn sync_fx(
         }
     }
 
-    let cam_rot = cam_tf.iter().filter(|(c, _)| c.is_active).min_by_key(|(c, _)| c.order).map(|(_, g)| g.to_scale_rotation_translation().1).unwrap_or(Quat::IDENTITY);
     // ---- `cus*` line models (`BBPLineModel`): both faces of the strips, ALPHA = Cs * As + Cd
     // `SH2_FX_NO_LINES=1`: A/B switch for the evidence shots
     if view.lines.is_empty() || std::env::var_os("SH2_FX_NO_LINES").is_some() {
@@ -339,10 +565,21 @@ fn sync_fx(
         lines_mesh(&view.lines, cam_rot, &mut m);
     }
 
-    // ---- back overlays: sprites drawn *under* the effect models (`sprShow` layer < 5) dim the stage, not the effect
-    let cam = cams.iter().filter(|(_, c, _)| c.is_active).min_by_key(|(_, c, _)| c.order);
-    let back: Vec<&FxSprite> = view.sprites.iter().filter(|sp| sp.layer < 5 && sp.color.w >= 1.0).collect();
-    let live_s: Vec<u32> = back.iter().map(|sp| sp.handle).collect();
+    // ---- overlays: screen sprites drawn in 3D as camera-attached quads.  Layers below 5 (`sprShow` layer < 5) are drawn *under* the effect models (they dim
+    // the stage, not the effect); views with `sprites_3d` (no 2D canvas owner) get every layer plus the `bfd*` fader, higher layers nearer the camera.
+    // key: sprite handle, `u32::MAX` = the fader
+    let mut wanted: Vec<(u32, [Vec2; 3], Vec4, BlendKind, f32)> = view
+        .sprites
+        .iter()
+        .filter(|sp| (view.sprites_3d || sp.layer < 5) && sp.color.w >= 1.0)
+        .map(|sp| (sp.handle, [sp.p[0].truncate(), sp.p[1].truncate(), sp.p[2].truncate()], sp.color / 128.0, sp.blend, sp.layer as f32 + sp.z as f32 * 1e-4))
+        .collect();
+    if view.sprites_3d {
+        if let Some((col, a)) = view.fade {
+            wanted.push((u32::MAX, [Vec2::ZERO, Vec2::new(512.0, 0.0), Vec2::new(0.0, 448.0)], Vec4::new(col[0], col[1], col[2], a), BlendKind::AlphaBlend, 99.0));
+        }
+    }
+    let live_s: Vec<u32> = wanted.iter().map(|w| w.0).collect();
     let gone: Vec<u32> = ents.overlays.keys().copied().filter(|h| !live_s.contains(h) || cam.is_none()).collect();
     for h in gone {
         if let Some((e, _)) = ents.overlays.remove(&h) {
@@ -350,20 +587,25 @@ fn sync_fx(
         }
     }
     if let Some((cam_e, _, proj)) = cam {
-        if ents.overlay_mesh == Handle::default() {
-            ents.overlay_mesh = meshes.add(Rectangle::new(1.0, 1.0));
-        }
         let (fov, aspect) = match proj {
             Projection::Perspective(p) => (p.fov, p.aspect_ratio),
             _ => (1.0, 1.33),
         };
-        let dist = 2.0;
-        let h = 2.0 * (fov * 0.5).tan() * dist;
-        let tf = Transform::from_xyz(0.0, 0.0, -dist).with_scale(Vec3::new(h * aspect * 1.05, h * 1.05, 1.0));
-        for sp in back {
-            let c = Vec4::new(sp.color.x, sp.color.y, sp.color.z, sp.color.w) / 128.0;
-            let blend = if sp.blend == BlendKind::Additive { Sh2Blend::Add } else { Sh2Blend::Normal };
-            match ents.overlays.get(&sp.handle) {
+        for (key, p, c, blend, order) in wanted {
+            let dist = 2.0 - order * 0.01;
+            let h = 2.0 * (fov * 0.5).tan() * dist;
+            let w = h * aspect;
+            // pixel (x, y) of the 512 x 448 frame -> plane point; a sprite covering the whole frame gets 5 % overscan (no seams at the edges)
+            let full = p[0].x <= 0.0 && p[0].y <= 0.0 && p[1].x >= 512.0 && p[2].y >= 448.0;
+            let k = if full { 1.05 } else { 1.0 };
+            let to = |q: Vec2| Vec3::new((q.x / 512.0 - 0.5) * w * k, (0.5 - q.y / 448.0) * h * k, -dist);
+            let (u, v) = (p[1] - p[0], p[2] - p[0]);
+            let centre = to(p[0] + (u + v) * 0.5);
+            let xa = to(p[0] + u) - to(p[0]);
+            let ya = to(p[0]) - to(p[0] + v);
+            let tf = Transform::from_matrix(Mat4::from_cols(xa.extend(0.0), ya.extend(0.0), Vec4::Z, centre.extend(1.0)));
+            let sb = if blend == BlendKind::Additive { Sh2Blend::Add } else { Sh2Blend::Normal };
+            match ents.overlays.get(&key) {
                 Some((e, mh)) => {
                     commands.entity(*e).insert(tf);
                     if let Some(mut m) = mats.get_mut(mh) {
@@ -371,74 +613,16 @@ fn sync_fx(
                     }
                 }
                 None => {
-                    let mut m = Sh2Material::textured(None).with_blend(blend, None).with_fog(false);
+                    let mut m = Sh2Material::textured(None).with_blend(sb, None).with_fog(false);
                     m.tint = c;
                     let mh = mats.add(m);
                     let e = commands
-                        .spawn((Mesh3d(ents.overlay_mesh.clone()), MeshMaterial3d(mh.clone()), tf, Visibility::default(), ::bevy::camera::visibility::NoFrustumCulling))
+                        .spawn((Mesh3d(overlay_mesh.clone()), MeshMaterial3d(mh.clone()), tf, Visibility::default(), ::bevy::camera::visibility::NoFrustumCulling))
                         .id();
                     commands.entity(cam_e).add_child(e);
-                    ents.overlays.insert(sp.handle, (e, mh));
+                    ents.overlays.insert(key, (e, mh));
                 }
             }
-        }
-    }
-
-    // ---- screen space passes (`blr*` frame feedback, `gny*` swirl): components of the main 3D camera
-    if let Some((cam_e, _, _)) = cam {
-        if view.blurs.is_empty() {
-            commands.entity(cam_e).remove::<Sh2BlurFx>();
-        } else {
-            let mut b = Sh2BlurFx::default();
-            for (rgba, uv) in &view.blurs {
-                b.push(*rgba, *uv);
-            }
-            commands.entity(cam_e).insert(b);
-        }
-        match view.swirl {
-            Some(angle) => {
-                commands.entity(cam_e).insert(Sh2SwirlFx { p: Vec4::new(angle, 1.0, 0.0, 0.0) });
-            }
-            None => {
-                commands.entity(cam_e).remove::<Sh2SwirlFx>();
-            }
-        }
-        match &view.shatter {
-            Some(shards) => {
-                let mut fx = Sh2ShatterFx::default();
-                for sh in shards {
-                    fx.push(&sh.verts, sh.shade);
-                }
-                commands.entity(cam_e).insert(fx);
-            }
-            None => {
-                commands.entity(cam_e).remove::<Sh2ShatterFx>();
-            }
-        }
-    }
-
-    // ---- lights
-    if let Some(l) = light.as_mut() {
-        let base = ents.base_light.get_or_insert_with(|| (**l).clone()).clone();
-        let mut out = base.clone();
-        if let Some(s) = view.scene_light_scale {
-            out.ambient *= s;
-            for c in out.colors.iter_mut() {
-                *c *= s;
-            }
-        }
-        for (slot, fl) in (1..3).zip(view.lights.iter().filter(|l| l.kind != 3)) {
-            let to = (p2b(fl.pos) - Vec3::new(0.0, 15.0, 0.0)).normalize_or_zero();
-            if to != Vec3::ZERO {
-                out.dirs[slot] = to;
-                out.colors[slot] = (fl.color / 128.0).clamp(Vec3::ZERO, Vec3::splat(1.5));
-            }
-        }
-        for fl in view.lights.iter().filter(|l| l.kind == 3) {
-            out.ambient += (fl.color / 128.0).clamp(Vec3::ZERO, Vec3::splat(1.0)) * 0.5;
-        }
-        if **l != out {
-            **l = out;
         }
     }
 }
@@ -448,7 +632,9 @@ pub struct EffectRenderPlugin;
 
 impl Plugin for EffectRenderPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<FxLive>().init_resource::<FxEntities>().add_systems(Update, sync_fx);
+        app.init_resource::<FxLive>().init_resource::<FxLiveSet>().init_resource::<FxSlots>().add_systems(Update, sync_fx);
+        // the encounter shatter (`BtlIn`; its driver skips itself without the mesh / image / material assets)
+        app.add_plugins(super::btlin::BtlInPlugin);
         // the screen space passes need the render sub app and the shader assets (absent in headless test apps)
         if app.world().get_resource::<Assets<Shader>>().is_some() {
             app.add_plugins(super::screenfx::ScreenFxPlugin);
@@ -474,4 +660,21 @@ mod line_tests {
         let f_bevy = q * -Vec3::Z;
         assert!((fwd - Vec3::new(f_bevy.x, -f_bevy.y, -f_bevy.z)).length() < 1e-6);
     }
+}
+
+/// The skeleton of an animated model as the effect scripts see it ([`super::scene::FxActor`], PS2 world): `gt` is the global transform of the
+/// [`AnimatedModel`] holder, whose local space is PS2 model space (y down) under a PS2 -> Bevy flip somewhere above it; the effect root is that flip at the
+/// origin, so PS2 world = flip * `gt`.  Attach frames use the joint position with the *animation* rotation, like the battle
+/// characters (`sh2_battle` `snapshot_actors`).  Used for the cut scene models that `lsdGetModel` finds by name ([`super::scene::FxScene::named_models`]).
+pub fn fx_actor_of(am: &AnimatedModel, gt: &GlobalTransform, height: f32) -> super::scene::FxActor {
+    let flip = Mat4::from_diagonal(Vec4::new(1.0, -1.0, -1.0, 1.0));
+    let world = flip * gt.to_matrix();
+    let mut bones = Vec::with_capacity(am.inst.skeleton.bones.len());
+    for (b, bone) in am.inst.skeleton.bones.iter().enumerate() {
+        let pose = am.inst.pose.get(b).copied().unwrap_or(sh2_formats::math::Matrix::IDENTITY);
+        let mut fm = pose.to_glam();
+        fm.w_axis = (pose * bone.bind).to_glam().w_axis;
+        bones.push((bone.name.clone(), world * fm));
+    }
+    super::scene::FxActor { pos: world.w_axis.truncate(), world, bones, height, ..Default::default() }
 }

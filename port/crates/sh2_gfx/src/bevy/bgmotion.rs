@@ -207,6 +207,25 @@ impl BgModel {
             None => false,
         }
     }
+    /// Play `name` from time `t` (s) (round 5 CS hook: LSD `ANMS` tracks of BG models are keyed on the scene clock); false for unknown motions.
+    pub fn seek(&mut self, name: &str, t: f32) -> bool {
+        if !self.play(name) {
+            return false;
+        }
+        if let Some(p) = self.playing.as_mut() {
+            p.time = t.max(0.0);
+            // events before `t` are not replayed
+            let frame = p.time * p.motion.fps as f32;
+            for (ei, e) in p.motion.events.iter().enumerate() {
+                p.cursor[ei] = event_keys(e).iter().take_while(|(k, _)| (*k as f32) <= frame).count();
+            }
+        }
+        true
+    }
+    /// Motion time (s) of the playing motion.
+    pub fn motion_time(&self) -> Option<f32> {
+        self.playing.as_ref().map(|p| p.time)
+    }
     pub fn current_motion(&self) -> Option<&str> {
         self.playing.as_ref().map(|p| p.motion.name.as_str())
     }

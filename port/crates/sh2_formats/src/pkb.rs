@@ -41,7 +41,11 @@ pub fn parse_package(d: &[u8], start: usize) -> Option<Package> {
         let o = start + 8 + i * 8;
         let b = d.get(o..o + 8)?;
         let kind = [b[0], b[1], b[2], b[3]];
-        if !kind[..3].iter().all(|c| c.is_ascii_alphanumeric()) {
+        // three alphanumeric characters (`mdl\0`, `anm\0`), or two and a NUL (`a2\0?` / `a3\0?`: the alternate motion sets of the last boss's
+        // `BTLDATA/CHRANM/499..502.ANM`, 4th byte garbage)
+        let three = kind[..3].iter().all(|c| c.is_ascii_alphanumeric());
+        let two = kind[..2].iter().all(|c| c.is_ascii_alphanumeric()) && kind[2] == 0;
+        if !three && !two {
             return None;
         }
         let off = u32::from_le_bytes([b[4], b[5], b[6], b[7]]) as usize;
