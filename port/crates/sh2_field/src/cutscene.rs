@@ -167,11 +167,13 @@ pub struct LipsData {
     pub events: Vec<LipsEvent>,
 }
 
-/// `LipsHandler::Open` / `getEvents`: header channels at `+0x30` (0x20 bytes: model name[16], bone name[16]; `+0x36` u16 = channel
+/// `LipsHandler::Open` / `getEvents`: header channels at `+0x30` (0x20 bytes: model name[16], bone name[16]; `+0x22` u16 = channel
 /// count), packets = `{u32 base_tick @0, u16 n @8}` + entries from `+0x10`: `{u8 count, u8 tick_offset, count x {u8 channel, u8 _, u16 target, u16 duration}}`.
 pub fn decode_lips(hdr: &TrackHeader, packets: &[Vec<u8>], ticks_per_sec: u32) -> LipsData {
     let raw = &hdr.raw;
-    let n = raw.get(0x36..0x38).map(|b| u16::from_le_bytes([b[0], b[1]]) as usize).unwrap_or(0);
+    // channel count = header `+0x22` (u16), records of 0x20 bytes from `+0x30` (the header is exactly `0x30 + n * 0x20` long).  Round 5 fix: the
+    // count used to be read at `+0x36`, i.e. from inside the first record's model name, which produced tens of thousands of empty channels.
+    let n = raw.get(0x22..0x24).map(|b| u16::from_le_bytes([b[0], b[1]]) as usize).unwrap_or(0).min(raw.len().saturating_sub(0x30) / 0x20);
     let cstr = |o: usize| {
         let s = raw.get(o..o + 16).unwrap_or(&[]);
         String::from_utf8_lossy(&s[..s.iter().position(|&c| c == 0).unwrap_or(s.len())]).into_owned()
@@ -573,6 +575,111 @@ pub fn caption_segments(s: &str) -> Vec<CaptionSegment> {
 // ----------------------------------------------------------------------------------------------------------------------------------
 // the scene
 // ----------------------------------------------------------------------------------------------------------------------------------
+// staff roll (SRDT)
+// ----------------------------------------------------------------------------------------------------------------------------------
+
+/// One text line of the staff roll.
+#[derive(Clone, Debug)]
+pub struct StaffLine {
+    /// Shift-JIS bytes (full-width roman letters in the US data)
+    pub text: Vec<u8>,
+    /// position in the roll strip (pixels of the 512 x 448 frame, y grows downwards; the strip scrolls up)
+    pub x: i16,
+    pub y: i32,
+    /// font of the pack (0..3)
+    pub font: u8,
+    /// record byte +0xb (copied to the text object `+0x5a`; 0 / 1 / 3 in the data)
+    pub kind: u8,
+    /// glyph scale (`byte +0xd / 100`: 0.8)
+    pub scale: f32,
+    /// record byte +0xe (style bits)
+    pub style: u8,
+}
+
+/// One picture of the staff roll (logos at the end).
+#[derive(Clone, Debug)]
+pub struct StaffImage {
+    /// byte offset of the `P2TexTex` picture in the pack
+    pub offset: usize,
+    pub x: i32,
+    pub y: i32,
+}
+
+/// The `SRDT` track of `GOOD_END` / `BAD_END` (disc 2): the retail staff roll handler (US main 0x002912d0 `CheckData` = 'SRDT', vtable
+/// 0x00439200: `Open` 0x00291310, `Read` 0x00291460, `Close` 0x00292180, `Event` 0x00291700).
+///
+/// Pack header: `u16 ?, u16 n_lines @2, u32 n_images @4, u32 font[4] @8` (offsets of four game font packs, `Font::CreateFont(i, ..)`, each with a
+/// 512 x 320 `FontDraw`), `u32 lines @0x24` (16-byte records `{u32 text, i32 y, i16 x, u8 font, u8 kind, u8 _, u8 scale%, u8 style, u8 flags}`),
+/// `u32 images @0x28` (16-byte records `{u32 picture, i32 x, i32 y, u8 shown}`), `f32 speed @0x30` (pixels per frame), `u32 @0x34` (window
+/// style), `f32 start @0x38` (seconds of the scene), `f32 dim @0x3c` (< 1: a screen filter of that level is laid behind the roll).
+///
+/// `Event(0)` per frame, once the scene time reaches `start`: the roll window scrolls up by `speed`; every line / picture whose `y` is at or above
+/// the bottom edge (`scroll + 448`) is created, objects that left the top are deleted.  The console steps the scene at 30 frames / s.
+#[derive(Clone, Debug)]
+pub struct StaffRoll {
+    pub start: f32,
+    pub speed: f32,
+    pub dim: f32,
+    pub lines: Vec<StaffLine>,
+    pub images: Vec<StaffImage>,
+    pub font_offsets: [usize; 4],
+    pub data: Arc<Vec<u8>>,
+}
+
+impl StaffRoll {
+    pub fn parse(d: &[u8]) -> Option<StaffRoll> {
+        let u16at = |o: usize| d.get(o..o + 2).map(|b| u16::from_le_bytes([b[0], b[1]]));
+        let u32at = |o: usize| d.get(o..o + 4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]));
+        let f32at = |o: usize| u32at(o).map(f32::from_bits);
+        let n_lines = u16at(2)? as usize;
+        let n_img = u32at(4)? as usize;
+        let (lo, io) = (u32at(0x24)? as usize, u32at(0x28)? as usize);
+        let mut lines = Vec::with_capacity(n_lines);
+        for i in 0..n_lines {
+            let r = d.get(lo + i * 16..lo + i * 16 + 16)?;
+            let so = u32::from_le_bytes([r[0], r[1], r[2], r[3]]) as usize;
+            let end = d.get(so..)?.iter().position(|&c| c == 0)? + so;
+            lines.push(StaffLine {
+                text: d[so..end].to_vec(),
+                y: i32::from_le_bytes([r[4], r[5], r[6], r[7]]),
+                x: i16::from_le_bytes([r[8], r[9]]),
+                font: r[10] & 3,
+                kind: r[11],
+                scale: if r[13] == 0 { 1.0 } else { r[13] as f32 / 100.0 },
+                style: r[14],
+            });
+        }
+        let mut images = Vec::with_capacity(n_img);
+        for i in 0..n_img.min(64) {
+            let r = d.get(io + i * 16..io + i * 16 + 16)?;
+            images.push(StaffImage {
+                offset: u32::from_le_bytes([r[0], r[1], r[2], r[3]]) as usize,
+                x: i32::from_le_bytes([r[4], r[5], r[6], r[7]]),
+                y: i32::from_le_bytes([r[8], r[9], r[10], r[11]]),
+            });
+        }
+        let fo = |i: usize| u32at(8 + 4 * i).unwrap_or(0) as usize;
+        Some(StaffRoll { start: f32at(0x38)?, speed: f32at(0x30)?, dim: f32at(0x3c)?, lines, images, font_offsets: [fo(0), fo(1), fo(2), fo(3)], data: Arc::new(d.to_vec()) })
+    }
+
+    /// Scroll position (pixels) at scene time `t` (s): `speed` per console frame (30 / s) from `start`; `None` before the roll starts.
+    pub fn scroll_at(&self, t: f32) -> Option<f32> {
+        (t >= self.start).then(|| (t - self.start) * 30.0 * self.speed)
+    }
+
+    /// Scroll at which the last line has left the top of the frame.
+    pub fn end_scroll(&self) -> f32 {
+        self.lines.iter().map(|l| l.y).chain(self.images.iter().map(|i| i.y)).max().unwrap_or(0) as f32 + 64.0
+    }
+
+    /// The font pack `i` (`Font::CreateFont(i, pack + font[i])`).
+    pub fn font(&self, i: usize) -> Option<sh2_menu::gamefont::GameFont> {
+        let o = *self.font_offsets.get(i)?;
+        (o != 0).then(|| sh2_menu::gamefont::GameFont::parse(self.data.get(o..)?)).flatten()
+    }
+}
+
+// ----------------------------------------------------------------------------------------------------------------------------------
 
 /// A model of the cut scene (`MDLS` track + the `ANMS` tracks that drive it).
 #[derive(Clone)]
@@ -609,6 +716,8 @@ pub struct CutsceneData {
     pub lgdt: Vec<sh2_script::lsd::LgdtBlob>,
     /// `DLBY` (Dolby Digital) audio track, played instead of `PCMS` on a surround setup (not decodable here)
     pub dlby_track: Option<usize>,
+    /// `SRDT` staff roll tracks (the endings)
+    pub staff: Vec<(usize, StaffRoll)>,
     pub warnings: Vec<String>,
 }
 
@@ -695,7 +804,24 @@ impl CutsceneData {
                 None => bg_anims.push((i, a.model.clone(), motion)),
             }
         }
-        Ok(CutsceneData { name: name.to_owned(), content, models, bg_anims, cam_track, map_tracks, pcms_track, movie_track, script_track, lips, lights, captions, caption_fonts, efd_tracks, lgdt, dlby_track, warnings })
+        // `SRDT` (staff roll): `LsdContent` keeps no payload for tags it does not know; collect it from the packets
+        let mut staff = Vec::new();
+        let srdt: Vec<usize> = content.tracks.iter().enumerate().filter(|(_, t)| &t.tag == b"SRDT").map(|(i, _)| i).collect();
+        if !srdt.is_empty() {
+            if let Ok(f) = sh2_script::lsd::LsdFile::parse(bytes) {
+                for &ti in &srdt {
+                    let mut pl = Vec::new();
+                    for p in f.packets().filter(|p| p.track as usize == ti) {
+                        pl.extend_from_slice(p.payload);
+                    }
+                    match StaffRoll::parse(&pl) {
+                        Some(r) => staff.push((ti, r)),
+                        None => warnings.push(format!("SRDT track {ti}: bad staff roll pack ({} bytes)", pl.len())),
+                    }
+                }
+            }
+        }
+        Ok(CutsceneData { name: name.to_owned(), content, models, bg_anims, cam_track, map_tracks, pcms_track, movie_track, script_track, lips, lights, captions, caption_fonts, efd_tracks, lgdt, dlby_track, staff, warnings })
     }
 
     pub fn ticks_per_sec(&self) -> u32 {
@@ -949,5 +1075,49 @@ mod caption_tests {
         let slot = rig.slots.get(&0).copied().unwrap_or(usize::MAX);
         let c = rig.lc.get_mut(slot).map(|l| l.color.x).unwrap_or(-1.0);
         assert!((c - 1.0).abs() < 1e-4, "a long gap stays a step: {c}");
+    }
+
+    #[test]
+    fn staff_roll_pack_and_scroll() {
+        // header: 2 lines, 0 pictures, no fonts, lines @0x40, pictures @0x60, speed 2.0 px / frame, start 10 s, dim 0.9
+        let mut d = vec![0u8; 0x80];
+        d[2] = 2;
+        d[0x24] = 0x40;
+        d[0x28] = 0x60;
+        d[0x30..0x34].copy_from_slice(&2.0f32.to_le_bytes());
+        d[0x38..0x3c].copy_from_slice(&10.0f32.to_le_bytes());
+        d[0x3c..0x40].copy_from_slice(&0.9f32.to_le_bytes());
+        for (i, (y, x)) in [(800i32, 48i16), (600, 80)].iter().enumerate() {
+            let r = 0x40 + i * 16;
+            d[r..r + 4].copy_from_slice(&(0x70u32 + i as u32 * 4).to_le_bytes());
+            d[r + 4..r + 8].copy_from_slice(&y.to_le_bytes());
+            d[r + 8..r + 10].copy_from_slice(&x.to_le_bytes());
+            d[r + 10] = 1;
+            d[r + 13] = 80;
+        }
+        d[0x70..0x73].copy_from_slice(b"AB ");
+        d[0x74..0x77].copy_from_slice(b"CD ");
+        let r = StaffRoll::parse(&d).unwrap();
+        assert_eq!(r.lines.len(), 2);
+        assert_eq!((r.lines[0].y, r.lines[0].x, r.lines[0].font, r.lines[0].text.as_slice()), (800, 48, 1, &b"AB"[..]));
+        assert!((r.lines[0].scale - 0.8).abs() < 1e-6);
+        assert_eq!(r.scroll_at(9.0), None);
+        // 30 console frames per second at 2 px each
+        assert!((r.scroll_at(11.0).unwrap() - 60.0).abs() < 1e-3);
+        assert!(r.end_scroll() >= 800.0);
+    }
+
+    #[test]
+    fn lips_channel_count_is_at_0x22() {
+        let mut raw = vec![0u8; 0x30 + 2 * 0x20];
+        raw[..4].copy_from_slice(b"LIPS");
+        raw[0x22] = 2;
+        raw[0x30..0x37].copy_from_slice(b"Nicol_m");
+        raw[0x40..0x44].copy_from_slice(b"JAW0");
+        raw[0x50..0x55].copy_from_slice(b"Karin");
+        let hdr = TrackHeader { tag: *b"LIPS", flags: 0, start_tick: 0, end_tick: 0, size_units: 7, mode: 0, field_14: 0, total_blocks: 0, raw };
+        let l = decode_lips(&hdr, &[], 30);
+        assert_eq!(l.channels.len(), 2);
+        assert_eq!((l.channels[0].model.as_str(), l.channels[0].bone.as_str(), l.channels[1].model.as_str()), ("Nicol_m", "JAW0", "Karin"));
     }
 }

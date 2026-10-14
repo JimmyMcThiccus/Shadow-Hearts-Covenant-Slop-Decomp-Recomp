@@ -1,0 +1,37 @@
+LSD/BAD_END.LSD track 4: 23015 pictures 512x448 @ 29.970 = 767.9s, track ticks 0..23013 = 767.1s
+LSD/G06A.LSD track 16: 975 pictures 512x448 @ 29.970 = 32.5s, track ticks 0..973 = 32.4s
+LSD/GOOD_END.LSD track 4: 23273 pictures 512x448 @ 29.970 = 776.5s, track ticks 0..23272 = 775.7s
+LSD/GY_MOV.LSD track 1: 406 pictures 512x448 @ 29.970 = 13.5s, track ticks 0..405 = 13.5s
+LSD/M01.LSD track 1: 1205 pictures 512x448 @ 29.970 = 40.2s, track ticks 0..1204 = 40.1s
+LSD/M02.LSD track 1: 1432 pictures 512x448 @ 30.000 = 47.7s, track ticks 0..1429 = 47.6s
+LSD/M04.LSD track 1: 2092 pictures 512x448 @ 29.970 = 69.8s, track ticks 0..2087 = 69.6s
+LSD/M05.LSD track 1: 720 pictures 512x448 @ 29.970 = 24.0s, track ticks 0..719 = 24.0s
+LSD/M06.LSD track 1: 2489 pictures 512x448 @ 29.970 = 83.0s, track ticks 0..2487 = 82.9s
+LSD/M07.LSD track 1: 1637 pictures 512x448 @ 29.970 = 54.6s, track ticks 0..1635 = 54.5s
+LSD/M09.LSD track 1: 3197 pictures 512x448 @ 29.970 = 106.7s, track ticks 0..3190 = 106.3s
+LSD/M11.LSD track 1: 2622 pictures 512x448 @ 29.970 = 87.5s, track ticks 0..2621 = 87.4s
+LSD/M13.LSD track 1: 2390 pictures 512x448 @ 29.970 = 79.7s, track ticks 0..2385 = 79.5s
+LSD/M15.LSD track 1: 1753 pictures 512x448 @ 29.970 = 58.5s, track ticks 0..1748 = 58.3s
+LSD/M16.LSD track 1: 1528 pictures 512x448 @ 29.970 = 51.0s, track ticks 0..1521 = 50.7s
+LSD/M17.LSD track 6: 323 pictures 512x448 @ 29.970 = 10.8s, track ticks 4557..4879 = 10.7s
+LSD/MOVIE_A.LSD track 2: 12607 pictures 512x448 @ 29.970 = 420.7s, track ticks 0..12606 = 420.2s
+LSD/MOVIE_B.LSD track 1: 2724 pictures 512x448 @ 29.970 = 90.9s, track ticks 0..2723 = 90.8s
+LSD/MOVIE_C.LSD track 3: 10980 pictures 512x448 @ 29.970 = 366.4s, track ticks 0..10979 = 366.0s
+LSD/MOVIE_D.LSD track 2: 560 pictures 512x448 @ 29.970 = 18.7s, track ticks 0..559 = 18.6s
+LSD/MOVIE_E.LSD track 3: 6779 pictures 512x448 @ 29.970 = 226.2s, track ticks 0..6778 = 225.9s
+LSD/MOVIE_F.LSD track 3: 6576 pictures 512x448 @ 29.970 = 219.4s, track ticks 0..6574 = 219.1s
+LSD/MOVIE_G.LSD track 3: 7341 pictures 512x448 @ 29.970 = 244.9s, track ticks 0..7340 = 244.7s
+LSD/N027.LSD track 20: 200 pictures 512x448 @ 30.000 = 6.7s, track ticks 1969..2168 = 6.6s
+LSD/N035.LSD track 31: 342 pictures 512x448 @ 29.970 = 11.4s, track ticks 1153..1494 = 11.4s
+LSD/N035.LSD track 32: 91 pictures 512x448 @ 29.970 = 3.0s, track ticks 2643..2732 = 3.0s
+LSD/N054.LSD track 27: 3025 pictures 512x448 @ 29.970 = 100.9s, track ticks 2051..5070 = 100.6s
+LSD/N060.LSD track 51: 404 pictures 512x448 @ 29.970 = 13.5s, track ticks 6065..6468 = 13.4s
+LSD/N081.LSD track 127: 200 pictures 512x448 @ 29.970 = 6.7s, track ticks 4793..4993 = 6.7s
+LSD/N103.LSD track 27: 195 pictures 512x448 @ 29.970 = 6.5s, track ticks 3402..3596 = 6.5s
+LSD/N103.LSD track 28: 224 pictures 512x448 @ 29.970 = 7.5s, track ticks 4297..4520 = 7.4s
+LSD/N121.LSD track 14: 91 pictures 512x448 @ 29.970 = 3.0s, track ticks 2953..3043 = 3.0s
+LSD/N129.LSD track 18: 1155 pictures 512x448 @ 29.970 = 38.5s, track ticks 838..1992 = 38.5s
+LSD/OPI_E00.LSD track 1: 237 pictures 512x448 @ 29.970 = 7.9s, track ticks 0..236 = 7.9s
+LSD/OPI_J00.LSD track 1: 237 pictures 512x448 @ 29.970 = 7.9s, track ticks 0..236 = 7.9s
+
+35 MOVS tracks, 123025 pictures, 0 errors []

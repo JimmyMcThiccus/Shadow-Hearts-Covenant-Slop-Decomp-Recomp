@@ -9,6 +9,7 @@
 //! * [`plugin`] – Bevy `AudioPlugin`, request queue and disc glue (feature `bevy`)
 pub mod adpcm;
 pub mod engine;
+pub mod objse;
 #[cfg(feature = "bevy")]
 pub mod plugin;
 pub mod runtime;
@@ -18,6 +19,7 @@ pub mod spu;
 pub mod stream;
 pub mod synth;
 pub mod validate;
+pub mod vibe;
 
 pub use engine::{write_wav, AudioEngine, OutputKind};
 #[cfg(feature = "bevy")]

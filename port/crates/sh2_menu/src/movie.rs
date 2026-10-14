@@ -50,11 +50,24 @@ pub struct MovieStream {
     handle: Option<std::thread::JoinHandle<()>>,
 }
 
-/// The `MOVS` elementary stream and `PCMS` audio of an LSD file held in memory.
+/// The `MOVS` elementary stream and `PCMS` audio of an LSD file held in memory (the first movie track).
 pub fn split_lsd(bytes: &[u8]) -> Result<(Vec<u8>, MovieInfo), String> {
     let f = LsdFile::parse(bytes).map_err(|e| e.to_string())?;
     let movs = f.tracks.iter().position(|t| TrackKind::from_tag(&t.tag) == TrackKind::Movie).ok_or("no MOVS track")?;
-    let pcms = f.tracks.iter().position(|t| &t.tag == b"PCMS");
+    split_parsed(&f, movs, true)
+}
+
+/// The elementary stream of movie track `track` (no audio: the cut scene player streams the `PCMS` track itself).
+pub fn split_lsd_track(bytes: &[u8], track: usize) -> Result<(Vec<u8>, MovieInfo), String> {
+    let f = LsdFile::parse(bytes).map_err(|e| e.to_string())?;
+    match f.tracks.get(track) {
+        Some(t) if TrackKind::from_tag(&t.tag) == TrackKind::Movie => split_parsed(&f, track, false),
+        _ => Err(format!("track {track} is not a MOVS track")),
+    }
+}
+
+fn split_parsed(f: &LsdFile<'_>, movs: usize, with_audio: bool) -> Result<(Vec<u8>, MovieInfo), String> {
+    let pcms = if with_audio { f.tracks.iter().position(|t| &t.tag == b"PCMS") } else { None };
     let mut es = Vec::with_capacity(f.tracks[movs].total_blocks as usize * 16);
     let mut pcm = Vec::new();
     for p in f.packets() {
@@ -81,21 +94,39 @@ impl MovieStream {
     pub fn try_recv(&self) -> Result<MovieMsg, TryRecvError> {
         self.rx.lock().unwrap_or_else(|e| e.into_inner()).try_recv()
     }
+    pub fn recv_timeout(&self, t: std::time::Duration) -> Result<MovieMsg, std::sync::mpsc::RecvTimeoutError> {
+        self.rx.lock().unwrap_or_else(|e| e.into_inner()).recv_timeout(t)
+    }
     pub fn recv(&self) -> Result<MovieMsg, std::sync::mpsc::RecvError> {
         self.rx.lock().unwrap_or_else(|e| e.into_inner()).recv()
     }
     /// Read `path` (e.g. `OPENING/DEMO.LSD`) from the disc folder `root` and start decoding.  Frames are queued through a small bounded
     /// channel (the thread blocks while it is full).
     pub fn open(root: PathBuf, path: String) -> MovieStream {
+        Self::spawn(move || {
+            let disc = sh2_core::fileio::Disc::open(&root).map_err(|e| e.to_string())?;
+            let bytes = disc.read(&path).map_err(|e| format!("{path}: {e}"))?;
+            split_lsd(&bytes)
+        })
+    }
+
+    /// Decode the `MOVS` track `track` of an LSD file already in memory (`MovieServerHandler` of a cut scene: `M01`, `N027`, `MOVIE_A` ...;
+    /// a file may hold several movie tracks).  The bytes are shared with the caller; the thread copies only the track's elementary stream.
+    pub fn from_lsd_track(bytes: Arc<Vec<u8>>, track: usize) -> MovieStream {
+        Self::spawn(move || {
+            let r = split_lsd_track(&bytes, track);
+            drop(bytes);
+            r
+        })
+    }
+
+    fn spawn(load: impl FnOnce() -> Result<(Vec<u8>, MovieInfo), String> + Send + 'static) -> MovieStream {
         let (tx, rx) = sync_channel::<MovieMsg>(8);
         let handle = std::thread::Builder::new()
             .name("movie-decoder".into())
             .spawn(move || {
                 let run = || -> Result<(), String> {
-                    let disc = sh2_core::fileio::Disc::open(&root).map_err(|e| e.to_string())?;
-                    let bytes = disc.read(&path).map_err(|e| format!("{path}: {e}"))?;
-                    let (es, mut info) = split_lsd(&bytes)?;
-                    drop(bytes);
+                    let (es, mut info) = load()?;
                     let mut dec = Mpeg2Decoder::new(&es);
                     // the sequence header gives the real size / rate
                     if let Some(s) = dec.peek_format() {

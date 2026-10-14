@@ -194,7 +194,8 @@ fn lsd_pcms_tracks_decode() {
         let Some(d) = disc(var, fallback) else { continue };
         let mut tracks = 0;
         let mut corr_sum = 0f64;
-        for (_c, files) in d.listing() {
+        // `listing_all`: with `SH2_US_DISC2_DIR` the disc 2 scenes (N077 .. GOOD_END) are checked too
+        for (_c, files) in d.listing_all() {
             for (path, loc) in files {
                 if !path.to_uppercase().ends_with(".LSD") || loc.size > 40_000_000 {
                     continue;

@@ -19,7 +19,7 @@ struct Shots {
 
 fn main() {
     let a: Vec<String> = std::env::args().skip(1).collect();
-    let name = a.iter().find(|s| !s.starts_with("--") && !s.contains(',') && !s.contains('/')).cloned().unwrap_or_else(|| "N004".into());
+    let name = a.iter().find(|s| !s.starts_with("--") && !s.contains(',') && !s.contains('/') && s.parse::<f32>().is_err()).cloned().unwrap_or_else(|| "N004".into());
     let us = a.iter().any(|s| s == "--us");
     // `--hz N`: every rendered frame advances exactly 1/N s (frame-rate independence checks); `--fixed` = 60
     let hz: Option<f32> = a.iter().position(|s| s == "--hz").and_then(|i| a.get(i + 1)).and_then(|s| s.parse().ok());
@@ -64,6 +64,27 @@ fn main() {
                 exit.write(AppExit::Success);
             }
         });
+    // `--seconds N`: hard wall-clock cap (test runs must never leave a window behind)
+    if let Some(cap) = std::env::args().skip_while(|x| x != "--seconds").nth(1).and_then(|v| v.parse::<f32>().ok()) {
+        let t0 = std::time::Instant::now();
+        app.add_systems(Update, move |mut exit: MessageWriter<AppExit>| {
+            if t0.elapsed().as_secs_f32() > cap {
+                println!("--seconds {cap}: wall-clock cap reached, exiting");
+                exit.write(AppExit::Success);
+            }
+        });
+    }
+    // vibration: count the motor pulses the scene asks for (no gamepad needed)
+    app.add_message::<sh2_menu::vibration::VibrationRequest>().add_systems(Update, |mut r: MessageReader<sh2_menu::vibration::VibrationRequest>, mut n: Local<(u32, f32)>, st: Res<CutsceneStatus>| {
+        for v in r.read() {
+            n.0 += 1;
+            n.1 = n.1.max(v.strength);
+        }
+        if matches!(st.state, CutsceneState::Finished | CutsceneState::Failed) && n.0 > 0 {
+            println!("vibration: {} motor pulses, peak strength {:.2}", n.0, n.1);
+            n.0 = 0;
+        }
+    });
     if let Some(s) = shots {
         app.insert_resource(s);
     }

@@ -405,17 +405,86 @@ impl PkfInfo {
 
 /// A disc image rooted at a host directory (`SH2_DISC_DIR`) that contains `PKFINFO.TBL`, `*.PKB`,
 /// `FIELD.BIN`, `BATTLE.BIN`, `SLPM_602.19`, ...
+///
+/// **Two-disc set (US retail, round 5 CS)**: the US game ships on two discs whose files are byte-identical except `LSD.PKB` /
+/// `PKFINFO.TBL` (disc 1 = `SLUS_210.41`: 90 LSD scenes `N001..N076`, `M01..M15`, `MOVIE_A..D`, `G02`, `OPI_E00`; disc 2 = `SLUS_210.44`: 75
+/// scenes `N077..N130`, `M16`, `M17`, `MOVIE_E..G`, `G01`, `G03..G07`, `GOOD_END`, `BAD_END`, `GY_MOV`, `OPI_J00`; no scene is on both).  When
+/// a disc 1 folder is opened and `SH2_US_DISC2_DIR` names the disc 2 folder (or the other way round with `SH2_US_DISC_DIR`), the other
+/// disc is attached: [`Disc::read`] / [`Disc::exists`] fall back to it for paths the opened disc does not hold, so every loader finds the
+/// disc 2 cut scenes without a disc swap.  [`Disc::disc_of`] tells which disc holds a path (the console's `DiskChange` prompt).
 pub struct Disc {
     root: PathBuf,
     info: PkfInfo,
+    /// the other disc of a two-disc set (see above)
+    other: Option<Box<Disc>>,
+    /// 1 / 2 for the US retail discs (by the boot ELF in the folder), 0 otherwise
+    number: u8,
+}
+
+/// Disc number of a folder by its boot ELF: `SLUS_210.41` = US disc 1, `SLUS_210.44` = US disc 2.
+pub fn disc_number(root: &Path) -> u8 {
+    if root.join("SLUS_210.41").exists() {
+        1
+    } else if root.join("SLUS_210.44").exists() {
+        2
+    } else {
+        0
+    }
 }
 
 impl Disc {
-    pub fn open(root: impl AsRef<Path>) -> Result<Self, FileIoError> {
-        let root = root.as_ref().to_path_buf();
+    fn open_single(root: &Path) -> Result<Self, FileIoError> {
+        let root = root.to_path_buf();
         let p = root.join("PKFINFO.TBL");
         let bytes = std::fs::read(&p).map_err(|source| FileIoError::Io { path: p, source })?;
-        Ok(Disc { info: PkfInfo::parse(&bytes)?, root })
+        let number = disc_number(&root);
+        Ok(Disc { info: PkfInfo::parse(&bytes)?, root, other: None, number })
+    }
+
+    pub fn open(root: impl AsRef<Path>) -> Result<Self, FileIoError> {
+        let mut d = Self::open_single(root.as_ref())?;
+        let other_var = match d.number {
+            1 => Some("SH2_US_DISC2_DIR"),
+            2 => Some("SH2_US_DISC_DIR"),
+            _ => None,
+        };
+        if let Some(dir) = other_var.and_then(std::env::var_os) {
+            if let Ok(o) = Self::open_single(Path::new(&dir)) {
+                if o.number != 0 && o.number != d.number {
+                    d.other = Some(Box::new(o));
+                }
+            }
+        }
+        Ok(d)
+    }
+
+    /// Open without attaching the other disc of a set.
+    pub fn open_one(root: impl AsRef<Path>) -> Result<Self, FileIoError> {
+        Self::open_single(root.as_ref())
+    }
+
+    /// 1 / 2 = US retail disc 1 / 2, 0 = not a US retail disc.
+    pub fn number(&self) -> u8 {
+        self.number
+    }
+
+    /// The attached other disc of a two-disc set.
+    pub fn other(&self) -> Option<&Disc> {
+        self.other.as_deref()
+    }
+
+    /// Does this disc (or the attached other disc) hold `path`?
+    pub fn exists(&self, path: &str) -> bool {
+        self.info.search_file(path).is_some() || self.other.as_ref().map(|o| o.info.search_file(path).is_some()).unwrap_or(false)
+    }
+
+    /// Which disc holds `path`: this disc's number when it has it, else the attached disc's number; `None` when neither has it.
+    pub fn disc_of(&self, path: &str) -> Option<u8> {
+        if self.info.search_file(path).is_some() {
+            Some(self.number)
+        } else {
+            self.other.as_ref().filter(|o| o.info.search_file(path).is_some()).map(|o| o.number)
+        }
     }
     pub fn info(&self) -> &PkfInfo {
         &self.info
@@ -446,7 +515,12 @@ impl Disc {
 
     /// `FileIOLib::open` + `read` + `close` in one go (what `BlockRead` / `DvdromOrder::ReadOrder` end up doing).
     pub fn read(&self, path: &str) -> Result<Vec<u8>, FileIoError> {
-        let loc = self.info.search_file(path).ok_or_else(|| FileIoError::NotFound(path.to_string()))?;
+        let Some(loc) = self.info.search_file(path) else {
+            return match &self.other {
+                Some(o) => o.read(path),
+                None => Err(FileIoError::NotFound(path.to_string())),
+            };
+        };
         let p = self.container_path(&loc);
         let io = |source| FileIoError::Io { path: p.clone(), source };
         let mut f = File::open(&p).map_err(io)?;
@@ -454,6 +528,19 @@ impl Disc {
         let mut buf = vec![0u8; loc.size as usize];
         f.read_exact(&mut buf).map_err(io)?;
         Ok(buf)
+    }
+
+    /// Like [`Disc::listing`] over the attached other disc too (its paths that this disc does not hold).
+    pub fn listing_all(&self) -> BTreeMap<String, Vec<(String, FileLoc)>> {
+        let mut m = self.listing();
+        if let Some(o) = &self.other {
+            o.info.walk(|p, l| {
+                if self.info.search_file(p).is_none() {
+                    m.entry(format!("{}@disc{}", l.container, o.number)).or_default().push((p.to_string(), l.clone()));
+                }
+            });
+        }
+        m
     }
 
     /// All files grouped by container (archive stem or plain file name) — used for listing/verification.

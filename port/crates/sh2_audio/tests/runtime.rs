@@ -176,3 +176,34 @@ fn bevy_plugin_plays_scene_music() {
     app.update();
     assert!(!app.world().resource::<AudioRuntime>().bgm_playing());
 }
+
+/// Round 5: `PlaySeR` (op 0x5f) plays / fades, the map object sounds start for a listener and stop for the battle, battle banks load by number.
+#[test]
+fn play_se_r_objse_and_battle_banks() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let Some(d) = disc() else { return };
+    drain();
+    // PlaySeR(0, id, 0x60, 0) ; PlaySeR(4, id, 0, 300) ; PlaySeR(1, ..) is a host query
+    assert!(hooks::field_script_op(0x5f, 4, |i| [0, 0x2000_1001u32 as i32, 0x60, 0][i], |_| String::new()));
+    assert!(hooks::field_script_op(0x5f, 4, |i| [4, 0x2000_1001u32 as i32, 0, 300][i], |_| String::new()));
+    assert!(hooks::field_script_op(0x5f, 4, |i| [1, 0x2000_1001u32 as i32, 0, 0][i], |_| String::new()));
+    let reqs = drain();
+    assert_eq!(reqs, vec![AudioRequest::PlaySe { id: 0x2000_1001, volume: 0x60 }, AudioRequest::FadeSe { id: 0x2000_1001, volume: 0, time: 300 }]);
+    let mut rt = AudioRuntime::new(AudioEngine::new(OutputKind::Null), Some(d));
+    rt.handle(&AudioRequest::LoadSe { name: "AP_00_U".into(), slot: 1 });
+    rt.handle(&reqs[0]);
+    assert!(energy(&mut rt, 0.2) > 1e-4);
+    rt.handle(&reqs[1]);
+    let _ = energy(&mut rt, 0.5);
+    // an object sound: non-positional, play bits set
+    let rec = sh2_audio::objse::ObjSeRec { id: 0x2000_1001, kind: 0, flags: 1, points: vec![], extra: [0; 4] };
+    rt.handle(&AudioRequest::SetObjSe { slot: 3, rec: Some(rec), one_shot: false });
+    rt.update(1.0 / 30.0);
+    assert_eq!(rt.objse_count(), 1);
+    rt.handle(&AudioRequest::PlayBattleBgm { number: 0x191 });
+    rt.update(1.0 / 30.0);
+    assert_eq!(rt.objse_count(), 0, "the battle releases the field's object sounds");
+    rt.handle(&AudioRequest::LoadBattleBanks { chrs: vec![0, 401], weapons: vec![(0, 0)], voices: vec![0] });
+    rt.handle(&AudioRequest::UnloadBattleBanks);
+    drain();
+}

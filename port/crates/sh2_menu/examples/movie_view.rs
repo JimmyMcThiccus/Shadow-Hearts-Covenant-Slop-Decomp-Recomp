@@ -53,6 +53,16 @@ fn main() {
             exit.write(AppExit::Success);
         }
     });
+    // `--seconds N`: hard wall-clock cap (test runs must never leave a window behind)
+    if let Some(cap) = std::env::args().skip_while(|x| x != "--seconds").nth(1).and_then(|v| v.parse::<f32>().ok()) {
+        let t0 = std::time::Instant::now();
+        app.add_systems(Update, move |mut exit: MessageWriter<AppExit>| {
+            if t0.elapsed().as_secs_f32() > cap {
+                println!("--seconds {cap}: wall-clock cap reached, exiting");
+                exit.write(AppExit::Success);
+            }
+        });
+    }
     if let Some(s) = shots {
         app.insert_resource(s);
     }

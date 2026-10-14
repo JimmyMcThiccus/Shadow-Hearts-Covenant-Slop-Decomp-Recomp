@@ -37,8 +37,13 @@ pub enum AudioRequest {
     PlaySe { id: u32, volume: i32 },
     /// 0x5a `CField::StopSe(id)`
     StopSe { id: u32 },
+    /// 0x5f `PlaySeR(4, id, volume, time)` -> `CSe::SeFade(SeFind2(id), volume, time)`: fade the first instance of `id` to `volume` (0..0x7f)
+    /// over `time` ms (the unit is the driver's, read as ms like `SetBGMParam`)
+    FadeSe { id: u32, volume: i32, time: i32 },
     /// 0x5e `CField::PlayStreamBgm(name, volume)`: `FIELD/SOUND/BGM/<name>` (an `*.SSV` stream)
     PlayStreamBgm { name: String, volume: i32 },
+    /// `StreamBGM::SetVolume(volume 0..127)` of the playing stream BGM (the effect programs' `sbgSetVolume`)
+    SetStreamBgmVolume { volume: i32 },
     /// 0x5d `SetSoundData(2, time)` -> `CField::FadeStreamBgm(time)`
     FadeStreamBgm { time: i32 },
     /// battle start: `BtlSocket::SetBtlBGMNumber(n)` -> `BTLDATA/SOUND/BGM/BGM%03d.SSQ`
@@ -70,6 +75,21 @@ pub enum AudioRequest {
     StopPcms { fade_ms: u32 },
     /// effect sound bank (the `1` / `SDRH` section of an EFMG effect file, `ssePlaySe`): `key` identifies the effect + section, `id` is the local SE id
     PlayEffectSe { key: String, bank: std::sync::Arc<Vec<u8>>, id: u16 },
+    /// a BGM bank held in memory (`CMusic::PlayBGM(0, mode, data)` on an `SDRH` blob: the LSD `SetNextBGM` of `LSDScrEx`, whose bank is an
+    /// `LGDT` track of the scene): replaces the field / battle BGM like [`AudioRequest::PlayBgm`].  `key` names the bank in the cache.
+    PlayBgmData { key: String, bank: std::sync::Arc<Vec<u8>>, index: u32 },
+    /// map load (`CField::AutoLoadSE`): the map's `OBJSE` chunk (data from its `u16 count`): loads its SE banks and replaces every object sound
+    MapObjSe { chunk: std::sync::Arc<Vec<u8>> },
+    /// field script 0x5c `SetObjSE(slot, ..)`: add / replace (`Some`) or clear (`None`; `slot < 0` = all) an object sound
+    SetObjSe { slot: i32, rec: Option<crate::objse::ObjSeRec>, one_shot: bool },
+    /// the active field camera (`GsxCamera` position, "at" axis, focal length), PS2 world units: the listener of the object sounds
+    SetListener { listener: Option<crate::objse::Listener> },
+    /// battle start: the per-fighter SE banks of BATTLE.BIN (`BTLDATA/SOUND/SE/%03dM.SSE` per CHR model number = wave bank `0x9000 | chr`,
+    /// `%03dW%02d.SSE` per PC weapon (same wave bank as the PC's `M`), `%03dC.SSE` per PC = `0x9100 | pc`); every bank stays resident until
+    /// [`AudioRequest::UnloadBattleBanks`] so `PlayGlobalSe { id: (bank << 16) | local }` finds them (`Sdrv::PlaySE` -> `FindSE`)
+    LoadBattleBanks { chrs: Vec<u16>, weapons: Vec<(u16, u8)>, voices: Vec<u16> },
+    /// leave the battle: drop the banks of [`AudioRequest::LoadBattleBanks`]
+    UnloadBattleBanks,
     /// stop everything (game over / reset)
     StopAll,
     /// `SaveMenuSection::UpdateSoundOut` -> `Sdrv::SetMode(mode)`: the Option page's sound-out setting, in the driver's codes
@@ -212,7 +232,16 @@ pub mod hooks {
                 }
             }
             0x5e => AudioRequest::PlayStreamBgm { name: str_arg(0), volume: int_arg(1) },
-            0x54 | 0x59 | 0x5b | 0x5c | 0x5f => return true, // WaitBgm / SetSeVolume / WaitSe / SetObjSE / PlaySeR: acknowledged only
+            // 0x5f `PlaySeR(mode, id, a, b)` (CField.c 3858 / 9103): 0 play with volume `a` (0 = 0x80), 4 fade (`SeFade(id, a, b)`), 2 play and wait
+            // until it ends (the op is re-executed every frame: start it only while no instance of the id is playing), 1 = query (host)
+            0x5f => match int_arg(0) {
+                0 => AudioRequest::PlaySe { id: int_arg(1) as u32, volume: int_arg(2) },
+                2 if status::wait_se(int_arg(1) as u32) => AudioRequest::PlaySe { id: int_arg(1) as u32, volume: int_arg(2) },
+                4 => AudioRequest::FadeSe { id: int_arg(1) as u32, volume: int_arg(2), time: int_arg(3) },
+                _ => return true,
+            },
+            // 0x59 `SetSeVolume` is an empty function on the console; 0x5c `SetObjSE` goes through `AudioRequest::SetObjSe` (host hook)
+            0x54 | 0x59 | 0x5b | 0x5c => return true, // WaitBgm / SetSeVolume / WaitSe / SetObjSE: acknowledged here
             _ => return false,
         };
         post(req);
@@ -245,6 +274,12 @@ pub struct AudioRuntime {
     se_banks: HashMap<String, u32>,
     /// every SE started through `PlaySe` / `PlayGlobalSe`: (global id, play id), oldest first (per-id `StopSe`, `WaitSe`)
     se_plays: Vec<(u32, PlayId)>,
+    /// banks of [`AudioRequest::LoadBattleBanks`]
+    battle_banks: Vec<String>,
+    /// field object sounds (`OBJSE`) and their play ids
+    objse: crate::objse::ObjSeMan,
+    objse_plays: HashMap<usize, PlayId>,
+    listener: Option<crate::objse::Listener>,
     pub stats: RuntimeStats,
 }
 
@@ -268,6 +303,10 @@ impl AudioRuntime {
             bgm_volume: 1.0,
             se_banks: HashMap::new(),
             se_plays: Vec::new(),
+            battle_banks: Vec::new(),
+            objse: Default::default(),
+            objse_plays: HashMap::new(),
+            listener: None,
             stats: RuntimeStats::default(),
         }
     }
@@ -311,6 +350,10 @@ impl AudioRuntime {
 
     fn start_bgm(&mut self, path: &str, index: usize) -> Option<PlayId> {
         let h = self.bank(path)?;
+        self.start_bgm_bank(h, index)
+    }
+
+    fn start_bgm_bank(&mut self, h: u32, index: usize) -> Option<PlayId> {
         let old = self.bgm_play.take();
         self.fade_out(old, STREAM_FADE_MS);
         // keep only the BGM bank of the playing song resident (they are large)
@@ -427,8 +470,16 @@ impl AudioRuntime {
                 }
                 self.publish_se_status();
             }
+            AudioRequest::FadeSe { id, volume, time } => {
+                self.prune_se_plays();
+                if let Some((_, pid)) = self.se_plays.iter().find(|(sid, _)| sid == id) {
+                    let v = (*volume).clamp(0, 0x7f) as f32 / 127.0;
+                    self.engine.synth().fade(*pid, v, (*time).max(0) as u32, v <= 0.0);
+                }
+            }
             AudioRequest::PlayStreamBgm { name, volume } => {
-                let path = format!("FIELD/SOUND/BGM/{name}");
+                // a name with a directory is a disc path (FX round 5 hook: the effect programs' `sbgCreate("EFFECT/EFX081.SSV")`)
+                let path = if name.contains('/') { name.clone() } else { format!("FIELD/SOUND/BGM/{name}") };
                 let old = self.stream_play.take();
                 self.fade_out(old, STREAM_FADE_MS);
                 if let Some(bytes) = self.read(&norm(&path)) {
@@ -438,11 +489,22 @@ impl AudioRuntime {
                     self.stream_play = self.engine.play_stream_file(&bytes, gain);
                 }
             }
+            AudioRequest::SetStreamBgmVolume { volume } => {
+                // `StreamBGM::SetVolume(v)`: the register `(v + 1) * 0x80 - 1` of 0x3fff
+                if let Some(id) = self.stream_play {
+                    let gain = (((*volume).clamp(0, 127) as f32 + 1.0) * 128.0 - 1.0) / 16383.0;
+                    if let Some(st) = self.engine.synth().stream_mut(id) {
+                        st.set_volume(gain.min(1.0));
+                    }
+                }
+            }
             AudioRequest::FadeStreamBgm { time } => {
                 let id = self.stream_play.take();
                 self.fade_out(id, if *time <= 0 { STREAM_FADE_MS } else { *time as u32 });
             }
             AudioRequest::PlayBattleBgm { number } => {
+                // the field (and its object sounds) is released for the battle
+                self.release_objse(-1);
                 let old = self.bgm_play.take();
                 self.fade_out(old, STREAM_FADE_MS);
                 let path = match &self.battle_bgm_name {
@@ -545,7 +607,64 @@ impl AudioRuntime {
                 self.engine.synth().set_output_mode(mono, true);
                 log::info!("audio: sound out {}", if mono { "mono" } else if sdrv_mode & 0xf == 2 { "surround (rendered as stereo)" } else { "stereo" });
             }
+            AudioRequest::PlayBgmData { key, bank, index } => {
+                let k = format!("MEM:{}", norm(key));
+                let h = match self.banks.get(&k) {
+                    Some(&h) => Some(h),
+                    None => {
+                        let h = self.engine.load_bank(bank);
+                        if let Some(h) = h {
+                            self.banks.insert(k, h);
+                            self.stats.banks_loaded += 1;
+                        }
+                        h
+                    }
+                };
+                match h {
+                    Some(h) => {
+                        self.start_bgm_bank(h, *index as usize);
+                    }
+                    None => log::warn!("audio: BGM data '{key}' is not a sound bank"),
+                }
+            }
+            AudioRequest::MapObjSe { chunk } => {
+                let c = crate::objse::ObjSeChunk::parse(chunk);
+                self.release_objse(-1);
+                for (i, b) in c.banks.iter().enumerate() {
+                    self.handle(&AudioRequest::LoadSe { name: b.clone(), slot: i as i32 + 1 });
+                }
+                for (i, r) in c.records.into_iter().enumerate() {
+                    let _ = self.objse.set(i as i32, Some(r), false);
+                }
+                log::debug!("audio: map OBJSE: banks {:?}, {} sounds", c.banks, self.objse_count());
+            }
+            AudioRequest::SetObjSe { slot, rec, one_shot } => {
+                let rel = self.objse.set(*slot, rec.clone(), *one_shot);
+                for i in rel {
+                    if let Some(id) = self.objse_plays.remove(&i) {
+                        self.engine.synth().stop(id, 0);
+                    }
+                }
+            }
+            AudioRequest::SetListener { listener } => self.listener = *listener,
+            AudioRequest::LoadBattleBanks { chrs, weapons, voices } => {
+                let mut paths: Vec<String> = chrs.iter().map(|c| format!("BTLDATA/SOUND/SE/{c:03}M.SSE")).collect();
+                paths.extend(weapons.iter().map(|(c, w)| format!("BTLDATA/SOUND/SE/{c:03}W{w:02}.SSE")));
+                paths.extend(voices.iter().map(|c| format!("BTLDATA/SOUND/SE/{c:03}C.SSE")));
+                for p in paths {
+                    // a missing file is normal (not every monster has a bank)
+                    if self.disc.as_ref().map(|d| d.exists(&p)).unwrap_or(false) && self.bank(&p).is_some() && !self.battle_banks.contains(&p) {
+                        self.battle_banks.push(p);
+                    }
+                }
+            }
+            AudioRequest::UnloadBattleBanks => {
+                for p in std::mem::take(&mut self.battle_banks) {
+                    self.unload(&p);
+                }
+            }
             AudioRequest::StopAll => {
+                self.release_objse(-1);
                 self.se_plays.clear();
                 self.publish_se_status();
                 {
@@ -564,8 +683,56 @@ impl AudioRuntime {
         }
     }
 
+    fn release_objse(&mut self, slot: i32) {
+        let rel = self.objse.set(slot, None, false);
+        let _ = rel;
+        let ids: Vec<PlayId> = if slot < 0 { self.objse_plays.drain().map(|(_, v)| v).collect() } else { self.objse_plays.remove(&(slot as usize)).into_iter().collect() };
+        for id in ids {
+            self.engine.synth().stop(id, 0);
+        }
+    }
+
+    /// Number of object sounds currently playing.
+    pub fn objse_count(&self) -> usize {
+        self.objse.active()
+    }
+
+    /// `UpdateObjSE`: place / start / release the object sounds for the current listener.
+    fn update_objse(&mut self) {
+        // sounds that ended by themselves
+        let ended: Vec<usize> = self.objse_plays.iter().filter(|(_, id)| !self.engine.synth().is_playing(**id)).map(|(s, _)| *s).collect();
+        for s in ended {
+            self.objse_plays.remove(&s);
+            self.objse.ended(s);
+        }
+        for a in self.objse.update(self.listener) {
+            match a {
+                crate::objse::ObjSeAction::Play { slot, id, volume, pan } => {
+                    let p = SeParam { volume, pan, ..SeParam::default() };
+                    let h = self.engine.play_se(0, id, &p);
+                    if h != 0 {
+                        self.objse_plays.insert(slot, h);
+                    } else {
+                        self.objse.ended(slot);
+                    }
+                }
+                crate::objse::ObjSeAction::Update { slot, volume, pan } => {
+                    if let Some(&h) = self.objse_plays.get(&slot) {
+                        self.engine.set_se_param(h, &SeParam { volume, pan, ..SeParam::default() });
+                    }
+                }
+                crate::objse::ObjSeAction::Release { slot } => {
+                    if let Some(h) = self.objse_plays.remove(&slot) {
+                        self.engine.synth().stop(h, 0);
+                    }
+                }
+            }
+        }
+    }
+
     /// Per-frame housekeeping: advance the virtual clock of the null / WAV backends and drop finished-event notifications.
     pub fn update(&mut self, dt: f32) {
+        self.update_objse();
         self.engine.pump(dt);
         for e in self.engine.take_events() {
             match e {
