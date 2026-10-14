@@ -1,0 +1,389 @@
+flag 0x0009 AP_06_U (chain from OP_00_U)
+flag 0x000a DO_06_U (chain from OP_00_U)
+flag 0x000b HUB_NA (chain from OP_00_U)
+flag 0x000c SU_40_U (chain from OP_00_U)
+flag 0x000d RU_00_U (chain from OP_00_U)
+flag 0x000e WI_17_U (chain from OP_00_U)
+flag 0x000f RU_05_U (chain from OP_00_U)
+flag 0x0010 SA_02_U (chain from OP_00_U)
+flag 0x0011 RO_20_U (chain from OP_00_U)
+flag 0x0012 WE_00_U (chain from OP_00_U)
+flag 0x0013 FI_00_U (chain from OP_00_U)
+flag 0x0014 SK_09_U (chain from OP_00_U)
+flag 0x0015 FI_00_U (chain from OP_00_U)
+flag 0x0016 AZ_09_U (chain from OP_00_U)
+flag 0x0017 FI_00_U (chain from OP_00_U)
+flag 0x001d WE_03_U (chain from OP_00_U)
+flag 0x001e HE_00_U (chain from OP_00_U)
+flag 0x001f PE_00_N (chain from OP_00_U)
+flag 0x0020 HE_10_N (chain from OP_00_U)
+flag 0x0021 PE_01_N (chain from OP_00_U)
+flag 0x0022 GT_05_U (chain from OP_00_U)
+flag 0x0023 MS_05_U (chain from OP_00_U)
+flag 0x0024 GT_06_U (chain from OP_00_U)
+flag 0x0025 SK_09_U (chain from OP_00_U)
+flag 0x0026 MOVIE (chain from OP_00_U)
+flag 0x0027 IF_25_U (chain from OP_00_U)
+flag 0x0028 AP_06_U (chain from OP_00_U)
+flag 0x0029 GY_11_U (chain from OP_00_U)
+flag 0x003c OP_01_U (chain from OP_00_U)
+flag 0x003d RE_00_U (chain from OP_00_U)
+flag 0x003e YO_00_U (chain from OP_00_U)
+flag 0x003f MI_16_U (chain from OP_00_U, Mikasa key puzzle skipped)
+flag 0x0040 TD_15_U (chain from OP_00_U, Mikasa key puzzle skipped)
+flag 0x0042 YO_00_U (chain from OP_00_U, Mikasa key puzzle skipped)
+flag 0x0043 GB_01_U (chain from OP_00_U, Mikasa key puzzle skipped)
+flag 0x0044 IK_03_U (chain from OP_00_U, Mikasa key puzzle skipped)
+flag 0x0045 MU_00_U (chain from OP_00_U, Mikasa key puzzle skipped)
+flag 0x0046 HUB_NA (chain from OP_00_U, Mikasa key puzzle skipped)
+flag 0x0048 MU_00_U (chain from OP_00_U, Mikasa key puzzle skipped)
+flag 0x0049 GI_01_N (chain from OP_00_U, Mikasa keys and Todo lab 2 power skipped)
+flag 0x004a KT_02_U (chain from OP_00_U, Mikasa keys and Todo lab 2 power skipped)
+flag 0x004b IN_06_U (chain from OP_00_U, Mikasa keys and Todo lab 2 power skipped)
+map AD_00_U
+map AD_01_U
+map AD_02_U
+map AD_03_U
+map AD_04_U
+map AD_06_U
+map AD_07_U
+map AD_08_U
+map AD_09_U
+map AD_11_U
+map AD_16_U
+map AP_00_U
+map AP_02_A
+map AP_02_U
+map AP_03_A
+map AP_03_U
+map AP_04_A
+map AP_04_U
+map AP_05_A
+map AP_05_U
+map AP_06_U
+map AP_07_U
+map AP_08_U
+map AP_10_A
+map AP_10_U
+map AR_00_U
+map AR_01_U
+map AR_02_U
+map AR_03_U
+map AR_04_U
+map AR_05_U
+map AR_06_U
+map AR_07_U
+map AR_08_U
+map AR_09_U
+map AR_10_U
+map AR_11_U
+map AR_12_U
+map AR_13_U
+map AR_14_U
+map AR_15_U
+map AZ_00_U
+map AZ_01_U
+map AZ_02_U
+map AZ_03_U
+map AZ_04_U
+map AZ_05_U
+map AZ_06_U
+map AZ_07_U
+map AZ_08_U
+map AZ_09_D
+map AZ_09_U
+map AZ_10_N
+map BO_01_U
+map BO_02_U
+map BO_03_U
+map DC_01_U
+map DO_00_U
+map DO_01_U
+map DO_02_U
+map DO_04_U
+map DO_05_U
+map DO_06_U
+map FI_00_U
+map FI_01_U
+map FU_00_U
+map FU_01_U
+map FU_02_U
+map FU_03_U
+map FU_04_U
+map FU_05_U
+map FU_06_U
+map FU_07_U
+map FU_08_U
+map FU_09_U
+map FU_10_U
+map FU_11_U
+map GB_00_U
+map GB_01_U
+map GI_00_N
+map GI_00_U
+map GI_01_N
+map GI_01_U
+map GI_02_N
+map GI_02_U
+map GI_05_N
+map GT_01_U
+map GT_02_U
+map GT_03_U
+map GT_04_U
+map GT_05_U
+map GT_06_U
+map GT_07_U
+map GT_08_U
+map GT_09_U
+map GT_10_U
+map GY_00_D
+map GY_02_U
+map GY_03_U
+map GY_11_U
+map HE_00_N
+map HE_00_U
+map HE_01_N
+map HE_02_N
+map HE_03_N
+map HE_04_N
+map HE_04_U
+map HE_05_N
+map HE_06_N
+map HE_06_U
+map HE_07_N
+map HE_07_U
+map HE_08_N
+map HE_09_N
+map HE_10_N
+map HE_11_N
+map HE_12_N
+map HE_12_O
+map HE_13_N
+map HE_14_N
+map HE_15_N
+map HE_16_N
+map HE_16_U
+map HE_17_N
+map HE_18_N
+map HE_19_N
+map HE_20_N
+map HE_20_U
+map HE_21_N
+map HE_21_U
+map HE_22_N
+map HE_23_N
+map HE_23_U
+map HE_24_N
+map HE_25_N
+map HE_25_U
+map HE_26_N
+map HE_26_U
+map HE_28_N
+map IF_00_U
+map IF_01_U
+map IF_02_U
+map IF_03_U
+map IF_04_U
+map IF_05_U
+map IF_06_U
+map IF_11_U
+map IF_12_U
+map IF_13_U
+map IF_14_U
+map IF_15_U
+map IF_16_U
+map IF_17_U
+map IF_18_U
+map IF_19_U
+map IF_20_U
+map IF_21_U
+map IF_22_U
+map IF_23_D
+map IF_23_U
+map IF_24_U
+map IF_25_U
+map IK_00_U
+map IK_01_U
+map IK_03_U
+map IN_00_U
+map IN_01_U
+map IN_02_U
+map IN_03_U
+map IN_04_U
+map IN_05_U
+map IN_06_U
+map KT_00_U
+map KT_01_U
+map KT_02_U
+map KT_03_U
+map MI_00_U
+map MI_01_U
+map MI_02_U
+map MI_03_U
+map MI_04_U
+map MI_06_U
+map MI_09_U
+map MI_10_U
+map MI_11_U
+map MI_16_U
+map MOVIE
+map MS_00_U
+map MS_01_U
+map MS_02_U
+map MS_03_U
+map MS_04_U
+map MS_05_U
+map MS_06_U
+map MS_07_U
+map MS_08_U
+map MS_09_U
+map MS_10_U
+map MU_00_U
+map ND_00_U
+map ND_01_U
+map ND_02_U
+map ND_03_U
+map ND_04_U
+map ND_05_U
+map ND_06_U
+map ND_07_U
+map ND_08_U
+map ND_09_U
+map OP_00_U
+map OP_01_U
+map PA_01_U
+map PA_02_A
+map PA_02_U
+map PA_03_U
+map PA_04_U
+map PA_05_U
+map PA_06_U
+map PA_07_U
+map PA_08_U
+map PE_00_N
+map PE_01_N
+map PE_02_N
+map PE_03_U
+map PE_04_N
+map PE_05_N
+map RE_00_U
+map RE_01_U
+map RE_02_U
+map RE_03_N
+map RE_03_U
+map RO_00_U
+map RO_01_U
+map RO_02_U
+map RO_03_U
+map RO_04_U
+map RO_05_U
+map RO_06_U
+map RO_07_U
+map RO_08_U
+map RO_09_U
+map RO_10_U
+map RO_11_U
+map RO_12_U
+map RO_13_U
+map RO_14_U
+map RO_15_U
+map RO_16_U
+map RO_17_U
+map RO_18_U
+map RO_19_U
+map RO_20_U
+map RO_21_U
+map RU_00_U
+map RU_01_U
+map RU_02_U
+map RU_03_N
+map RU_03_U
+map RU_04_N
+map RU_04_U
+map RU_05_N
+map RU_05_U
+map RU_06_N
+map RU_06_U
+map SA_00_U
+map SA_01_N
+map SA_01_U
+map SA_02_U
+map SA_03_U
+map SA_04_U
+map SA_05_U
+map SK_00_U
+map SK_01_U
+map SK_02_U
+map SK_03_U
+map SK_04_U
+map SK_05_U
+map SK_06_U
+map SK_07_U
+map SK_08_U
+map SK_09_U
+map SK_10_U
+map SK_11_U
+map SU_00_A
+map SU_00_U
+map SU_01_U
+map SU_02_U
+map SU_03_U
+map SU_04_U
+map SU_05_U
+map SU_06_U
+map SU_07_U
+map SU_08_U
+map SU_09_U
+map SU_10_A
+map SU_10_S
+map SU_11_U
+map SU_12_U
+map SU_20_U
+map SU_22_U
+map SU_30_U
+map SU_31_U
+map SU_40_U
+map TD_00_U
+map TD_01_U
+map TD_02_U
+map TD_03_U
+map TD_04_U
+map TD_05_U
+map TD_06_U
+map TD_14_U
+map TD_15_U
+map TD_16_U
+map TD_17_U
+map TD_20_U
+map TD_21_U
+map TD_22_U
+map WE_00_U
+map WE_01_U
+map WE_02_U
+map WE_03_U
+map WE_04_U
+map WI_00_U
+map WI_01_U
+map WI_02_U
+map WI_03_U
+map WI_04_U
+map WI_05_U
+map WI_06_U
+map WI_07_U
+map WI_08_U
+map WI_09_U
+map WI_10_U
+map WI_11_U
+map WI_12_U
+map WI_13_U
+map WI_14_U
+map WI_15_U
+map WI_16_U
+map WI_17_U
+map YO_00_U
+map YO_01_U
+map YO_02_U
+map ZI_00_U
+map ZI_01_U
+end ED_00_U
+map ED_00_U

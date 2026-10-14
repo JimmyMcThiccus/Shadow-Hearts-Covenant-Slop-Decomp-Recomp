@@ -23,7 +23,13 @@ Editing a file you do not own: only small, additive hooks (a call site, a field 
 a `## Round 5 <id>` heading in `requests.md`.  Larger changes in someone else's file: write the request there and keep going.
 Read `requests.md` again every hour or so for requests addressed to you.
 
-## Build rules (no git here: a broken file breaks everyone)
+## Git (added 2026-10-14, after launch)
+
+The tree is now a git repo (`main`, baseline commit "Snapshot before round 5 agents").  Use `git diff` / `git log` / `git show`
+freely to see changes, but **never** `git commit`, `checkout`, `reset`, `restore`, `stash`, `clean` or anything that writes the
+index or working tree: seven agents share it and the coordinator commits.
+
+## Build rules (one shared working tree: a broken file breaks everyone)
 
 * Own target dir per agent: `CARGO_TARGET_DIR=%USERPROFILE%\.cache\sh2-r5-<id>` (e.g. `sh2-r5-fs`).  Env as in `run-us.bat`
   (`SH2_DISC_DIR`, `SH2_US_DISC_DIR`).  Workspace = `port/`.
@@ -31,9 +37,16 @@ Read `requests.md` again every hour or so for requests addressed to you.
   because of someone else's in-progress edit, wait a few minutes and retry rather than "fixing" their file.
 * Before you finish: `cargo check --workspace --all-targets` and `cargo test -p <your crates>` green.  A pre-round snapshot of the
   sources is in `..\backups\sh2-decomp-src-2026-10-14-pre-agents.tgz`.
+* **Windowed runs** (sh2_app, cutscene_view, movie_view, menu_dev.sh, dev drives): always `timeout -k 5 <secs> <exe> ...` (Git
+  Bash), secs well under the tool-call timeout.  A tool-call timeout does not kill the exe on Windows and windows pile up on the
+  user's screen.  Afterwards kill only leftovers whose command line contains your own `sh2-r5-<id>` target dir.
 * Sprite layer ids (`sh2_menu::bevy_ui::layer`) are a shared namespace: grep before choosing one.
 * After large changes, take the autoplay sanity screenshots (`sh2_app --us --autoplay --boost 80 --shots <dir>`) and look at field,
   battle menu / ring, result and in-game menu, not just your screen.
+
+* (QA, 2026-10-14) `sh2_app` now exits with the `AppExit` code (`--autoplay` timeout / game over = **2**, was always 0), and honours
+  `SH2_MAX_SECONDS=<n>`: after n s of wall clock it sends `AppExit(124)`, and a watchdog thread `process::exit(124)`s 5 s later if the
+  shutdown hangs (the `--view-*` viewers get the hard limit only).  Scripted windowed runs: `SH2_MAX_SECONDS=60 timeout -k 5 90 sh2_app ...`.
 
 ## Shared single-instance tools: take the lock
 

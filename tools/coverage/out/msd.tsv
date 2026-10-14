@@ -16,13 +16,13 @@ MENU/MSD/ITEM.MSD	ok			records=92;attached_scenes=5
 MENU/MSD/KEYCUS.MSD	ok			records=40;attached_scenes=0
 MENU/MSD/LIBRARY.MSD	ok			records=156;attached_scenes=6
 MENU/MSD/MAGIC.MSD	ok			records=106;attached_scenes=6
-MENU/MSD/NENTRY.MSD	untested	parses; the file name appears nowhere in the port sources (no screen loads it by name)	MN	records=39;attached_scenes=1;unknown_chunks=1
+MENU/MSD/NENTRY.MSD	ok			records=39;attached_scenes=1;unknown_chunks=1
 MENU/MSD/OPTION.MSD	ok			records=112;attached_scenes=0
 MENU/MSD/PERSONAL.MSD	ok			records=530;attached_scenes=28
 MENU/MSD/PLIST.MSD	ok			records=175;attached_scenes=10
 MENU/MSD/RINGCTM.MSD	ok			records=200;attached_scenes=9
-MENU/MSD/SCHARGE.MSD	untested	parses; the file name appears nowhere in the port sources (no screen loads it by name)	MN	records=85;attached_scenes=5;unknown_chunks=1
+MENU/MSD/SCHARGE.MSD	ok			records=85;attached_scenes=5;unknown_chunks=1
 MENU/MSD/SCORE.MSD	ok			records=84;attached_scenes=1;unknown_chunks=1
 MENU/MSD/SECHAR.MSD	untested	parses; the file name appears nowhere in the port sources (no screen loads it by name)	MN	records=26;attached_scenes=0
 MENU/MSD/SKILL.MSD	ok			records=93;attached_scenes=4
-MENU/MSD/WSTAMP.MSD	untested	parses; the file name appears nowhere in the port sources (no screen loads it by name)	MN	records=21;attached_scenes=1;unknown_chunks=1
+MENU/MSD/WSTAMP.MSD	ok			records=21;attached_scenes=1;unknown_chunks=1

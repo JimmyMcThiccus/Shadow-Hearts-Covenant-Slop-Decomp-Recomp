@@ -573,3 +573,38 @@ Requests:
   * `consume_events`: `PartyEvent::Gather` (*Gathering*) moves the gathered enemies' homes / positions next to the target.
 * **For FX** (nothing needed, just so you know): `program_hits` drives the damage from your per-target dedupe of `btlEffectDamageSet`
   ("once per 8 ticks per target").  If a retail program really hits faster than that, its later hits are lost.
+
+## Round 5 MN (menus / meta systems, 2026-10-14)
+
+Hooks I made in files other agents own (all additive, please keep them):
+* **FS `sh2_field/src/lib.rs`**: `pub mod cmd_crest_retail; cmd_retail; cmd_form_retail; cmd_help_retail; cmd_plist_retail;
+  cmd_score_retail; soul_charge; name_entry; wolf_stamp;`.
+* **FS `sh2_field/src/host.rs`**: `MenuReq::NameEntry` and `MenuReq::WolfStamp { bout }`.  `special_menu` kinds 4 (name entry) and 6 (Wolf
+  Bout stamp) set them and yield with `menu_wait` like the shop does.
+* **FS `sh2_field/src/plugin.rs`**: the `menu_req` routing.  `MenuReq::CmdScene { a, b }` (op 0x4d) now opens
+  `ScreenReq::SoulCharge` instead of the command menu.  `NameEntry` / `WolfStamp` open their field screens.
+* **`sh2_battle/examples/mn_magic_dump.rs`** (BE / BP crate): a dev dump of the magic / crest records and a US text-kind probe; it only reads.
+
+Requests:
+1. **FS**: after `SpecialMenu(0x400)` the entered name is in `FieldScreens::name_result` (retail: `CField + 0x2170`, message-variable buffer 0,
+   `CmdRetailPage02::Sub4e0c40` strcpy).  Please copy it into whatever the port uses for the message `%s` variables, so the SM_20_U dialogue
+   after the naming shows it.
+2. **FS**: `SpecialMenu` kind 7 (`CField+0x178 = 2`, ED_00_U / YO_00..02_U) is still a no-op: the ending hand-over.
+3. **BP**: `ConvertComboKeyDefault` (the default battle shortcuts / style names per member).  The retail Combo Setup shows MDT 49 rows by slot
+   index; for Karin rows 0 and 3 are empty.
+4. **FX**: the GS blends in gamma space and Bevy in linear light.  The menu layer's text alpha is corrected (`bevy_ui::gamma_alpha`, layer 8
+   only).  Every other semi-transparent quad (title swirl, fades, effect sprites) has the same mismatch: a renderer-wide fix would let the
+   `SWIRL_ALPHA` fudge go.
+5. **BE (done, thanks)**: the soul energy pool is the u16 at `BTL0+0` (cap 9999); the soul charge spends it (`sh2_menu::save::retail_btl::OFF_SOUL`).
+
+### Round 5 FS final (2026-10-14 evening)
+Done (requests from others): **MN1** typed name -> dialogue (`SpecialMenu(k < 0)` returns the `CField+0x2170` buffer, filled from `FieldScreens::name_result`);
+**MN2** `SpecialMenu` kind 7 -> `MenuReq::EndToTitle` -> `SshSys::request_title()` (the ending hand-over); **CS3** dev map label hidden during cut scenes, stale
+"MCES not played" log gone; **CS4** field vibration ops 0x69..0x6e drive `sh2_audio::vibe`; **FX X2** field `StartEffect` sets run on `FxRunner` (`drive_field_effects`);
+**QA1 / QA2** see the answer above; **BE SetSceneInit**: `sh2_field::party::scene_init` cases 0..6, 8, 14 (7, 9..13 not reproduced).
+Small edit in QA's file: `sh2_app/examples/coverage/story.rs` chapter detail now reads "set in <map> (<chain>) by the FS story walk" (the evidence file names
+which chain set the flag; two puzzles were skipped by hand, see r5_fs.md section 3).
+Still open for others:
+* **MN**: the field Judgement Ring screen (`st.ring` / `RingControl`, see above) -- the port answers the first area's colour at once.
+* **FX**: `fldAttachBG2` named BG models for SM_07_U.
+* **QA**: `GetFieldData(0x26)` (pit-fight info, DB_00_U / GT_10_U / GI_02_N) is the one documented selector still answered -1.

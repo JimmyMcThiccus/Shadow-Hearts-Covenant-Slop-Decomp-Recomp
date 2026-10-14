@@ -3,19 +3,19 @@ monset 018	ok			scenes=[BootBattleField];battle_secs=29;menus=4;ring_presses=10;
 monset 034	ok			scenes=[BootBattleField];battle_secs=40;menus=6;ring_presses=14;effects_started=0;last_stage=left
 monset 050	ok			scenes=[BootBattleField];battle_secs=28;menus=4;ring_presses=10;effects_started=0;last_stage=left
 monset 066	ok			scenes=[BootBattleField];battle_secs=94;menus=16;ring_presses=40;effects_started=2;last_stage=left
-monset 082	ok			scenes=[BootBattleField];battle_secs=74;menus=12;ring_presses=30;effects_started=0;last_stage=left
+monset 082	ok			scenes=[BootBattleField];battle_secs=75;menus=12;ring_presses=30;effects_started=1;last_stage=left
 monset 098	ok			scenes=[BootBattleField];battle_secs=51;menus=8;ring_presses=20;effects_started=1;last_stage=left
-monset 114	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=103;menus=16;ring_presses=40;effects_started=3;last_stage=left
-monset 130	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=185;menus=28;ring_presses=70;effects_started=9;last_stage=left
-monset 146	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=62;menus=7;ring_presses=17;effects_started=3;last_stage=left
-monset 162	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=73;menus=8;ring_presses=20;effects_started=2;last_stage=left
-monset 178	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=151;menus=19;ring_presses=49;effects_started=6;last_stage=left
-monset 194	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=48;menus=4;ring_presses=9;effects_started=5;last_stage=left
-monset 210	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=37;menus=1;ring_presses=2;effects_started=9;last_stage=left
-monset 226	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=75;menus=10;ring_presses=25;effects_started=2;last_stage=left
-monset 242	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=45;menus=3;ring_presses=7;effects_started=4;last_stage=left
+monset 114	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=132;menus=20;ring_presses=52;effects_started=6;last_stage=left
+monset 130	ok			scenes=[BootBattleField];battle_secs=174;menus=28;ring_presses=70;effects_started=4;last_stage=left
+monset 146	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=74;menus=9;ring_presses=20;effects_started=3;last_stage=left
+monset 162	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=47;menus=4;ring_presses=10;effects_started=2;last_stage=left
+monset 178	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=124;menus=15;ring_presses=39;effects_started=5;last_stage=left
+monset 194	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=44;menus=4;ring_presses=10;effects_started=4;last_stage=left
+monset 210	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=20;menus=0;ring_presses=0;effects_started=4;last_stage=left
+monset 226	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=39;menus=4;ring_presses=10;effects_started=1;last_stage=left
+monset 242	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=23;menus=1;ring_presses=2;effects_started=0;last_stage=left
 monset 258	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=80;menus=11;ring_presses=27;effects_started=0;last_stage=left
-monset 274	ok			scenes=[BootBattleField];battle_secs=550;menus=87;ring_presses=217;effects_started=0;last_stage=left
-monset 290	untested	not finished after 599 s of game time but still progressing (93 command menus, 229 ring presses): party too weak for this set		scenes=[BootBattle];battle_secs=599;menus=93;ring_presses=229;effects_started=36;last_stage=running
-monset 306	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=65;menus=4;ring_presses=8;effects_started=4;last_stage=left
+monset 274	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=101;menus=15;ring_presses=35;effects_started=0;last_stage=left
+monset 290	untested	not finished after 599 s of game time but still progressing (89 command menus, 221 ring presses): party too weak for this set		scenes=[BootBattle];battle_secs=599;menus=89;ring_presses=221;effects_started=51;last_stage=running
+monset 306	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=30;menus=1;ring_presses=2;effects_started=2;last_stage=left
 monset 322	ok			scenes=[BootBattleField];battle_secs=99;menus=16;ring_presses=40;effects_started=1;last_stage=left
