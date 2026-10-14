@@ -2732,6 +2732,8 @@ impl Plugin for BattlePlugin {
                 .init_resource::<crate::effects_bridge::ExtraFx>() // FX round 5 hook: engine-started effect programs (FU_* fusion, UNION, BD_*)
                 .init_resource::<crate::effects_bridge::EffMdlQueue>() // FX round 5 hook: BTL_001 effect models (hit bursts, cast circle)
                 .init_resource::<crate::effects_bridge::BtlEffArt>()
+                .init_resource::<crate::effects_bridge::WeaponTrails>() // FX round 5 hook: weapon trails (`SwordLocusEffect1` / `BlowLocusEffect1`)
+                .add_systems(Update, crate::effects_bridge::drive_weapon_trails.after(crate::models::follow_weapons).run_if(in_state(Scene::Battle)).run_if(resource_exists::<sh2_gfx::bevy::Sh2Disc>))
                 .add_systems(Update, (crate::effects_bridge::effmdl_battle_hooks, crate::effects_bridge::drive_effmdls).chain().after(crate::effects_bridge::apply_fx_actor_events).run_if(in_state(Scene::Battle)))
                 .add_systems(OnEnter(Scene::Battle), spawn_battle_scene.after(enter_battle))
                 // round 5 BE: the engine-started programs the battle asks for (boss deaths `BD_%03d.EFD`, the last boss's `UNION.EFD`)

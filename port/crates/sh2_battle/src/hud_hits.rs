@@ -601,8 +601,8 @@ pub fn icon_mask(status: &[StatMod], is_enemy: bool, sp_zero: bool, hp: i32) -> 
     let (mut t, mut u, mut speed_up, mut speed_down, mut special) = (0u32, 0u32, false, false, false);
     for m in status {
         match m.kind {
-            modkind::STATUS | RETAIL_STATUS => t |= m.value as u32,
-            modkind::STATUS_AUX | RETAIL_STATUS_AUX => u |= m.value as u32,
+            modkind::STATUS | modkind::JP_STATUS => t |= m.value as u32,
+            modkind::STATUS_AUX | modkind::JP_STATUS_AUX => u |= m.value as u32,
             modkind::TURN_INTERVAL => {
                 if m.value < 0 {
                     speed_down = true;
@@ -1336,6 +1336,58 @@ pub fn draw_ring(g: &mut dyn MenuGfx, art: &HitArt, r: &JRing, trail: &[f32; 9],
             v: [vtx(centre - side, Vec2::ZERO, c0), vtx(centre + side, Vec2::ZERO, c0), vtx(centre + end - side, Vec2::ZERO, c1), vtx(centre + end + side, Vec2::ZERO, c1)],
             blend: Blend::Alpha,
         });
+    }
+}
+
+/// Round 5 BP: the floating texts / centred message of a [`crate::flow::PartyEvent`] (`EffectMesCall` for the effect records,
+/// `SetBtlMessage` 0x71 / 0x72 berserk, 0x73 paralysed).  `is_enemy(i)` / `name(i)` describe fighter `i`.  Returns the centred message
+/// (the caller posts it as `MesKind::Center`, 2 s or a button), if any.
+pub fn party_event_texts(hits: &mut HitFx, ev: &crate::flow::PartyEvent, is_enemy: &dyn Fn(usize) -> bool, name: &dyn Fn(usize) -> String, text: &crate::ui::BtlText) -> Option<String> {
+    use crate::flow::PartyEvent as P;
+    match ev {
+        P::Effect { target, mp, sp, added, cured: _, blocked, buffs: _, failed, revived: _ } => {
+            let t = *target;
+            let mut line = 0.0;
+            for (word, d) in [("MP", *mp), ("SP", *sp)] {
+                if d != 0 {
+                    let s = format!("{word} {}{}", if d > 0 { "+" } else { "-" }, d.abs());
+                    hits.texts.push(HitText::new(t, if d > 0 { 7 } else { 8 }, &s, 0, if d > 0 { FontColor::Green } else { FontColor::Red }, 0.2 + line, line * 41.0));
+                    line += 1.0;
+                }
+            }
+            // the status words of `BM_N` 0x4f.. (Poison, Deadly Poison, Paralysis, Seal, Petrify, Panic, Mental Break) and the icon through the
+            // status list
+            for (bit, word) in [(1u32, 0x4f), (2, 0x50), (4, 0x51), (8, 0x52), (0x20, 0x53), (0x10, 0x54), (0x40, 0x55)] {
+                if added & bit != 0 {
+                    let w = text.word(word).to_string();
+                    hits.on_status(t, &w, is_enemy(t), None);
+                }
+            }
+            if *failed && *mp == 0 && *sp == 0 && *added == 0 && (*blocked != 0 || line == 0.0) {
+                hits.texts.push(HitText::new(t, 1, text.mes(8), 0, FontColor::Blue, 0.2, 0.0));
+            }
+            None
+        }
+        P::RingItem { target, added } => {
+            for (bit, word) in [(1u32, 0x4f), (2, 0x50), (4, 0x51), (8, 0x52), (0x20, 0x53), (0x10, 0x54), (0x40, 0x55)] {
+                if added & bit != 0 {
+                    let w = text.word(word).to_string();
+                    hits.on_status(*target, &w, is_enemy(*target), None);
+                }
+            }
+            None
+        }
+        P::Paralyzed { chr } => Some(crate::hud_result::message(text, 0x73, &name(*chr))).filter(|s| !s.is_empty()).or_else(|| Some(format!("{} is paralyzed!", name(*chr)))),
+        P::Berserk { chr, first } => {
+            let id = if *first { 0x71 } else { 0x72 };
+            let s = crate::hud_result::message(text, id, &name(*chr));
+            Some(if s.is_empty() { format!("{} {}", name(*chr), if *first { "has gone berserk!" } else { "is berserk!" }) } else { s })
+        }
+        P::Album { name: album, .. } => {
+            let s = crate::hud_result::message(text, 0x7a, album);
+            Some(if s.is_empty() { format!("You got the \"{album}\" Album!") } else { s })
+        }
+        _ => None,
     }
 }
 

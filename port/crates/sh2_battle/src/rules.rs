@@ -104,20 +104,57 @@ pub mod modkind {
     pub const DEAL_PHYS_PASSIVE: u8 = 0x3c;
     /// Magic attack boost applying only to percent (`GetSAtk` type 'E').
     pub const SATK_PCT_ONLY: u8 = 0x45;
-    /// Status bit field (value bit0..: see [`status_bits`]).
-    pub const STATUS: u8 = 0x47;
-    pub const STATUS_AUX: u8 = 0x48;
+    /// Status bit field (value bit0..: see [`status_bits`]).  Retail kind `'T'` 0x54 (`SpecialEffectCode` SLUS 0x369330 writes it for the
+    /// 0x20..0x2f effect words; the JP demo used `'G'` 0x47, which the retail build reuses for "MP cut down to a value").
+    pub const STATUS: u8 = 0x54;
+    /// `'U'` 0x55 (JP `'H'` 0x48): the auxiliary status word (resist / protection bits, `0x1f800` = beneficial auras).
+    pub const STATUS_AUX: u8 = 0x55;
+    /// JP numbering of the two status kinds (only records read from a demo `BtlChr` image carry them).
+    pub const JP_STATUS: u8 = 0x47;
+    pub const JP_STATUS_AUX: u8 = 0x48;
+    /// Retail-only kinds of `EffectCodeFunc` (SLUS 0x36b410): MP drain, HP drain, the HP / MP / SP "cut" families, steal, cash steal, remove,
+    /// attack / magic charge (one turn), skip turn, Stand.
+    pub const MP_DRAIN: u8 = 0x3d;
+    pub const HP_DRAIN: u8 = 0x3f;
+    pub const STEAL: u8 = 0x4c;
+    pub const CASH_STEAL: u8 = 0x4d;
+    pub const REMOVE: u8 = 0x4e;
+    /// `'O'`: the next physical attack deals `+value` % (`GetPAtkDamage`), 1 turn.
+    pub const PATK_CHARGE: u8 = 0x4f;
+    /// `'P'`: the next spell deals `+value` % (`GetSAtkDamage`), 1 turn.
+    pub const SATK_CHARGE: u8 = 0x50;
+    pub const SKIP_TURN: u8 = 0x51;
+    pub const STAND: u8 = 0x52;
+    /// Port-private kind of a `'T'` record of duration type 2 (a *protection*: the value is the protected bit set, `chance` the protection
+    /// percentage, retail `+0x121`).  The retail game keeps it as kind 0x54 with the duration bits; the port gives it its own kind so that
+    /// every reader of [`STATUS`] sees inflicted bits only.
+    pub const STATUS_PROTECT: u8 = 0xf0;
+    /// Port-private kind of a `'U'` record of duration type 2 (aux protections).
+    pub const STATUS_AUX_PROTECT: u8 = 0xf1;
+    /// `true` for both numberings of the status kind.
+    pub fn is_status(k: u8) -> bool {
+        k == STATUS || k == JP_STATUS
+    }
 }
 
 /// Bits of the value of a [`modkind::STATUS`] record (`'G'`, 0x47).
 pub mod status_bits {
-    /// bit 2: the unit cannot be targeted/does not count while this is on ("evade all"?), checked
-    /// together with `0x20` in `BtlEndCheck` (PC alive test).
-    pub const PROTECT_A: u32 = 0x04;
+    /// Names from the retail icon list (`GetIconList`, live capture `19b`) and the accessory descriptions ("stops Poison, Seal, Panic and
+    /// Mental Break"): 1 Poison, 2 Deadly Poison, 4 Paralysis, 8 Seal, 0x10 Panic, 0x20 Petrify, 0x40 Mental Break, 0x80 instant Death.
+    pub const POISON: u32 = 0x01;
+    pub const D_POISON: u32 = 0x02;
+    pub const PARALYSIS: u32 = 0x04;
+    pub const SEAL: u32 = 0x08;
+    pub const PANIC: u32 = 0x10;
+    pub const PETRIFY: u32 = 0x20;
+    pub const MENTAL_BREAK: u32 = 0x40;
+    pub const DEATH: u32 = 0x80;
+    /// bit 2: checked together with `0x20` in `BtlEndCheck` (PC alive test) -- Paralysis.
+    pub const PROTECT_A: u32 = PARALYSIS;
     /// bit 4: triples the Sanity cost (`DecSP` multiplies by 3).
     pub const SP_TRIPLE: u32 = 0x10;
-    /// bit 5: "out of the fight" – counted as down in `BtlEndCheck`/`MakeResultTrophy`.
-    pub const DOWN: u32 = 0x20;
+    /// bit 5: "out of the fight" (Petrify) – counted as down in `BtlEndCheck`/`MakeResultTrophy`.
+    pub const DOWN: u32 = PETRIFY;
 }
 
 /// One entry of the 32 element status list of a battle character (+0x1b8, 12 bytes each) or
@@ -144,6 +181,19 @@ impl StatMod {
     pub const fn pct(kind: u8, value: i32) -> Self {
         Self { turns: 0, chance: 100, percent: true, kind, value }
     }
+    /// an inflicted status bit set (`'T'` record of duration type 0)
+    pub fn inflicted(&self) -> u32 {
+        if modkind::is_status(self.kind) {
+            self.value as u32
+        } else {
+            0
+        }
+    }
+}
+
+/// The inflicted status bits of a status list (`'T'` records of duration type 0).
+pub fn status_of(status: &[StatMod]) -> u32 {
+    status.iter().fold(0, |a, m| a | m.inflicted())
 }
 
 /// Iterate the modifiers (status list followed by passives) that have `kind`.
@@ -1309,7 +1359,7 @@ pub fn sp_cost_per_turn(
             } else {
                 cost += m.value * 100;
             }
-        } else if m.kind == modkind::STATUS && !m.percent && (m.value as u32 & status_bits::SP_TRIPLE) != 0 {
+        } else if (m.inflicted() & status_bits::SP_TRIPLE) != 0 {
             cost *= 3;
         }
     }

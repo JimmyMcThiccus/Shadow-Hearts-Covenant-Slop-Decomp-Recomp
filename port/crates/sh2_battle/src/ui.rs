@@ -342,7 +342,15 @@ pub struct MenuBuild {
     pub snap: Option<SnapEntry>,
     /// the character is fused: its skill list is the fusion monster's, the Fusion page starts with `Cancel`
     pub fused: Option<FusedMenu>,
+    /// round 5 BP: the combo magic a combo member can cast (`CheckComboSkill` 0x69abe0: the `COMB` rows of the members' elements while three
+    /// or more fight in the combo), [`MagicEntry::id`] = `COMB` row; reported as [`MenuEvent::RingSkill`]
+    pub combo_magic: Vec<MagicEntry>,
+    /// Seal (status 8): crest magic, the special-command list, the Tarot Card and Aromatherapy are greyed and buzz
+    pub sealed: bool,
 }
+
+/// [`Pending::Magic`] ids at and above this one are combo magic rows (`id - COMBO_MAGIC_BASE`), reported as [`MenuEvent::RingSkill`].
+pub const COMBO_MAGIC_BASE: i32 = 0x1000;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Pending {
@@ -370,6 +378,8 @@ pub enum Page {
     /// the second aroma list (`SetAddAromaMenu`): the other owned oils with the combination's MP, under the `first` oil's sub-header (live `10n`)
     Aroma2 { first: usize },
     Target { then: Pending, targets: Vec<usize> },
+    /// round 5 BP: the combo magic list ([`MenuBuild::combo_magic`])
+    ComboMagic,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -388,6 +398,8 @@ pub enum Root {
     Aroma,
     /// Anastasia: `Snap Shot`
     Snap,
+    /// round 5 BP: `Combo Magic` (`BtlMenuItem` 5) while three or more party members fight in a combo
+    ComboMagic,
 }
 
 /// What the camera should look at while the menu is open.
@@ -439,6 +451,9 @@ impl BtlMenu {
         }
         if !b.magic.is_empty() {
             roots.push(Root::Magic);
+        }
+        if !b.combo_magic.is_empty() {
+            roots.push(Root::ComboMagic);
         }
         roots.push(Root::Item);
         roots.push(Root::Guard);
@@ -522,12 +537,14 @@ impl BtlMenu {
                         Root::Tarot => t.label_raw(crate::menu_data::raw_label::TAROT),
                         Root::Aroma => t.label_raw(crate::menu_data::raw_label::AROMA),
                         Root::Snap => "",
+                        Root::ComboMagic => t.item(5),
                     };
                     if *r == Root::Snap {
                         let s = self.b.snap.clone().unwrap_or_default();
                         return row(s.label, if s.mp > 0 { s.mp.to_string() } else { String::new() }, s.mp <= self.b.mp);
                     }
-                    row(l.to_string(), String::new(), !(*r == Root::Tarot && self.b.tarot_locked))
+                    let sealed = self.b.sealed && matches!(r, Root::Magic | Root::Skill | Root::Tarot | Root::Aroma | Root::ComboMagic);
+                    row(l.to_string(), String::new(), !(*r == Root::Tarot && self.b.tarot_locked) && !sealed)
                 })
                 .collect(),
             Page::Aroma => self.b.aroma_oils.iter().map(|(id, n)| row(n.clone(), String::new(), self.aroma_first_enabled(*id))).collect(),
@@ -543,6 +560,7 @@ impl BtlMenu {
                 .collect(),
             Page::Shape => label::SHAPES.iter().map(|&l| row(t.item(l).to_string(), String::new(), true)).collect(),
             Page::Magic => self.b.magic.iter().map(|m| row(m.name.clone(), m.mp.to_string(), m.mp <= self.b.mp)).collect(),
+            Page::ComboMagic => self.b.combo_magic.iter().map(|m| row(m.name.clone(), m.mp.to_string(), m.mp <= self.b.mp)).collect(),
             Page::Skill => self.b.skills.iter().map(|m| row(m.name.clone(), if m.mp > 0 { m.mp.to_string() } else { String::new() }, m.mp <= self.b.mp)).collect(),
             Page::Item => self.b.items.iter().map(|m| row(m.name.clone(), m.count.to_string(), true)).collect(),
             Page::Fusion => self.b.fusion.iter().map(|f| row(if f.id < 0 { t.label_raw(crate::menu_data::raw_label::FUSION_CANCEL).to_string() } else { f.name.clone() }, if f.sp > 0 { f.sp.to_string() } else { String::new() }, true)).collect(),
@@ -556,6 +574,7 @@ impl BtlMenu {
             Page::Main => self.b.actor_name.clone(),
             Page::Shape => t.item(label::ATTACK).to_string(),
             Page::Magic => t.item(label::CREST_MAGIC).to_string(),
+            Page::ComboMagic => t.item(5).to_string(),
             Page::Skill => t.label_raw(self.special_index()).to_string(),
             Page::Item => t.item(label::ITEM).to_string(),
             Page::Fusion => t.label_raw(self.fusion_index()).to_string(),
@@ -581,6 +600,7 @@ impl BtlMenu {
                 Some(Root::Aroma) => t.note_raw(crate::menu_data::raw_label::AROMA).to_string(),
                 // table 43 row 17: `Take a photo and collect detailed enemy data.`
                 Some(Root::Snap) => t.note_raw(17).to_string(),
+                Some(Root::ComboMagic) => t.note(5).to_string(),
                 None => String::new(),
             },
             // live `10n0` / `10n`: `Select Aroma Oil.`, then the combination's description (`????` while it is unknown)
@@ -594,6 +614,7 @@ impl BtlMenu {
             Page::Fusion => self.b.fusion.get(self.cursor()).and_then(|f| t.fusion_help.get(f.id.max(0) as usize)).filter(|s| !s.is_empty()).cloned().unwrap_or_else(|| t.note_raw(self.fusion_index()).to_string()),
             Page::Guard => t.guard_notes.get(self.cursor()).filter(|s| !s.is_empty()).cloned().unwrap_or_else(|| t.note(9).to_string()),
             Page::Target { .. } => String::new(),
+            Page::ComboMagic => t.note(5).to_string(),
         }
     }
 
@@ -633,6 +654,7 @@ impl BtlMenu {
             Page::Main => self.roots.len(),
             Page::Shape => 4,
             Page::Magic => self.b.magic.len(),
+            Page::ComboMagic => self.b.combo_magic.len(),
             Page::Skill => self.b.skills.len(),
             Page::Item => self.b.items.len(),
             Page::Fusion => self.b.fusion.len(),
@@ -664,7 +686,13 @@ impl BtlMenu {
     }
 
     fn push(&mut self, p: Page) {
-        self.stack.push((p, 0));
+        // `GetDefaultTarget`: a party-side target page opens on the actor itself (live US capture, Nicolai's Cure: the cursor starts on
+        // `Nicolai`, below `Karin`); enemy pages on the first enemy
+        let start = match &p {
+            Page::Target { then: Pending::Magic(_) | Pending::Skill(_) | Pending::Item(_), targets } if targets.contains(&self.b.actor) => targets.iter().position(|&t| t == self.b.actor).unwrap_or(0),
+            _ => 0,
+        };
+        self.stack.push((p, start));
         // a sub-page opens on the remembered cursor while every page above it is still on its remembered entry (the retail menu resets the
         // deeper levels as soon as a shallower cursor differs from the stored one: BtlMenu.c ~1792)
         let d = self.stack.len() - 1;
@@ -704,6 +732,8 @@ impl BtlMenu {
                 let actor = self.b.actor as i32;
                 match self.page().clone() {
                     Page::Main => match self.roots.get(cur).copied()? {
+                        // Seal: the magic-like entries buzz
+                        Root::Magic | Root::Skill | Root::Tarot | Root::Aroma | Root::ComboMagic if self.b.sealed => None,
                         Root::Attack => {
                             // the shape is chosen inline (`Attack < Standard >`): straight to the target
                             let t = self.targets_for(TargetClass::Opponent);
@@ -742,6 +772,10 @@ impl BtlMenu {
                                 return None;
                             }
                             self.push(Page::Target { then: Pending::Link, targets: t });
+                            None
+                        }
+                        Root::ComboMagic => {
+                            self.push(Page::ComboMagic);
                             None
                         }
                         Root::Tarot if self.b.tarot_locked => None,
@@ -793,6 +827,15 @@ impl BtlMenu {
                         self.push(Page::Target { then: Pending::Magic(m.id), targets: t });
                         None
                     }
+                    Page::ComboMagic => {
+                        let m = self.b.combo_magic.get(cur)?.clone();
+                        if m.mp > self.b.mp {
+                            return None;
+                        }
+                        let t = self.targets_for(m.class);
+                        self.push(Page::Target { then: Pending::Magic(COMBO_MAGIC_BASE + m.id), targets: t });
+                        None
+                    }
                     Page::Skill => {
                         let m = self.b.skills.get(cur)?.clone();
                         if m.mp > self.b.mp {
@@ -815,12 +858,14 @@ impl BtlMenu {
                         let id = self.b.fusion.get(cur)?.id;
                         Some(MenuEvent::Fusion { id })
                     }
-                    Page::Guard => Some(MenuEvent::Guard { actor }),
+                    // `SetGuardMenu`: row 0 *Block*, row 1 *Resist* (`BtlMenuFunc` step 0x32 sets `BtlChr+0xb5` bit 3 for Resist)
+                    Page::Guard => Some(if cur == 1 { MenuEvent::Defend { actor, resist: true } } else { MenuEvent::Guard { actor } }),
                     Page::Target { then, targets } => {
                         let t = *targets.get(cur)? as i32;
                         Some(match then {
                             Pending::Attack(shape) => MenuEvent::Attack { actor, target: t, kind: shape, skill: -1 },
                             Pending::Item(item) => MenuEvent::Item { item, target: t },
+                            Pending::Magic(id) if id >= COMBO_MAGIC_BASE => MenuEvent::RingSkill { id: id - COMBO_MAGIC_BASE, target: t },
                             Pending::Magic(id) => MenuEvent::Magic { id, target: t },
                             Pending::Skill(i) => MenuEvent::Special { a: i, b: t, enemy_like: false },
                             Pending::Link => MenuEvent::Link { actor, target: t },
@@ -859,7 +904,8 @@ pub fn build_lists(tables: &ActionTables, src: &crate::menu_data::MenuSource, fu
     if let Some(id) = fused.filter(|&id| id >= 0) {
         let id = id as usize;
         let group = tables.groups.get(ActionTables::fusion_group(id)).map(|g| g.as_slice()).unwrap_or(&[]);
-        let wanted = tables.fusion_skills.get(id).map(|s| src.fused_skills(id, s)).unwrap_or_default();
+        let soul = tables.fusion_soul.get(id).copied().unwrap_or(id as u8) as usize;
+        let wanted = tables.fusion_skills.get(id).map(|s| src.fused_skills(soul, s)).unwrap_or_default();
         b.skills = wanted
             .into_iter()
             .filter_map(|i| group.get(i).map(|r| (i, r)))
@@ -1128,6 +1174,8 @@ mod tests {
             aroma_combos: vec![],
             snap: None,
             fused: None,
+            combo_magic: vec![],
+            sealed: false,
         }
     }
 
@@ -1225,7 +1273,7 @@ mod tests {
         let rows = m.rows(&t);
         assert_eq!(rows.iter().map(|r| r.label.as_str()).collect::<Vec<_>>(), vec!["Block", "Resist"]);
         m.press(Button::Down);
-        assert_eq!(m.press(Button::Confirm), Some(MenuEvent::Guard { actor: 0 }));
+        assert_eq!(m.press(Button::Confirm), Some(MenuEvent::Defend { actor: 0, resist: true }));
     }
 
     #[test]

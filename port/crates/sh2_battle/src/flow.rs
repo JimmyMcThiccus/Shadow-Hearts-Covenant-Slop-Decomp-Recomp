@@ -17,6 +17,9 @@
 //! JP 0x00331960, and the AI script VM): item/magic/skill effect evaluation and enemy AI.  They
 //! are stubbed behind [`Host::resolve_effect`] / [`Host::choose_ai_command`].
 
+use std::sync::Arc;
+
+use crate::actions::{ActionTables, FighterExt, Guard};
 use crate::rules::{self, Ambush, GlobalMod, Lcg, Rng, StatMod, TurnSlot};
 
 /// `CBattle+0x28`.
@@ -166,6 +169,10 @@ pub enum MenuEvent {
     RingSkill { id: i32, target: i32 },
     /// Anastasia's `Snap Shot` on an enemy (port: effect kind 8; the photo is recorded by the host)
     Snap { target: i32 },
+    /// 7 with the Defend page's choice (`SetGuardMenu`: 0 *Block*, 1 *Resist*); [`MenuEvent::Guard`] is *Block*
+    Defend { actor: i32, resist: bool },
+    /// retail phase 0x14 with `nCmdKind = 1` (AIS tokens 1 / 3): the unit only ends its turn (`flTurnPush = 3.0`, no guard)
+    Wait { actor: i32 },
 }
 
 /// The command the battle will execute (CBattle+0x44..0x58).
@@ -202,6 +209,8 @@ impl MenuEvent {
             Item { item, target } => (Phase::Effect, 0, Command { p44: item, p48: target, p4c: EffectKind::Item as i32, ..Default::default() }),
             Magic { id, target } => (Phase::Effect, 0, Command { p44: id, p48: target, p4c: EffectKind::Magic as i32, ..Default::default() }),
             Guard { actor } => (Phase::Guard, 0, Command { p44: actor, ..Default::default() }),
+            Defend { actor, resist } => (Phase::Guard, 0, Command { p44: actor, p48: resist as i32, ..Default::default() }),
+            Wait { actor } => (Phase::Guard, 0, Command { p44: actor, p48: -1, ..Default::default() }),
             Link { actor, target } => (Phase::Link, 0, Command { p44: actor, p48: target, ..Default::default() }),
             Run => (Phase::Escape, 0, Command::default()),
             Fusion { id } => (Phase::Fusion, 0, Command { p44: id, p4c: EffectKind::Fusion as i32, ..Default::default() }),
@@ -510,6 +519,20 @@ pub trait Host {
     fn fusion_info(&self, _id: i32) -> Option<(String, u32, i32)> {
         None
     }
+    /// Round 5 BE hook: elemental resist classes of fighter `t` against a physical (`true`) or magic hit -- monsters use `MONSTERParam+0x32`
+    /// (`BtlHost::resist_of`); the default is "normal" for everyone.
+    fn defender_resist(&self, _t: usize, _physical: bool) -> [rules::Resist; 6] {
+        [rules::Resist::Normal; 6]
+    }
+    /// Round 5 BE hook: the soul reward of the monster in slot `k` (`MONSTERParam+0x2c`, summed by `AddTrophy` into the result's `Soul.` column).
+    fn monster_soul(&self, _k: usize) -> u16 {
+        0
+    }
+    /// BE request 8: the effect words of a monster skill attack (`PAtkEffectFunc` with the skill record, AIS 0x24 index 0 -> phase 5 with
+    /// `cmd.p58 = skill`) on the struck target, after the physical hits landed.  Returns HP changes (damage > 0) like [`Host::resolve_effect`].
+    fn attack_rider(&mut self, _actor: usize, _target: usize, _skill: i32, _fighters: &mut [Option<Fighter>]) -> Vec<(usize, i32)> {
+        Vec::new()
+    }
 }
 
 /// Scale an effect hit (damage > 0 / heal < 0) by the Judgement Ring grade of the action: 1.0 = no ring or a clean lap, 0.0 = `Miss!!`
@@ -579,6 +602,34 @@ pub enum BattleEvent {
     TarotCash { variant: u8 },
     /// `TurnBeforeFunc` step 0x3b: the actor carries the "cannot act" status (Hanged Man) and loses its turn (`SetBtlMessage(0x78)`)
     CannotAct { chr: usize },
+    /// party-side results of the round 5 engine (statuses, MP / SP changes, berserk, guard ...), see [`PartyEvent`]
+    Party(PartyEvent),
+}
+
+/// What the party-side engine reports besides HP damage ([`BattleEvent::Party`]).  The plugin shows them as floating texts / messages
+/// (`EffectMesCall`); headless runs read them for tests.
+#[derive(Clone, Debug, PartialEq)]
+pub enum PartyEvent {
+    /// `EffectCodeFunc` result on one target: MP / SP change, status bits added / cured / resisted, buffs, "no effect"
+    Effect { target: usize, mp: i32, sp: i32, added: u32, cured: u32, blocked: u32, buffs: Vec<u8>, failed: bool, revived: bool },
+    /// `TurnBeforeFunc` step 0x39: `SetBtlMessage(0x73)` "%s is paralyzed!" -- the turn is lost
+    Paralyzed { chr: usize },
+    /// step 0x3d: `SetBtlMessage(0x71)` "%s has gone berserk!" (Sanity ran out, score counter +1) / 0x72 "%s is berserk!"
+    Berserk { chr: usize, first: bool },
+    /// a petrified unit's turn passes (it stays in the order but cannot act)
+    Petrified { chr: usize },
+    /// the MP an action cost (`DecMPp`)
+    MpCost { chr: usize, mp: i32 },
+    /// items / cash taken by *Pillage* / *Cash Steal* (the owner of the bag / cash adds them)
+    Stolen { items: Vec<i32>, cash: i32 },
+    /// the Defend stance of a party member (`Block` / `Resist`)
+    Defend { chr: usize, resist: bool },
+    /// a physical hit's ring item rider (`PAtkEffectFunc`: the `JRCI` effect words with the ring grade as power)
+    RingItem { target: usize, added: u32 },
+    /// `TurnBeforeFunc` step 0x37 / `SetBtlMessage(0x79)`: the aroma `id` is gone
+    AromaGone { id: i32 },
+    /// Snap Shot: `SetBtlMessage(0x7a)` "You got the "%s" Album!" (album `index` = Anastasia's `SKIL` group 4 record)
+    Album { index: u8, name: String },
 }
 
 pub struct Battle<H: Host> {
@@ -612,8 +663,73 @@ pub struct Battle<H: Host> {
     pub tarot: crate::tarot::TarotState,
     /// the Tarot draw in progress during [`Phase::Tarot`]
     pub tarot_run: Option<crate::tarot::TarotRun>,
+    /// per fighter slot: the state the [`Fighter`] does not carry (guard stance, resists, immunities, raw stats, ...), see [`party_setup`]
+    pub ext: Vec<FighterExt>,
+    /// the action tables of the party-side engine ([`crate::actions::resolve_action`]); `None` = items / magic / skills go through
+    /// [`Host::resolve_effect`] only (the headless tests of other modules)
+    pub engine: Option<Arc<ActionTables>>,
+    /// per fighter slot: floor positions (Bevy world, x / z) for the area shapes; empty = unknown (every area hits the chosen target only)
+    pub positions: Vec<[f32; 3]>,
+    /// the party's cash (Cash Steal by monsters)
+    pub party_cash: i32,
+    /// the crest columns learned (`MC_P+6` bits, `BtlSave+0xaae`): bit `k` of `crest_learned[crest]`
+    pub crest_learned: Vec<u8>,
+    /// statistics of this battle for the Score page ([`BattleStats`], written by [`write_score`])
+    pub stats: BattleStats,
+    /// Lucia's active aroma (`CBattle+0x4090..0x40a7`, [`AromaState`])
+    pub aroma: Option<AromaState>,
+    /// an action made the party leave (*Falling Leaves*): the battle ends as an escape after it
+    pub escape_now: bool,
+    /// Anastasia's albums already owned at the start (`BTL0+0xfc3` bits)
+    pub albums_owned: Vec<u8>,
     pending: Option<MenuEvent>,
 }
+
+/// An aroma in the air (`CBattle+0x4090` row, `+0x4094` power, `+0x4098` three words, `+0x40a6` turns, `+0x40a7` chance).  `AromaEffectFunc`
+/// (retail 0x69ccd0) re-applies the words to every unit of the aroma's side at the start of its turn (the previous application -- records of
+/// source type 5 -- is removed first); the words with kinds 0x33 / 0x34 act on the enemies, the others on the party.  It lasts `turns` of Lucia's
+/// turns and needs Lucia standing in the battle.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AromaState {
+    pub id: i32,
+    pub words: [u32; 4],
+    pub turns_left: u8,
+    pub chance: u8,
+    pub power: i32,
+    pub lucia: usize,
+}
+
+/// Counters of one battle for the retail Score blocks (`BTL0+0x14bc + chapter * 0x400`, `sh2_menu::score`), written by [`write_score`].
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct BattleStats {
+    /// most hits in one action / all hits of the battle
+    pub max_hits: u32,
+    pub total_hits: u32,
+    /// the largest damage dealt by the party
+    pub max_damage: u32,
+    /// Link combos completed
+    pub combos: u32,
+    /// per PC id (0..14): went berserk, fell, attack rings (total / all areas hit), perfect rings (total / every hit a strike)
+    pub berserk: [u32; 14],
+    pub unconscious: [u32; 14],
+    pub ring_total: [u32; 14],
+    pub ring_ok: [u32; 14],
+    pub perfect_total: [u32; 14],
+    pub perfect_ok: [u32; 14],
+    pub ran_away: bool,
+    /// items taken from monsters by *Pillage* (party side, `ITEM` ids) and the cash change of *Cash Steal*
+    pub stolen_items: Vec<i32>,
+    pub cash_delta: i32,
+    /// permanent base-stat changes of party members (the Seal items in battle): `(pc id, kind 0xc..0x15, delta)`
+    pub permanent: Vec<(u8, u8, i32)>,
+    /// Anastasia's albums gained by Snap Shot this battle (`SKIL` group 4 record = bit of `BTL0+0xfc3`)
+    pub albums: Vec<u8>,
+}
+
+/// `StatusRecovery` case 7 (Snap Shot, retail SH2US_BATTLE.BIN 0x626bf8): photographing these `MONSTERParam` ids gives album `k` (bit `k` of
+/// `BTL0+0xfc3..0xfc4`, = Anastasia's `SKIL` group 4 record `k`: Aqua Raise, Direct Press, Cash Steal, Remove, Pillage Storm, Falling Leaves,
+/// Power Cannon, Spirit Ward, Nightmare, Euthanasia).  Same ids as the JP demo's `BtlFree` case 6.
+pub const ALBUM_MONSTERS: [u16; 10] = [0x3a, 0x4d, 0x26, 0x33, 0xcc, 0x6f, 0x7e, 0x82, 0x92, 0x9c];
 
 impl<H: Host> Battle<H> {
     pub fn new(host: H, fighters: Vec<Fighter>, ambush: Ambush, escape: rules::EscapeMode, seed: u64) -> Self {
@@ -642,6 +758,15 @@ impl<H: Host> Battle<H> {
             fused: vec![None; rules::MAX_CHR],
             tarot: crate::tarot::TarotState::new([0; 3], false),
             tarot_run: None,
+            ext: vec![FighterExt::default(); rules::MAX_CHR],
+            engine: None,
+            positions: vec![],
+            party_cash: 0,
+            crest_learned: vec![],
+            stats: BattleStats::default(),
+            aroma: None,
+            escape_now: false,
+            albums_owned: vec![],
             pending: None,
         }
     }
@@ -653,7 +778,13 @@ impl<H: Host> Battle<H> {
             if let Some(Some(prev)) = self.fused.get_mut(i).map(|s| s.take()) {
                 f.name = prev.orig_name;
             }
+            if let Some(e) = self.ext.get_mut(i) {
+                crate::actions::apply_fusion_stats(f, e, None);
+            }
             return;
+        }
+        if let Some(e) = self.ext.get_mut(i) {
+            crate::actions::apply_fusion_stats(f, e, Some(id));
         }
         let Some((name, model, sp_upkeep)) = self.host.fusion_info(id) else { return };
         let orig_name = self.fused.get(i).and_then(|s| s.as_ref()).map(|s| s.orig_name.clone()).unwrap_or_else(|| f.name.clone());
@@ -675,7 +806,8 @@ impl<H: Host> Battle<H> {
         self.fighters
             .iter()
             .map(|f| match f {
-                Some(f) => TurnSlot { active: true, excluded: f.removed || f.hp <= 0 && !f.is_enemy && false, ..f.turn },
+                // a fallen party member has no turns until revived (BE item 9: `turn Karin(-402hp)`)
+                Some(f) => TurnSlot { active: true, excluded: f.removed || f.hp <= 0, ..f.turn },
                 None => TurnSlot::default(),
             })
             .collect()
@@ -715,7 +847,7 @@ impl<H: Host> Battle<H> {
                     is_enemy: f.is_enemy,
                     hp: f.hp,
                     gone: f.removed,
-                    status_down: f.status.iter().any(|m| m.kind == rules::modkind::STATUS && (m.value as u32 & rules::status_bits::DOWN) != 0),
+                    status_down: rules::status_of(&f.status) & rules::status_bits::DOWN != 0,
                 },
                 None => rules::EndView::default(),
             })
@@ -772,36 +904,68 @@ impl<H: Host> Battle<H> {
                     }
                 }
                 f.status.retain(|m| m.kind != 0);
-                // Poison (status 0x47 bit 0 / D.Poison bit 1): 5 % / 10 % of the max HP per turn (floor 1)
-                let poison = f.status.iter().filter(|m| m.kind == rules::modkind::STATUS).fold(0, |a, m| a | m.value as u32);
+                // the stance of the previous turn ends; the getters see the expired records (`EffectEndFunc` -> `GetPAtk` ...)
+                // (the aroma's records of the previous turn are removed and applied again below: `AromaEffectFunc`)
+                if let Some(e) = self.ext.get_mut(i) {
+                    e.guard = Guard::None;
+                    crate::actions::refresh_stats(f, e);
+                }
+                // Poison (status 0x54 bit 0 / D.Poison bit 1): 5 % / 10 % of the max HP per turn (floor 1)
+                let poison = rules::status_of(&f.status);
                 if poison & 3 != 0 && f.hp > 1 {
                     let d = (f.max_hp * if poison & 2 != 0 { 10 } else { 5 } / 100).max(1);
                     f.hp = (f.hp - d).max(1);
                     let e = BattleEvent::Damage { target: i, amount: d, critical: false };
                     self.events.push(e);
                 }
-                // Sanity drain for PCs (DecSP)
-                if !f.is_enemy && f.max_sp > 0 {
-                    let cost = rules::sp_cost_per_turn(None, &f.status, &f.passives, false, &gm);
-                    let (sp, frac, _) = rules::dec_sp(f.sp, f.sp_frac, cost, false);
+                // `TurnBeforeFunc` step 0x3d: Sanity drain for PCs (`DecSP(actor, -2)`: 1 SP per turn, the fusion's `FUSM+5` while fused, the 0x1e / 0x38
+                // modifiers, x3 under Panic, The Temperance card); PCs 8..10 have no Sanity.  Running out of Sanity sends the character berserk
+                // (`SetBtlMessage(0x71)`, `BtlChr+0xb6` bit 2, the score counter `BTL0+0x1504 + pc * 0x24`); a berserk character gets 0x72 each turn.
+                let pc = self.ext.get(i).map(|e| e.pc).unwrap_or(f.char_id);
+                let upkeep = self.fused.get(i).and_then(|s| s.as_ref()).map(|s| s.sp_upkeep);
+                if !f.is_enemy && f.max_sp > 0 && !matches!(pc, 8..=10) {
+                    let cost = rules::sp_cost_per_turn(upkeep, &f.status, &f.passives, upkeep.is_some(), &gm);
+                    let (sp, frac, sane) = rules::dec_sp(f.sp, f.sp_frac, cost, false);
                     if sp != f.sp {
                         let e = BattleEvent::SanityDrop { chr: i, sp };
                         self.events.push(e);
                     }
                     f.sp = sp;
                     f.sp_frac = frac;
-                }
-                // a fused character pays the fusion's SP upkeep (`FUSM+5`) and reverts when it cannot
-                let upkeep = self.fused.get(i).and_then(|s| s.as_ref()).map(|s| s.sp_upkeep).unwrap_or(0);
-                if upkeep > 0 {
-                    let f = self.fighters[i].as_mut().unwrap();
-                    f.sp = (f.sp - upkeep).max(0);
-                    let sp = f.sp;
-                    self.events.push(BattleEvent::SanityDrop { chr: i, sp });
-                    if sp == 0 {
-                        // out of Sanity: the fusion ends (the real game's berserk is not modelled)
-                        self.set_fused(i, -1);
+                    let was = self.ext.get(i).map(|e| e.berserk).unwrap_or(false);
+                    if !sane {
+                        if let Some(e) = self.ext.get_mut(i) {
+                            e.berserk = true;
+                        }
+                        if !was {
+                            if let Some(c) = self.stats.berserk.get_mut(pc.clamp(0, 13) as usize) {
+                                *c += 1;
+                            }
+                        }
+                        self.events.push(BattleEvent::Party(PartyEvent::Berserk { chr: i, first: !was }));
+                    } else if let Some(e) = self.ext.get_mut(i) {
+                        e.berserk = false;
                     }
+                }
+                // out of Sanity while fused: the fusion ends (`SetAutoFusionOff`)
+                if upkeep.is_some() && self.fighters[i].as_ref().map(|f| f.sp < 1).unwrap_or(false) {
+                    self.set_fused(i, -1);
+                }
+                self.aroma_turn(i);
+                // a petrified unit (status 0x20) cannot act: its turn passes
+                let st = self.fighters[i].as_ref().map(|f| rules::status_of(&f.status)).unwrap_or(0);
+                if st & rules::status_bits::PETRIFY != 0 {
+                    self.events.push(BattleEvent::Party(PartyEvent::Petrified { chr: i }));
+                    self.finish_action(1.0);
+                    return true;
+                }
+                // step 0x39: Paralysis (status 4) -- `SetBtlMessage(0x73)` "%s is paralyzed!", the turn is lost
+                if st & rules::status_bits::PARALYSIS != 0 {
+                    let e = BattleEvent::Party(PartyEvent::Paralyzed { chr: i });
+                    self.host.event(&e);
+                    self.events.push(e);
+                    self.finish_action(1.0);
+                    return true;
                 }
                 // `TurnBeforeFunc` step 0x3b / `BtlMenuFunc`: a slot of kind 'Q' (the Hanged Man's tarot card) -- the turn is lost.  The slot count was
                 // decremented above (n + 1 -> n), so a card that skips n turns removes itself at the start of turn n + 1.
@@ -819,8 +983,14 @@ impl<H: Host> Battle<H> {
             Phase::Command => {
                 let i = self.actor.unwrap();
                 let enemy = self.fighters[i].as_ref().unwrap().is_enemy;
+                let berserk = !enemy && self.ext.get(i).map(|e| e.berserk).unwrap_or(false);
                 let ev = if enemy {
                     Some(self.host.choose_ai_command(i, &self.fighters))
+                } else if berserk {
+                    // `BerserkFunc` (retail 0x690270): no command menu; the port keeps its "attack somebody" branch (a random living enemy).  The
+                    // item / crest-spell branches and the antics phases 0x0f..0x12 are not modelled.
+                    self.pending = None;
+                    Some(self.berserk_command(i))
                 } else {
                     self.pending.take()
                 };
@@ -836,11 +1006,23 @@ impl<H: Host> Battle<H> {
                 // `CBattle` phase 7: walk next to the partner; the partner chooses a command first (`SetNextComboChrMenu`), the leader acts afterwards
                 let leader = self.actor.unwrap();
                 let partner = self.cmd.p48.max(0) as usize;
-                let ok = partner != leader && self.fighters.get(partner).and_then(|f| f.as_ref()).map(|f| !f.is_enemy && f.hp > 0 && !f.removed).unwrap_or(false);
+                let leader_enemy = self.fighters.get(leader).and_then(|f| f.as_ref()).map(|f| f.is_enemy).unwrap_or(false);
+                let ok = partner != leader && self.fighters.get(partner).and_then(|f| f.as_ref()).map(|f| f.is_enemy == leader_enemy && f.hp > 0 && !f.removed).unwrap_or(false);
                 if ok && self.combo.is_empty() {
                     self.combo = vec![leader, partner];
                     self.host.combo_changed(&self.combo);
                     self.combo_queue = vec![leader];
+                    self.actor = Some(partner);
+                    let e = BattleEvent::ComboLink { leader, partner };
+                    self.host.event(&e);
+                    self.events.push(e);
+                    self.goto(Phase::Command, 0);
+                } else if ok && self.combo.contains(&leader) && !self.combo.contains(&partner) && self.combo.len() < 4 {
+                    // round 5 BP: a combo member links a further ally (combos of up to four, the combo magic needs three): the new member acts
+                    // next, the linking member after it, then the rest of the queue
+                    self.combo.push(partner);
+                    self.host.combo_changed(&self.combo);
+                    self.combo_queue.insert(0, leader);
                     self.actor = Some(partner);
                     let e = BattleEvent::ComboLink { leader, partner };
                     self.host.event(&e);
@@ -851,6 +1033,16 @@ impl<H: Host> Battle<H> {
                 }
             }
             Phase::Guard => {
+                // `BtlMenuFunc` step 0x32: the defender stands in `bState` 0x11 until its next turn; `CheckGuard` answers 1 (*Block*) or 2 (*Resist*,
+                // `BtlChr+0xb5` bit 3).  `cmd.p48 == -1` is the AI's "end the turn" (no stance).
+                let i = self.actor.unwrap();
+                if self.cmd.p48 >= 0 {
+                    let resist = self.cmd.p48 == 1;
+                    if let Some(e) = self.ext.get_mut(i) {
+                        e.guard = if resist { Guard::Resist } else { Guard::Block };
+                    }
+                    self.events.push(BattleEvent::Party(PartyEvent::Defend { chr: i, resist }));
+                }
                 self.finish_action(1.0);
             }
             // `TarotEffectFunc`: the pick / effect steps are driven through `tarot_stop` / `tarot_apply` / `tarot_finish` (src/tarot.rs)
@@ -877,6 +1069,7 @@ impl<H: Host> Battle<H> {
                     !me.is_enemy,
                 );
                 if rules::roll_percent(self.rng.as_mut(), rate) {
+                    self.stats.ran_away = !me.is_enemy;
                     self.tarot.end_battle(&mut self.fighters);
                     self.gmod = rules::GlobalMod::default();
                     self.events.push(BattleEvent::Escaped);
@@ -899,20 +1092,60 @@ impl<H: Host> Battle<H> {
                     let id = self.cmd.p44;
                     self.set_fused(i, id);
                 }
-                let hits = self.host.resolve_effect(i, &self.cmd, &mut self.fighters);
-                // the action's Judgement Ring (`GetJRingAreaResult` in `EffectDamageSet`): the grade scales every hit, a miss cancels the effect
-                let ring = self.ring;
-                for (t, amt) in hits {
-                    self.apply_damage(t, scale_by_ring(amt, ring), false);
+                let actor_pc = self.fighters[i].as_ref().map(|f| !f.is_enemy).unwrap_or(false);
+                // Snap Shot of a monster that carries an album (`StatusRecovery` case 7): "You got the "%s" Album!" (0x7a) once per album
+                if self.phase == Phase::Effect && actor_pc && self.cmd.p4c == EffectKind::Snap as i32 {
+                    let t = self.cmd.p48.max(0) as usize;
+                    if let Some(id) = self.fighters.get(t).and_then(|f| f.as_ref()).filter(|f| f.is_enemy).map(|f| f.char_id as u16) {
+                        if let Some(k) = ALBUM_MONSTERS.iter().position(|&m| m == id) {
+                            if !self.stats.albums.contains(&(k as u8)) && !self.albums_owned.contains(&(k as u8)) {
+                                self.stats.albums.push(k as u8);
+                                let name = self
+                                    .engine
+                                    .as_ref()
+                                    .and_then(|t| t.groups.get(4).and_then(|g| g.get(k)).map(|r| t.skill_name(r.name_idx.max(0) as usize).to_string()))
+                                    .unwrap_or_default();
+                                self.events.push(BattleEvent::Party(PartyEvent::Album { index: k as u8, name }));
+                            }
+                        }
+                    }
+                }
+                let mut factor = 1.0;
+                // (a fused party member's skill may arrive as the monster-skill kind 3 (`Special { enemy_like: true }`, QA3): the engine looks it up in
+                // the fusion's `SKIL` group)
+                let engine_phase = self.phase == Phase::Effect && matches!(self.cmd.p4c, 0..=3) || self.phase == Phase::RingSkill && self.cmd.p4c == 4;
+                if self.engine.is_some() && self.phase == Phase::Aroma && actor_pc {
+                    factor = self.start_aroma(i);
+                } else if self.engine.is_some() && engine_phase && actor_pc {
+                    factor = self.resolve_party_effect(i);
+                } else if self.engine.is_some() && self.phase == Phase::Fusion {
+                    // the fused form's stats come from `set_fused` (FUSM growth rows); the host only sees the command (banner / effect choice)
+                    let mut scratch = self.fighters.clone();
+                    let _ = self.host.resolve_effect(i, &self.cmd, &mut scratch);
+                } else {
+                    let hits = self.host.resolve_effect(i, &self.cmd, &mut self.fighters);
+                    // the action's Judgement Ring (`GetJRingAreaResult` in `EffectDamageSet`): the grade scales every hit, a miss cancels the effect
+                    let ring = self.ring;
+                    for (t, amt) in hits {
+                        self.apply_damage(t, scale_by_ring(amt, ring), false);
+                    }
                 }
                 self.ring = 1.0;
                 self.ring_hits.clear();
+                if self.escape_now {
+                    self.escape_now = false;
+                    self.tarot.end_battle(&mut self.fighters);
+                    self.gmod = rules::GlobalMod::default();
+                    self.events.push(BattleEvent::Escaped);
+                    self.goto(Phase::End, 0);
+                    return true;
+                }
                 if self.phase == Phase::Fusion && self.fused.get(i).map(|s| s.is_some()).unwrap_or(false) {
                     // live `08h` / `17k`: the transformation costs no turn -- the fused character's own command menu opens at once
                     self.pending = None;
                     self.goto(Phase::Command, 0);
                 } else {
-                    self.finish_action(1.0);
+                    self.finish_action(factor);
                 }
             }
             Phase::ActionDone => self.goto(Phase::Death, 0),
@@ -924,7 +1157,8 @@ impl<H: Host> Battle<H> {
                     let f = self.fighters[k].as_mut().unwrap();
                     f.removed = true;
                     let (id, exp, cash, drops) = (f.mon_id, f.exp, f.cash, f.drops);
-                    self.trophy.add_monster(id, exp, cash, 0, &drops);
+                    let soul = self.host.monster_soul(k);
+                    self.trophy.add_monster(id, exp, cash, soul, &drops);
                     let e = BattleEvent::Defeated { chr: k };
                     self.host.event(&e);
                     self.events.push(e);
@@ -1001,7 +1235,12 @@ impl<H: Host> Battle<H> {
             ..Default::default()
         };
         let guard_in = rules::GuardIn { free_to_guard: true, status: &def.status, passives: &def.passives, ..Default::default() };
-        let guard = rules::check_guard(&guard_in, self.rng.as_mut());
+        // `CheckGuard`: the guard records first, then the Defend stance (`bState` 0x11: 1 Block, 2 Resist)
+        let stance = self.ext.get(t).map(|e| e.guard.class()).unwrap_or(0);
+        let mut guard = rules::check_guard(&guard_in, self.rng.as_mut());
+        if guard == 0 {
+            guard = stance;
+        }
         let dview = rules::DefenderView {
             is_enemy: def.is_enemy,
             pdef: def.pdef,
@@ -1012,13 +1251,17 @@ impl<H: Host> Battle<H> {
             variance: def.variance,
             status: &def.status,
             passives: &def.passives,
-            resist: [rules::Resist::Normal; 6],
+            resist: if def.is_enemy { self.host.defender_resist(t, true) } else { self.ext.get(t).map(|e| e.resist_p).unwrap_or([rules::Resist::Normal; 6]) },
             guard,
             ..Default::default()
         };
         let crit = rules::critical_rate(self.no_evade, att.luc, def.luc, &att.status, &att.passives, !att.is_enemy);
         let mut total = 0;
         let mut landed: Vec<(i32, bool)> = Vec::new();
+        // `PAtkHitSet`: the target accumulates the float damage of the action (`BtlChr+0x530`) and takes the whole points (`+0x528`); a hit
+        // that is not fully guarded away takes at least 1
+        let mut acc_f = 0.0f32;
+        let mut acc_i = 0i32;
         for k in 0..hits {
             let h = rules::PhysHit {
                 power: 1.0,
@@ -1035,11 +1278,16 @@ impl<H: Host> Battle<H> {
             // Retail order (`PAtkHitSet` -> `GetPAtkDamage`): the damage chain with its critical roll comes first, then the guard
             // factor, and only then the evasion roll.
             let r = rules::physical_damage(&aview, &dview, &h, self.rng.as_mut());
-            let dmg = (r.damage * rules::guard_damage_factor(guard)) as i32;
+            let factor = rules::guard_damage_factor(guard);
+            let mut dmg = (acc_f + r.damage * factor) as i32 - acc_i;
+            if factor != 0.0 && dmg == 0 {
+                dmg = if r.damage > 0.0 { 1 } else if r.damage < 0.0 { -1 } else { 0 };
+            }
             // The evasion roll happens only for an unguarded defender, or when the hit would kill a party member ("last chance" dodge, +10 %).
             let lethal = !def.is_enemy && dmg >= def.hp - total && def.hp - total > 0;
             if rules::evasion_roll_applies(guard, lethal) {
-                let mut ev = rules::evasion_rate(self.no_evade, def.agl, def.luc, att.agl, &def.status, &def.passives, !def.is_enemy, &self.gmod, None);
+                let yoah = self.ext.get(t).and_then(|e| e.yoah).map(|y| y[3]);
+                let mut ev = rules::evasion_rate(self.no_evade, def.agl, def.luc, att.agl, &def.status, &def.passives, !def.is_enemy, &self.gmod, yoah);
                 if lethal {
                     ev += rules::LETHAL_EVADE_BONUS;
                 }
@@ -1047,12 +1295,33 @@ impl<H: Host> Battle<H> {
                     continue; // evaded
                 }
             }
+            acc_f += r.damage * factor;
+            acc_i += dmg;
             landed.push((dmg, r.critical));
             total += dmg;
         }
+        // ring statistics of a party member's attack (score page: attack rings total / every area hit, perfect = every hit a strike)
+        if !att.is_enemy && !self.ring_hits.is_empty() {
+            let pc = self.ext.get(a).map(|e| e.pc).unwrap_or(att.char_id).clamp(0, 13) as usize;
+            self.stats.ring_total[pc] += 1;
+            if self.ring_hits.iter().all(|&g| g > 0.0) {
+                self.stats.ring_ok[pc] += 1;
+            }
+            self.stats.perfect_total[pc] += 1;
+            if self.ring_hits.iter().all(|&g| g > 1.0) {
+                self.stats.perfect_ok[pc] += 1;
+            }
+        }
+        let grade = self.ring_hits.first().copied().unwrap_or(self.ring);
         self.ring = 1.0;
         self.ring_hits.clear();
+        if !att.is_enemy {
+            self.stats.max_hits = self.stats.max_hits.max(landed.len() as u32);
+            self.stats.total_hits += landed.len() as u32;
+            self.stats.max_damage = self.stats.max_damage.max(total.max(0) as u32);
+        }
         // one result per landed hit (`EffectMesCall` per `PAtkHitSet`: the "N Hit" counter and the per-hit numbers); all hits evaded = a single miss
+        let hit_any = !landed.is_empty();
         if landed.is_empty() {
             self.apply_damage(t, 0, false);
         } else {
@@ -1060,17 +1329,288 @@ impl<H: Host> Battle<H> {
                 self.apply_damage(t, dmg, crit);
             }
         }
-        let _ = total;
+        // BE request 8: a monster skill attack's rider (the skill record's effect words on the struck target)
+        if hit_any && self.cmd.p58 >= 0 && att.is_enemy {
+            let skill = self.cmd.p58;
+            let hits = self.host.attack_rider(a, t, skill, &mut self.fighters);
+            for (tt, amt) in hits {
+                self.apply_damage(tt, amt, false);
+            }
+        }
+        // `PAtkEffectFunc` (retail 0x6972a0 / 0x696ab0): the ring item of the attacker (`JRCI` row `PCParam+0x68`, effect words `+4`) acts on the
+        // target with the ring grade as power (source type 0)
+        if hit_any && !att.is_enemy {
+            if let Some(words) = self.ext.get(a).and_then(|e| e.ring_item) {
+                let recs = crate::actions::decode_effect_words_src(&words, 0, att.satk / 2, att.satk, true, 0);
+                let tex = self.ext.get(t).cloned().unwrap_or_default();
+                if let Some(Some(f)) = self.fighters.get_mut(t) {
+                    if f.hp > 0 {
+                        let env = crate::actions::EcEnv { power: (grade * 100.0).round() as i32, immune: tex.immune, pc: tex.pc, ..Default::default() };
+                        let ap = crate::actions::effect_code(&recs, f, &env, self.rng.as_mut());
+                        if ap.status_added != 0 {
+                            self.events.push(BattleEvent::Party(PartyEvent::RingItem { target: t, added: ap.status_added }));
+                        }
+                    }
+                }
+            }
+        }
         self.finish_action(1.0);
     }
 
     fn apply_damage(&mut self, t: usize, amount: i32, critical: bool) {
         if let Some(Some(f)) = self.fighters.get_mut(t) {
-            f.hp = (f.hp - amount).clamp(-9999, f.max_hp);
+            let was = f.hp;
+            f.hp = (f.hp - amount).clamp(0, f.max_hp);
+            let fell = !f.is_enemy && was > 0 && f.hp <= 0;
             let e = BattleEvent::Damage { target: t, amount, critical };
             self.host.event(&e);
             self.events.push(e);
+            if fell {
+                self.note_fall(t);
+            }
         }
+    }
+
+    /// Round 5 BP: the party-side additions to the command menu of `actor` (call after the lists are built, before `BtlMenu::new`): Seal greys the
+    /// magic-like entries, the crest magic shows its `DecMPp` cost (crest count divisor, MP-cost modifiers, The Magician), a combo member may link
+    /// one more ally (combos of up to four), and three or more combo members get the combo magic of their elements (`CheckComboSkill`).
+    pub fn menu_extras(&self, actor: usize, b: &mut crate::ui::MenuBuild) {
+        let Some(f) = self.fighters.get(actor).and_then(|f| f.as_ref()) else { return };
+        let ext = self.ext.get(actor).cloned().unwrap_or_default();
+        b.sealed = rules::status_of(&f.status) & rules::status_bits::SEAL != 0;
+        if let Some(t) = self.engine.as_ref() {
+            let bits = &self.crest_learned;
+            let learned = |c: usize, k: usize| bits.get(c).map(|v| v & (1 << k) != 0).unwrap_or(false);
+            for m in b.magic.iter_mut() {
+                if let Some(rec) = t.magic.get(m.id.max(0) as usize) {
+                    m.mp = crate::actions::mp_cost(t, rec, true, f, &ext, &self.gmod, &learned);
+                }
+            }
+            // combo magic (`CheckComboSkill`): the members' elements -> `COMB` rows; Ouka / Hien / Raiden together -> row 7 (Lightning Flash)
+            let members: Vec<usize> = if self.combo.contains(&actor) { self.combo.clone() } else { vec![] };
+            let alive: Vec<usize> = members.iter().copied().filter(|&m| self.fighters.get(m).and_then(|x| x.as_ref()).map(|x| x.hp > 0 && !x.is_enemy).unwrap_or(false)).collect();
+            let pcs: Vec<i32> = alive.iter().map(|&m| self.ext.get(m).map(|e| e.pc).unwrap_or(-1)).collect();
+            let trio_ohr = [8, 9, 10].iter().all(|p| pcs.contains(p));
+            let trio_nrv = [0xb, 0xc, 0xd].iter().all(|p| pcs.contains(p));
+            let mut rows: Vec<usize> = vec![];
+            if trio_ohr && alive.len() == 3 && self.combo.len() > 1 {
+                rows.push(7);
+            } else if self.combo.len() >= if trio_nrv { 2 } else { 3 } {
+                for &m in &alive {
+                    let el = self.ext.get(m).map(|e| e.combo_element).unwrap_or(7) as usize;
+                    if el < 7 && !rows.contains(&el) {
+                        rows.push(el);
+                    }
+                }
+            }
+            b.combo_magic = rows
+                .into_iter()
+                .filter_map(|r| {
+                    let rec = t.combos.get(r)?;
+                    let mp = crate::actions::mp_cost(t, rec, false, f, &ext, &self.gmod, &learned);
+                    Some(crate::ui::MagicEntry { id: r as i32, name: t.combo_names.get(r).cloned().unwrap_or_default(), mp, class: rec.target_class(), area: crate::ui::Area::from_flags(rec.flags) })
+                })
+                .collect();
+        }
+        // a combo member may link one more ally
+        if !self.combo.is_empty() && self.combo.contains(&actor) && self.combo.len() < 4 {
+            b.can_link = b.allies.iter().any(|&a| a != actor && !self.combo.contains(&a));
+        }
+    }
+
+    /// Lucia's *Aromatherapy* (phase 0xc): pay the combination's MP, put the aroma in the air ([`AromaState`]) and apply it to its side at once
+    /// (the rows "only when used" have no turns and act this once).  Returns the turn factor.
+    fn start_aroma(&mut self, i: usize) -> f32 {
+        let mut scratch = self.fighters.clone();
+        let _ = self.host.resolve_effect(i, &self.cmd, &mut scratch);
+        let Some(t) = self.engine.clone() else { return 1.0 };
+        let Some((rec, turns, chance)) = t.aroma_rows.get(self.cmd.p44.max(0) as usize).cloned() else { return 1.0 };
+        let ext = self.ext.get(i).cloned().unwrap_or_default();
+        if let Some(Some(f)) = self.fighters.get_mut(i) {
+            let cost = crate::actions::mp_cost(&t, &rec, false, f, &ext, &self.gmod, &|_, _| true);
+            f.mp = (f.mp - cost).max(0);
+            self.events.push(BattleEvent::Party(PartyEvent::MpCost { chr: i, mp: cost }));
+        }
+        let power = (self.ring * 100.0).round() as i32;
+        self.aroma = Some(AromaState { id: self.cmd.p44, words: rec.words, turns_left: turns, chance, power: power.max(1), lucia: i });
+        let side_targets: Vec<usize> = (0..self.fighters.len()).collect();
+        for k in side_targets {
+            self.apply_aroma_to(k);
+        }
+        if turns == 0 {
+            self.aroma = None;
+        }
+        if rec.power > 0 { rec.turn_factor() / 3.0 } else { 1.0 }
+    }
+
+    /// `AromaEffectFunc(chr)`: the aroma's records on one unit (source type 5 records of the last application are replaced).
+    fn apply_aroma_to(&mut self, k: usize) {
+        let Some(a) = self.aroma.clone() else { return };
+        let lucia_ok = self.fighters.get(a.lucia).and_then(|f| f.as_ref()).map(|f| f.hp > 0 && !f.removed).unwrap_or(false);
+        let Some(Some(f)) = self.fighters.get_mut(k) else { return };
+        if !lucia_ok || f.hp <= 0 || f.removed {
+            return;
+        }
+        // source type 5 (`SpecialEffectCode(.., 5, ..)`): turns are taken as they are; the aroma's chance / turns override the words'
+        let mut recs = crate::actions::decode_effect_words_src(&a.words, 5, f.satk / 2, f.satk, true, 0);
+        for r in recs.iter_mut() {
+            if r.turns == 0 {
+                r.turns = 1;
+            }
+            r.chance = a.chance.max(1);
+        }
+        let enemy_words = recs.first().map(|r| matches!(r.kind, 0x33 | 0x34)).unwrap_or(false);
+        if f.is_enemy != enemy_words {
+            return;
+        }
+        let tex = self.ext.get(k).cloned().unwrap_or_default();
+        let env = crate::actions::EcEnv { power: a.power, immune: tex.immune, pc: tex.pc, ..Default::default() };
+        let ap = crate::actions::effect_code(&recs, f, &env, self.rng.as_mut());
+        if let Some(e) = self.ext.get(k) {
+            crate::actions::refresh_stats(f, e);
+        }
+        if ap.hp != 0 {
+            let e = BattleEvent::Damage { target: k, amount: -ap.hp, critical: false };
+            self.host.event(&e);
+            self.events.push(e);
+        }
+        if ap.mp != 0 || ap.sp != 0 || ap.status_added != 0 || ap.status_cured != 0 || !ap.buffs.is_empty() {
+            self.events.push(BattleEvent::Party(PartyEvent::Effect { target: k, mp: ap.mp, sp: ap.sp, added: ap.status_added, cured: ap.status_cured, blocked: ap.blocked, buffs: ap.buffs, failed: false, revived: ap.revived }));
+        }
+    }
+
+    /// Turn start of unit `i` with an aroma in the air: Lucia's turn counts the aroma down (`AromaTurnReset`, message 0x79 when it is gone),
+    /// every other unit of the side gets the aroma again (`AromaEffectFunc`).
+    fn aroma_turn(&mut self, i: usize) {
+        let Some(a) = self.aroma.clone() else { return };
+        if i == a.lucia {
+            let left = a.turns_left.saturating_sub(1);
+            if left == 0 {
+                self.aroma = None;
+                self.events.push(BattleEvent::Party(PartyEvent::AromaGone { id: a.id }));
+                return;
+            }
+            if let Some(s) = self.aroma.as_mut() {
+                s.turns_left = left;
+            }
+        }
+        self.apply_aroma_to(i);
+    }
+
+    /// A party member fell (score counter "unconscious").
+    fn note_fall(&mut self, t: usize) {
+        let pc = self.ext.get(t).map(|e| e.pc).unwrap_or(0).clamp(0, 13) as usize;
+        self.stats.unconscious[pc] += 1;
+    }
+
+    /// `BerserkFunc` (retail 0x690270, attack branch, taken 80 % of the time when a spell would be possible): the berserk character attacks a
+    /// random living unit -- live (pine_us_refinement 9.1): berserk PCs "act by AI and also hit each other and the enemies".  The item / crest
+    /// branches and the per-character antics (phases 0x0f..0x12) are not modelled.
+    fn berserk_command(&mut self, i: usize) -> MenuEvent {
+        let any: Vec<usize> = (0..self.fighters.len()).filter(|&k| k != i && self.fighters[k].as_ref().map(|f| f.hp > 0 && !f.removed).unwrap_or(false)).collect();
+        let t = if any.is_empty() { 0 } else { any[self.rng.rand() as usize % any.len()] };
+        MenuEvent::Attack { actor: i as i32, target: t as i32, kind: 0, skill: -1 }
+    }
+
+    /// An item / crest spell / skill of a party member through the party-side engine ([`crate::actions::resolve_action`]).  The host still sees
+    /// the command on a scratch copy of the fighters (its banner / effect id, the bag consumption, Snap Shot and friendship bookkeeping); the HP
+    /// changes become [`BattleEvent::Damage`] events (applied already), everything else [`PartyEvent`]s.  Returns the `TurnEnd` factor.
+    fn resolve_party_effect(&mut self, i: usize) -> f32 {
+        let mut scratch = self.fighters.clone();
+        let _ = self.host.resolve_effect(i, &self.cmd, &mut scratch);
+        let Some(tables) = self.engine.clone() else { return 1.0 };
+        let fused = self.fused.get(i).and_then(|s| s.as_ref()).map(|s| s.id);
+        let combo = self.combo.clone();
+        let learned_bits = self.crest_learned.clone();
+        let learned = move |c: usize, k: usize| learned_bits.get(c).map(|b| b & (1 << k) != 0).unwrap_or(false);
+        let radius: Vec<f32> = self.ext.iter().map(|e| e.radius).collect();
+        let host = &self.host;
+        let friendship = |a: usize, b: usize| host.friendship(a, b);
+        let ctx = crate::actions::ResolveCtx {
+            tables: &tables,
+            pos: &self.positions,
+            radius: &radius,
+            gm: self.gmod,
+            ring: self.ring,
+            combo: &combo,
+            friendship: &friendship,
+            party_cash: self.party_cash,
+            fused,
+            learned: &learned,
+            turn_no: self.turn_no,
+        };
+        let mut cmd = self.cmd;
+        if cmd.p4c == 3 {
+            cmd.p4c = 2;
+        }
+        let r = crate::actions::resolve_action(&ctx, i, &cmd, &mut self.fighters, &mut self.ext, self.rng.as_mut());
+        if r.mp_cost > 0 {
+            self.events.push(BattleEvent::Party(PartyEvent::MpCost { chr: i, mp: r.mp_cost }));
+        }
+        let mut damage_total = 0;
+        for h in &r.hits {
+            let heal = h.applied.hp;
+            if h.damage != 0 || h.missed || heal == 0 && h.applied.mp == 0 && h.applied.sp == 0 && h.applied.status_added == 0 && h.applied.status_cured == 0 && h.applied.buffs.is_empty() {
+                let e = BattleEvent::Damage { target: h.target, amount: h.damage, critical: h.critical };
+                self.host.event(&e);
+                self.events.push(e);
+                damage_total += h.damage.max(0);
+            }
+            if heal != 0 {
+                let e = BattleEvent::Damage { target: h.target, amount: -heal, critical: false };
+                self.host.event(&e);
+                self.events.push(e);
+            }
+            let a = &h.applied;
+            if a.mp != 0 || a.sp != 0 || a.status_added != 0 || a.status_cured != 0 || a.blocked != 0 || !a.buffs.is_empty() || a.revived || a.failed {
+                self.events.push(BattleEvent::Party(PartyEvent::Effect {
+                    target: h.target,
+                    mp: a.mp,
+                    sp: a.sp,
+                    added: a.status_added,
+                    cured: a.status_cured,
+                    blocked: a.blocked,
+                    buffs: a.buffs.clone(),
+                    failed: a.failed,
+                    revived: a.revived,
+                }));
+            }
+            if let Some(pc) = self.ext.get(h.target).map(|e| e.pc).filter(|&p| p >= 0) {
+                for &(k, dlt) in &a.permanent {
+                    self.stats.permanent.push((pc as u8, k, dlt));
+                }
+            }
+            let fell = self.fighters.get(h.target).and_then(|f| f.as_ref()).map(|f| !f.is_enemy && f.hp <= 0).unwrap_or(false);
+            if fell && (h.damage > 0 || a.fell) {
+                self.note_fall(h.target);
+            }
+        }
+        self.stats.max_damage = self.stats.max_damage.max(damage_total as u32);
+        // special effect ids of `EffectFunc` whose action is the effect program's (`rec+0x18 % 1000`): 0xe5 *Falling Leaves* -- the party runs
+        // away (effect 0x105 = fails when the fight forbids it), 0xde *Spirit Ward* -- one enemy is driven away (0x104 = fails on bosses)
+        let special = r.record.as_ref().map(|x| x.effect_id.rem_euclid(1000)).unwrap_or(-1);
+        if special == 0xe5 && self.escape != rules::EscapeMode::Never {
+            self.stats.ran_away = true;
+            self.escape_now = true;
+        }
+        if special == 0xde && self.escape != rules::EscapeMode::Never {
+            let t = self.cmd.p48.max(0) as usize;
+            if let Some(Some(f)) = self.fighters.get_mut(t) {
+                if f.is_enemy && f.hp > 0 {
+                    f.removed = true;
+                    let e = BattleEvent::Defeated { chr: t };
+                    self.host.event(&e);
+                    self.events.push(e);
+                }
+            }
+        }
+        if !r.stolen.is_empty() || r.cash != 0 {
+            self.events.push(BattleEvent::Party(PartyEvent::Stolen { items: r.stolen.clone(), cash: r.cash }));
+            self.party_cash = (self.party_cash + r.cash).max(0);
+            self.stats.stolen_items.extend(r.stolen.iter().copied());
+            self.stats.cash_delta += r.cash;
+        }
+        r.turn_factor
     }
 
     /// `TarotEffectFunc` step 0x34: the turn ends (`TurnEnd`, same factor as every other action).
@@ -1099,11 +1639,187 @@ impl<H: Host> Battle<H> {
             }
         }
         if !self.combo.is_empty() {
+            if self.combo.len() > 1 {
+                self.stats.combos += 1;
+            }
             self.combo.clear();
             self.host.combo_changed(&[]);
         }
         self.combo_queue.clear();
         self.goto(Phase::ActionDone, 0);
+    }
+}
+
+/// Set up the party-side engine of a battle (round 5 BP): the [`FighterExt`] of every fighter (PCs: the `PCInit` stat pipeline from the save
+/// record incl. the accessory passives, resists, the weapon element and the crests, the ring item; monsters: `MONSTERParam` immunities,
+/// resists, drops, raw stats), the action tables, the learned crest columns and the party's cash.  `pc_ids[i]` = the PC id of fighter `i`
+/// (`None` for monsters, whose `char_id` is the `MONSTERParam` id).
+pub fn party_setup<H: Host>(b: &mut Battle<H>, data: &crate::data::BattleData, tables: Arc<ActionTables>, session: &sh2_menu::session::GameSession, pc_ids: &[Option<u8>]) {
+    b.engine = Some(tables);
+    b.party_cash = session.cash() as i32;
+    if session.save.btl.is_retail() {
+        let r = &session.save.btl.retail;
+        b.albums_owned = (0..10u8).filter(|&k| r.get(0xfc3 + (k as usize >> 3)).map(|v| v & (1 << (k & 7)) != 0).unwrap_or(false)).collect();
+    }
+    // `MC_P` learned columns: bit `k` of the crest's byte in the kind-5 bit set 2 of the active bag (`SetMagicMenu`: `bag + 0x16a`)
+    let bag = session.save.btl.bag() as usize * sh2_menu::save::BtlSave::BAG_STRIDE;
+    b.crest_learned = (0..0x60)
+        .map(|c| {
+            let learned = session.save.btl.data.get(sh2_menu::save::BtlSave::OFF_SKILL_BITS2 + bag + (c >> 3)).map(|v| v & (1 << (c & 7)) != 0).unwrap_or(false);
+            if learned { 0xff } else { 0 }
+        })
+        .collect();
+    for i in 0..b.fighters.len() {
+        let Some(f) = b.fighters[i].as_mut() else { continue };
+        let mut ext = FighterExt { radius: 3.0, ..Default::default() };
+        match pc_ids.get(i).copied().flatten() {
+            Some(pc) => {
+                ext.pc = pc as i32;
+                if let Some(rec) = session.save.btl.pc(pc as usize) {
+                    let st = crate::actions::pc_stats(data, &rec, pc, None);
+                    let (hp, mp, sp) = (f.hp, f.mp, f.sp);
+                    crate::actions::apply_pc_stats(f, &mut ext, &st);
+                    f.hp = hp.min(f.max_hp);
+                    f.mp = mp.min(f.max_mp);
+                    f.sp = sp.min(f.max_sp.max(sp));
+                    for (k, c) in rec.skills.iter().enumerate().take(8) {
+                        ext.crests[k] = *c;
+                    }
+                    // Yuri (0..0x14) / Kurando (0x15, 0x16): the fusion forms at the souls' levels (`BTL0+0xf24 + FUSM[0x1d]`)
+                    let range: Vec<usize> = match pc {
+                        0 => (0..0x15).collect(),
+                        7 => (0x15..0x17).collect(),
+                        _ => vec![],
+                    };
+                    if !range.is_empty() {
+                        let lv = |soul: usize| if session.save.btl.is_retail() { session.save.btl.retail.get(0xf24 + soul).copied().unwrap_or(1) } else { 1 };
+                        ext.fusions = crate::actions::fusion_forms(data, &range, &lv);
+                    }
+                    // the element the combo magic uses (`CheckComboSkill`: `PCParam+0` bits 2..4; Gepetto: Cornelia's dress, `CLOT` row `BTL0+0xf3e` byte 6)
+                    ext.combo_element = (rec.raw[0] >> 2) & 7;
+                    if pc == 2 && session.save.btl.is_retail() {
+                        let dress = session.save.btl.retail.get(0xf3e).copied().unwrap_or(0) as usize;
+                        if let Some(r) = data.dat.record(crate::data::SEC_CLOTH, dress, 0xc) {
+                            ext.combo_element = r[6] & 7;
+                            for (k, bit) in [(0, 0x08u8), (1, 0x10), (2, 0x20), (3, 0x40), (4, 0x80)] {
+                                if r[6] & bit != 0 {
+                                    ext.element_mask |= 1 << k;
+                                }
+                            }
+                            for (k, bit) in [(5, 1u8), (6, 2)] {
+                                if r[7] & bit != 0 {
+                                    ext.element_mask |= 1 << k;
+                                }
+                            }
+                        }
+                    }
+                    // Joachim's Yoahism row scales his max HP / PATK / SATK / evasion (`PCInit` also scales the current HP)
+                    if pc == 6 {
+                        let row = session.save.btl.yoahism() as usize;
+                        if let Some(y) = data.dat.record(crate::data::SEC_YOAH, row, 0x10) {
+                            ext.yoah = Some([y[10] as i32, y[11] as i32, y[12] as i32, y[13] as i32]);
+                            let hp = f.hp;
+                            crate::actions::refresh_stats(f, &ext);
+                            f.hp = (hp * y[10] as i32 / 100).clamp(1, f.max_hp);
+                        }
+                    }
+                    let ring = sh2_menu::ringcustom::ring_state(session, pc);
+                    if ring.item >= 0 {
+                        ext.ring_item = data.dat.record(crate::data::SEC_JRING, ring.item as usize, 0x20).map(|r| {
+                            let w = |o: usize| u32::from_le_bytes([r[o], r[o + 1], r[o + 2], r[o + 3]]);
+                            [w(4), w(8), w(0xc), w(0x10)]
+                        });
+                    }
+                }
+            }
+            None => {
+                if let Some(rec) = data.dat.record(crate::data::SEC_MONSTER, f.char_id.max(0) as usize, 0x38) {
+                    ext = crate::actions::monster_ext(rec);
+                }
+            }
+        }
+        b.ext[i] = ext;
+    }
+}
+
+/// Round 5 BP: what a finished battle leaves in the save besides the rewards -- the Score counters ([`write_score`], chapter = the save's
+/// scenario), the items stolen with *Pillage* (into the active bag) and the cash of *Cash Steal*.  Call once when the battle ends (`won` =
+/// victory).
+pub fn apply_battle_end<H: Host>(b: &Battle<H>, session: &mut sh2_menu::session::GameSession, won: bool) {
+    let chapter = session.save.btl.scenario() as usize;
+    write_score(&b.stats, &mut session.save.btl, chapter, won);
+    let bag = session.save.btl.bag() as usize * sh2_menu::save::BtlSave::BAG_STRIDE;
+    for &item in &b.stats.stolen_items {
+        if item >= 0 {
+            if let Some(slot) = session.save.btl.data.get_mut(sh2_menu::save::BtlSave::OFF_ITEMS + bag + item as usize) {
+                *slot = slot.saturating_add(1).min(99);
+            }
+        }
+    }
+    if b.stats.cash_delta != 0 {
+        session.add_cash(b.stats.cash_delta);
+    }
+    // albums photographed by Anastasia
+    if session.save.btl.is_retail() {
+        for &k in &b.stats.albums {
+            if let Some(v) = session.save.btl.retail.get_mut(0xfc3 + (k as usize >> 3)) {
+                *v |= 1 << (k & 7);
+            }
+        }
+    }
+    // the Seal items used in battle change the record for good (`EffectCodeFunc` writes `PCParam` directly)
+    for &(pc, kind, dlt) in &b.stats.permanent {
+        let Some(mut r) = session.save.btl.pc(pc as usize) else { continue };
+        let add8 = |v: u8| (v as i32 + dlt).clamp(0, 99) as u8;
+        match kind {
+            0xc => r.hp_max = (r.hp_max as i32 + dlt).clamp(1, 999) as u16,
+            0xd => r.mp_max = (r.mp_max as i32 + dlt).clamp(0, 999) as u16,
+            0xe => r.sp_max = (r.sp_max as i32 + dlt).clamp(1, 99) as u8,
+            0xf => r.str_ = add8(r.str_),
+            0x10 => r.vit = add8(r.vit),
+            0x11 => r.int = add8(r.int),
+            0x12 => r.pow = add8(r.pow),
+            0x13 => r.agl = add8(r.agl),
+            0x14 => r.luc = add8(r.luc),
+            0x15 => r.stat_2c = add8(r.stat_2c),
+            _ => continue,
+        }
+        session.save.btl.set_pc(pc as usize, &r);
+    }
+}
+
+/// Add the counters of a finished battle to the retail Score block of `chapter` (`BTL0+0x14bc + chapter * 0x400`, u32 words, `sh2_menu::score`):
+/// `[0]` battles, `[1]` ran away, `[2]` most hits (max), `[3]` total hits, `[5]` combos, `[6]` largest damage (max), `[7]` complete victories
+/// (`won && nobody fell`), per PC `0x11 + 9 * pc + j`: 1 berserk, 2 unconscious, 3 / 5 ring total / success, 4 / 6 perfect total / success.
+/// Nothing happens on a demo-shaped save (no retail block).
+pub fn write_score(st: &BattleStats, btl: &mut sh2_menu::save::BtlSave, chapter: usize, won: bool) {
+    let base = sh2_menu::score::OFF_BLOCKS + chapter.min(sh2_menu::score::CHAPTERS - 1) * sh2_menu::score::BLOCK_SIZE;
+    if btl.retail.len() < base + sh2_menu::score::BLOCK_SIZE {
+        return;
+    }
+    let mut word = |i: usize, f: &dyn Fn(u32) -> u32| {
+        let o = base + i * 4;
+        let v = u32::from_le_bytes([btl.retail[o], btl.retail[o + 1], btl.retail[o + 2], btl.retail[o + 3]]);
+        btl.retail[o..o + 4].copy_from_slice(&f(v).to_le_bytes());
+    };
+    word(0, &|v| v.saturating_add(1));
+    if st.ran_away {
+        word(1, &|v| v.saturating_add(1));
+    }
+    word(2, &|v| v.max(st.max_hits));
+    word(3, &|v| v.saturating_add(st.total_hits));
+    word(5, &|v| v.saturating_add(st.combos));
+    word(6, &|v| v.max(st.max_damage));
+    if won && st.unconscious.iter().all(|&n| n == 0) {
+        word(7, &|v| v.saturating_add(1));
+    }
+    for pc in 0..14 {
+        let r = 0x11 + 9 * pc;
+        for (j, n) in [(1, st.berserk[pc]), (2, st.unconscious[pc]), (3, st.ring_total[pc]), (5, st.ring_ok[pc]), (4, st.perfect_total[pc]), (6, st.perfect_ok[pc])] {
+            if n > 0 {
+                word(r + j, &|v| v.saturating_add(n));
+            }
+        }
     }
 }
 
@@ -1346,5 +2062,203 @@ mod tests {
         assert_eq!(scale_by_ring(-16, 1.2), -19);
         assert_eq!(MenuEvent::Snap { target: 2 }.apply(false).unwrap().0, Phase::Effect);
         assert_eq!(MenuEvent::Aroma { id: 3 }.apply(false).unwrap().2.p4c, EffectKind::Misc as i32);
+    }
+}
+
+/// Round 5 BP: the party-side engine inside `Battle` on the US tables (retail new game + Yuri); every test returns early without the disc.
+#[cfg(test)]
+mod bp_flow_tests {
+    use super::*;
+    use crate::data::BattleData;
+    use crate::pkb_compat::PkbDisc;
+    use sh2_menu::session::GameSession;
+
+    fn us() -> Option<(BattleData, Arc<ActionTables>, GameSession)> {
+        let d = PkbDisc::open(std::env::var_os("SH2_US_DISC_DIR")?).ok()?;
+        sh2_core::boot::set_active_region(sh2_core::boot::Region::Us);
+        let data = BattleData::load_us(&d).ok()?;
+        let tables = Arc::new(ActionTables::load(&data));
+        let mut s = GameSession::default();
+        s.new_game("AP_03_U");
+        crate::bridge::init_new_game_retail(&data, &mut s, 0);
+        let tbl = crate::bridge::level_table(&data);
+        crate::bridge::ensure_pc(&data, &mut s, 0, &tbl);
+        eprintln!("bp_flow_tests: US disc loaded");
+        Some((data, tables, s))
+    }
+
+    fn battle(data: &BattleData, tables: &Arc<ActionTables>, s: &GameSession, party: &[u8], set: usize) -> (Battle<crate::host::BtlHost>, crate::bridge::BattleSetup) {
+        let mut n = 7u32;
+        let mut rnd = || {
+            n = n.wrapping_mul(1664525).wrapping_add(1013904223);
+            n >> 8
+        };
+        let setup = crate::bridge::build_setup(data, s, party, set, &mut rnd).expect("setup");
+        let host = crate::host::BtlHost::new(5, tables.clone(), setup.fighters.len());
+        let mut b = Battle::new(host, setup.fighters.clone(), setup.ambush, setup.escape, 11);
+        party_setup(&mut b, data, tables.clone(), s, &setup.pc_ids);
+        (b, setup)
+    }
+
+    /// Run to the next command of party member `who`, answering every other party command with Defend.
+    fn run_to(b: &mut Battle<crate::host::BtlHost>, who: usize) -> bool {
+        for _ in 0..20000 {
+            if b.phase == Phase::Command && b.actor == Some(who) {
+                return true;
+            }
+            if b.phase == Phase::Command {
+                let a = b.actor.unwrap();
+                if !b.fighters[a].as_ref().unwrap().is_enemy {
+                    b.submit(MenuEvent::Guard { actor: a as i32 });
+                }
+            }
+            if !b.poll() {
+                return false;
+            }
+        }
+        false
+    }
+
+    #[test]
+    fn retail_party_stats_and_white_magic() {
+        let Some((data, tables, s)) = us() else { return };
+        let (mut b, setup) = battle(&data, &tables, &s, &[5, 0xb], 2);
+        // Karin's first-fight stats are the live cache values (pine_us_refinement 9.1)
+        let k = b.fighters[0].as_ref().unwrap();
+        assert_eq!((k.patk, k.satk, k.pdef, k.sdef), (17, 15, 16, 14));
+        assert_eq!(b.ext[0].pc, 5);
+        assert!(b.ext[2].pc < 0 && b.ext[2].mon.is_some());
+        // Nicolai casts Cure (his SKIL group 11 record 0, 6 MP) on a hurt Karin
+        b.fighters[0].as_mut().unwrap().hp = 5;
+        assert!(run_to(&mut b, 1));
+        let mp0 = b.fighters[1].as_ref().unwrap().mp;
+        let ev0 = b.events.len();
+        b.submit(MenuEvent::Special { a: 0, b: 0, enemy_like: false });
+        while b.phase != Phase::ActionDone {
+            b.poll();
+        }
+        let hp = b.fighters[0].as_ref().unwrap().hp;
+        assert!(hp > 5, "Cure healed Karin: {hp}");
+        assert_eq!(b.fighters[1].as_ref().unwrap().mp, mp0 - 6);
+        assert!(b.events[ev0..].iter().any(|e| matches!(e, BattleEvent::Damage { target: 0, amount, .. } if *amount < 0)));
+        assert!(b.events[ev0..].iter().any(|e| matches!(e, BattleEvent::Party(PartyEvent::MpCost { chr: 1, mp: 6 }))));
+        let _ = setup;
+    }
+
+    #[test]
+    fn defend_items_and_statuses() {
+        let Some((data, tables, s)) = us() else { return };
+        let (mut b, _setup) = battle(&data, &tables, &s, &[5, 0xb], 2);
+        // Karin: Defend / Resist -> the stance lasts until her next turn
+        assert!(run_to(&mut b, 0));
+        b.submit(MenuEvent::Defend { actor: 0, resist: true });
+        while b.phase != Phase::ActionDone {
+            b.poll();
+        }
+        assert_eq!(b.ext[0].guard, Guard::Resist);
+        assert!(run_to(&mut b, 0));
+        assert_eq!(b.ext[0].guard, Guard::None, "the stance ends at the next turn");
+        // Thera Leaf (ITEM 0) on Nicolai
+        b.fighters[1].as_mut().unwrap().hp = 3;
+        b.submit(MenuEvent::Item { item: 0, target: 1 });
+        while b.phase != Phase::ActionDone {
+            b.poll();
+        }
+        assert!(b.fighters[1].as_ref().unwrap().hp > 3);
+        assert!(b.host.used_items.contains(&0), "the host consumed the leaf");
+        // a paralysed character loses its turn
+        b.fighters[1].as_mut().unwrap().status.push(StatMod { turns: 2, chance: 100, percent: false, kind: rules::modkind::STATUS, value: 4 });
+        let ev0 = b.events.len();
+        assert!(run_to(&mut b, 0));
+        assert!(b.events[ev0..].iter().any(|e| matches!(e, BattleEvent::Party(PartyEvent::Paralyzed { chr: 1 }))) || b.fighters[1].as_ref().unwrap().hp <= 0);
+    }
+
+    #[test]
+    fn sanity_out_goes_berserk_and_is_counted() {
+        let Some((data, tables, s)) = us() else { return };
+        let (mut b, _setup) = battle(&data, &tables, &s, &[5, 0xb], 2);
+        b.fighters[0].as_mut().unwrap().sp = 1;
+        assert!(run_to(&mut b, 0) || b.outcome() != rules::BattleOutcome::Continue);
+        // Karin's turn started with SP 1 -> 0: berserk, the command is chosen for her
+        assert!(b.ext[0].berserk || b.fighters[0].as_ref().unwrap().sp > 0);
+        if b.ext[0].berserk {
+            assert_eq!(b.stats.berserk[5], 1);
+            assert!(b.events.iter().any(|e| matches!(e, BattleEvent::Party(PartyEvent::Berserk { chr: 0, first: true }))));
+        }
+    }
+
+    #[test]
+    fn yuri_fusion_uses_the_growth_rows() {
+        let Some((data, tables, s)) = us() else { return };
+        let (mut b, _setup) = battle(&data, &tables, &s, &[0, 5], 2);
+        assert_eq!(b.ext[0].pc, 0);
+        assert_eq!(b.ext[0].fusions.len(), 0x15);
+        let before = b.fighters[0].as_ref().unwrap().clone();
+        let form = b.ext[0].fusions[0];
+        assert_eq!(form.growth, [6, 5, 4, 0, 3, 3], "FUSM 0 level 1 growth row");
+        b.set_fused(0, 0);
+        let f = b.fighters[0].as_ref().unwrap();
+        assert_eq!(f.patk - before.patk, 6, "STR + 6 -> PATK + 6");
+        assert_eq!(f.pdef - before.pdef, 5);
+        assert_eq!(f.agl - before.agl, 4);
+        b.set_fused(0, -1);
+        let f = b.fighters[0].as_ref().unwrap();
+        assert_eq!((f.patk, f.pdef, f.agl), (before.patk, before.pdef, before.agl));
+    }
+
+    #[test]
+    fn lucia_aroma_heals_the_party_over_turns() {
+        let Some((data, tables, mut s)) = us() else { return };
+        let tbl = crate::bridge::level_table(&data);
+        crate::bridge::ensure_pc(&data, &mut s, 3, &tbl);
+        let (mut b, _setup) = battle(&data, &tables, &s, &[3, 5], 2);
+        assert!(tables.aroma_rows.len() >= 8, "{}", tables.aroma_rows.len());
+        let (row1, turns, chance) = tables.aroma_rows[1].clone();
+        assert_eq!((row1.words[0], turns, chance), (0x1000_0032, 1, 100), "row 1: HP +50 for one turn");
+        for k in [0, 1] {
+            b.fighters[k].as_mut().unwrap().hp = 10;
+        }
+        assert!(run_to(&mut b, 0));
+        b.submit(MenuEvent::Aroma { id: 1 });
+        while b.phase != Phase::ActionDone {
+            b.poll();
+        }
+        assert!(b.fighters[0].as_ref().unwrap().hp > 10 && b.fighters[1].as_ref().unwrap().hp > 10, "both healed at once");
+        assert!(b.aroma.is_some(), "one more turn in the air");
+        let karin_hp = b.fighters[1].as_ref().unwrap().hp;
+        assert!(run_to(&mut b, 1) || b.fighters[1].as_ref().unwrap().hp <= 0);
+        let _ = karin_hp;
+    }
+
+    #[test]
+    fn score_block_gets_the_counters() {
+        let Some((_data, _tables, mut s)) = us() else { return };
+        if !s.save.btl.is_retail() {
+            return;
+        }
+        let st = BattleStats { max_hits: 3, total_hits: 7, max_damage: 55, berserk: { let mut a = [0; 14]; a[5] = 1; a }, ..Default::default() };
+        write_score(&st, &mut s.save.btl, 0, true);
+        let t = sh2_menu::score::ScoreTotals::from_save(&s.save.btl, &s.save.menu);
+        assert_eq!((t.battles, t.max_hits, t.total_hits, t.max_damage, t.berserk, t.victories), (1, 3, 7, 55, 1, 1));
+    }
+
+    #[test]
+    fn snap_shot_albums_reach_the_save() {
+        let Some((data, tables, mut s)) = us() else { return };
+        if !s.save.btl.is_retail() {
+            return;
+        }
+        // the album records are Anastasia's SKIL group 4 (Aqua Raise first, Euthanasia tenth)
+        let names: Vec<String> = (0..10).map(|k| tables.groups[4].get(k).map(|r| tables.skill_name(r.name_idx.max(0) as usize).to_string()).unwrap_or_default()).collect();
+        eprintln!("albums: {names:?}");
+        assert!(names.iter().all(|n| !n.is_empty()));
+        let (mut b, _) = battle(&data, &tables, &s, &[5, 0xb], 2);
+        b.stats.albums = vec![2, 8];
+        apply_battle_end(&b, &mut s, true);
+        assert_eq!(s.save.btl.retail[0xfc3] & 0x04, 0x04);
+        assert_eq!(s.save.btl.retail[0xfc4] & 0x01, 0x01);
+        // owned albums are read back at the next battle
+        let (b2, _) = battle(&data, &tables, &s, &[5, 0xb], 2);
+        assert!(b2.albums_owned.contains(&2) && b2.albums_owned.contains(&8));
     }
 }

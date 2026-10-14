@@ -169,13 +169,15 @@ impl MenuSource<'_> {
     pub fn fusion_label(&self) -> usize {
         if self.retail && self.pc == 7 { raw_label::DEMON_MORPH } else { raw_label::FUSION }
     }
-    /// Fusion level of `FUSM` row `id` (`BTL0+0xf24 + id`).
-    pub fn fusion_level(&self, id: usize) -> u8 {
-        self.raw8(0xf24 + id)
+    /// Level of soul `soul` (`BTL0+0xf24 + soul`; a fusion's soul is `FUSM+0x1d`, shared by the three forms of a soul -- retail `GetStr` /
+    /// `GetAgl` read `BTL0 + FUSM[0x1d] + 0xf24`, round 5 BP).
+    pub fn fusion_level(&self, soul: usize) -> u8 {
+        self.raw8(0xf24 + soul)
     }
     /// `SetSkill1Menu` (fused path): the fusion's `FUSM` skill slots whose level requirement (`+0x16+k`) is met -> `SKIL` record indices.
-    pub fn fused_skills(&self, id: usize, slots: &([i16; 7], [u8; 7])) -> Vec<usize> {
-        let lv = self.fusion_level(id);
+    /// `soul` = the fusion's `FUSM+0x1d` ([`crate::actions::ActionTables::fusion_soul`]).
+    pub fn fused_skills(&self, soul: usize, slots: &([i16; 7], [u8; 7])) -> Vec<usize> {
+        let lv = self.fusion_level(soul);
         (0..7).filter(|&k| slots.0[k] >= 0 && slots.1[k] <= lv).map(|k| slots.0[k] as usize).collect()
     }
     /// Lucia: `Tarot Card` (label 15) needs a tarot bit in `BTL0+0xf3f..0xf41` (kind-9 flag bits).
