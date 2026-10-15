@@ -143,6 +143,8 @@ pub struct RingRun {
     pub mes: Vec<(Option<jring::JrArea>, i16)>,
     /// round 6 BT: the result of an event ring (callback 0x80, `JrResult::event_value` = the tag of the stopped area), see [`Self::start_event`]
     pub event_result: Option<JrResult>,
+    /// round 6 BT: `HitArea` / `HitBar` events of the ring, drained like [`Self::mes`] into `HitFx::ring_area_flash`
+    pub flashes: Vec<JrEvent>,
 }
 
 impl RingRun {
@@ -202,7 +204,7 @@ impl RingRun {
         r.ring_active(&mut rng);
         r.period = 1.6;
         r.events.clear();
-        RingRun { ring: r, rng, result: None, time: 0.0, mes: vec![], event_result: None }
+        RingRun { ring: r, rng, result: None, time: 0.0, mes: vec![], event_result: None, flashes: vec![] }
     }
 
     fn start_areas_colored(areas: &[(i16, i16, i16)], period: f32, seed: u64, custom: Option<[u8; 20]>, special: bool) -> Self {
@@ -228,7 +230,7 @@ impl RingRun {
         r.ring_active(&mut rng);
         r.period = period;
         r.events.clear();
-        RingRun { ring: r, rng, result: None, time: 0.0, mes: vec![], event_result: None }
+        RingRun { ring: r, rng, result: None, time: 0.0, mes: vec![], event_result: None, flashes: vec![] }
     }
 
     /// Round 6 BT (field ring, RG): an *event* ring -- one step area per `(start, width, tag)` (`AddStepArea(start, width, col, tag)`), one lap,
@@ -249,7 +251,7 @@ impl RingRun {
         r.ring_active(&mut rng);
         r.period = period;
         r.events.clear();
-        RingRun { ring: r, rng, result: None, time: 0.0, mes: vec![], event_result: None }
+        RingRun { ring: r, rng, result: None, time: 0.0, mes: vec![], event_result: None, flashes: vec![] }
     }
 
     /// One 60 Hz tick with the face buttons pressed this tick; returns true when the ring has finished.
@@ -261,6 +263,7 @@ impl RingRun {
                 JrEvent::Callback { code: 0x40, result: Some(r) } => self.result = Some(r),
                 JrEvent::Callback { code: 0x80, result: Some(r) } => self.event_result = Some(r),
                 JrEvent::HitMes { area, variant } => self.mes.push((area, variant)),
+                e @ (JrEvent::HitArea { .. } | JrEvent::HitBar { .. }) => self.flashes.push(e),
                 _ => {}
             }
         }
@@ -439,6 +442,9 @@ pub struct BattleRuntime {
     /// round 6 BT: the last boss's joined form `(core, parts)` while the parts are the core's weapons (`LastBossSpecial`), drawn by
     /// `models::drive_last_boss`
     pub boss_joined: Option<(usize, Vec<usize>)>,
+    /// round 6 BT: *Gathering*'s placement, computed when its program (080) starts so that `btlGetWarpPos` (FX `FxHost::warp`) and the
+    /// battle's `PartyEvent::Gather` agree: `(fighter, new home, Bevy)` in target order
+    pub gather_plan: Vec<(usize, Vec3)>,
     /// *The Tower* was drawn: scale the party's cash by this variant once the session is at hand
     tarot_cash: Option<u8>,
     /// battle cursor memory per fighter (`BtlChr+0x598..0x59e`, [`BtlMenu::path`]); -1 = nothing remembered
@@ -597,6 +603,7 @@ fn enter_battle(
     host.load_friendship(&setup.pc_ids, &|id| session.save.btl.pc(id as usize).map(|r| r.raw));
     let ambush = setup.ambush;
     let mut battle = Battle::new(host, setup.fighters.clone(), setup.ambush, setup.escape, seed);
+    battle.battle_type = setup.battle_type;
     // Lucia's owned Tarot cards (`BtlSaveDat+0xf3f`) and the `'E'` passive
     battle.tarot = crate::tarot::TarotState::from_save(if session.save.btl.is_retail() { &session.save.btl.retail } else { &session.save.btl.data });
     // development aids: `SH2_TAROT_CARD=<id>` / `SH2_TAROT_VARIANT=<0..3>` force the draw (Lucia's saved cards are not checked)
@@ -730,6 +737,7 @@ fn enter_battle(
         tarot_ui: None,
         home_moves: vec![],
         boss_joined: None,
+        gather_plan: vec![],
         tarot_cash: None,
         cursor_mem: vec![[-1; 4]; 12],
     });
@@ -998,7 +1006,15 @@ fn begin_action_fx(rt: &mut BattleRuntime, cx: &Cx) {
                 let p = |i: usize| rt.positions.get(i).copied().unwrap_or(Vec3::ZERO);
                 let ctx = FxContext { gen: vec![p(actor)], targets: vec![p(info.target)], height: 17.0 };
                 match FxProgram::new(eid, bytes, ctx) {
-                    Ok(prog) => {
+                    Ok(mut prog) => {
+                        // round 6 BT: program 080 (*Gathering*) asks the battle where each target goes (`btlGetWarpPos` -> `GetWarpPos`)
+                        rt.gather_plan.clear();
+                        if eid == 0x50 {
+                            let plan = gather_plan(rt, actor, info.target);
+                            let ps2: Vec<Vec3> = plan.iter().map(|p| crate::effects_bridge::bevy_to_ps2(p.1)).collect();
+                            prog.host.warp = Some(Box::new(move |side, i, _first| if side == 0 { None } else { ps2.get(i.max(0) as usize).copied() }));
+                            rt.gather_plan = plan;
+                        }
                         log::info!("battle: effect {:03} for '{}' ({} bytes)", info.effect_id, info.name, prog.assets.file.len());
                         rt.fx = Some(FxPlay { prog, acc: 0.0, hit: false, info: info.clone(), banks: Default::default() });
                         rt.fx_started += 1;
@@ -1052,6 +1068,37 @@ fn dev_fx_list(rt: &mut BattleRuntime, cx: &Cx) {
         }
         Err(e) => log::warn!("dev fx {id}: {e}"),
     }
+}
+
+/// *Gathering* as `GetWarpPos` places it ([`crate::warp::gather`]) on the battle's current places (box centres ~ feet), the target's side.
+fn gather_plan(rt: &BattleRuntime, actor: usize, target: usize) -> Vec<(usize, Vec3)> {
+    let f = &rt.battle.fighters;
+    let n = f.len().min(rt.positions.len());
+    let mut units: Vec<crate::warp::WarpUnit> = (0..n)
+        .map(|k| {
+            let x = f[k].as_ref();
+            let p = rt.positions[k];
+            crate::warp::WarpUnit {
+                pos: [p.x, -p.z],
+                radius: rt.dims.get(k).map(|d| d.0).unwrap_or(3.0),
+                enemy: x.map(|x| x.is_enemy).unwrap_or(false),
+                present: x.map(|x| x.hp > 0 && !x.removed).unwrap_or(false),
+                chr: crate::flow::Host::chr_model(&rt.battle.host, k),
+            }
+        })
+        .collect();
+    let actor_enemy = units.get(actor).map(|u| u.enemy).unwrap_or(false);
+    let side = units.get(target).map(|u| u.enemy).unwrap_or(!actor_enemy);
+    let Some(first) = (0..n).find(|&k| units[k].present && units[k].enemy == side) else { return vec![] };
+    let mut s = (rt.seed as u32) ^ (rt.fx_started as u32).wrapping_mul(0x9e37_79b9) | 1;
+    let mut rnd = move || {
+        s = s.wrapping_mul(1103515245).wrapping_add(12345);
+        (s >> 16) & 0x7fff
+    };
+    crate::warp::gather(&mut units, first, actor_enemy, rt.battle.arena, &mut rnd)
+        .into_iter()
+        .map(|(k, p)| (k, Vec3::new(p[0], rt.positions[k].y, -p[1])))
+        .collect()
 }
 
 /// The environment of the running effect: who casts, who is hit (skeletons from `snapshot_actors`), the scene light colours.
@@ -1271,6 +1318,8 @@ fn consume_events(rt: &mut BattleRuntime, text: &BtlText) -> Option<(Option<rule
                 // round 6 BT: `GetWarpPos` (*Gathering*) / `LastBossSpecial` write the new box centres (`BtlChr+0x160`) = the units' homes; the
                 // models are put there at once (`models::apply_home_moves`)
                 let moves: Vec<(usize, [f32; 3])> = match &p {
+                    // the plan the effect program was answered with wins over the flow's own roll
+                    crate::flow::PartyEvent::Gather { .. } if !rt.gather_plan.is_empty() => std::mem::take(&mut rt.gather_plan).into_iter().map(|(k, v)| (k, [v.x, v.y, v.z])).collect(),
                     crate::flow::PartyEvent::Gather { units, to, .. } => units.iter().copied().zip(to.iter().copied()).collect(),
                     crate::flow::PartyEvent::BossForm { joined: false, parts, to, .. } => parts.iter().copied().zip(to.iter().copied()).collect(),
                     _ => vec![],
@@ -1451,6 +1500,12 @@ pub fn battle_tick(
     }
     // Snap Shot: retail `StatusRecovery` case 7 sets the album bit `BTL0+0xfc3` at the photo (live r5_lv check 6: 0x1010f3 = 1 right after the
     // shot, `Album` on Anastasia's next turn of the same battle), so the command menu built from the save sees it at once
+    // the berserk item branch sees the bag as it is now (items used this battle are taken from the save as they are used)
+    if rt.ticks % 30 == 1 {
+        let n = rt.battle.bag.len();
+        let lost = rt.battle.stats.bag_lost.clone();
+        rt.battle.bag = (0..n).map(|i| session.save.btl.item_count(i).saturating_sub(lost.iter().filter(|&&x| x == i as i32).count() as u8)).collect();
+    }
     if session.save.btl.is_retail() {
         for &k in &rt.battle.stats.albums {
             if let Some(v) = session.save.btl.retail.get_mut(0xfc3 + (k as usize >> 3)) {
@@ -2322,6 +2377,9 @@ fn draw_battle_ui(rt: &mut BattleRuntime, canvas: &mut UiCanvas, cx: &Cx, hud: O
                 rt.hits.trail[i] = run.ring.cur_angle;
                 for (area, variant) in run.mes.drain(..) {
                     rt.hits.ring_mes(&run.ring, area.as_ref(), variant);
+                }
+                for e in run.flashes.drain(..) {
+                    rt.hits.ring_area_flash(&run.ring, &e);
                 }
                 crate::hud_hits::draw_ring(&mut g, a, &run.ring, &rt.hits.trail, rt.hits.trail_i);
             }

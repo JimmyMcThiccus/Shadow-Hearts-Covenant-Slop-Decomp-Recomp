@@ -68,7 +68,7 @@ pub fn kind_applied(r: &sh2_battle::actions::EffRec) -> bool {
     // a party record aimed at the enemies (steal) is tried on a monster copy as well
     let mut foe = f.clone();
     foe.is_enemy = true;
-    let env_foe = sh2_battle::actions::EcEnv { pc: -1, ..env };
+    let env_foe = sh2_battle::actions::EcEnv { pc: -1, ..env.clone() };
     let foe_ok = {
         let before = format!("{foe:?}");
         let a = sh2_battle::actions::effect_code(&[*r], &mut foe, &env_foe, &mut Z);

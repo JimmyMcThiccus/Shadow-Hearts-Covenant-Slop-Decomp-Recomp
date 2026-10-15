@@ -634,6 +634,8 @@ pub struct Applied {
     pub drained: i32,
     /// kind 0x4c: the `ITEM` id stolen from a monster
     pub stolen_item: Option<i32>,
+    /// kind 0x4c by a monster on a party member: the `ITEM` id taken out of the party's bag (round 6 BT)
+    pub bag_taken: Option<i32>,
     /// kind 0x4d: cash taken from a monster (positive) or from the party (negative)
     pub cash: i32,
     /// permanent changes of a party member's base values (`0xc..0x15` words with the permanent flag, Seal items): `(kind, delta)`
@@ -641,7 +643,7 @@ pub struct Applied {
 }
 
 /// Per-target inputs of `EffectCodeFunc` that the [`Fighter`] does not carry.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct EcEnv {
     /// `param_1 * 100`: the action's power percentage (100 = the record value as is)
     pub power: i32,
@@ -657,12 +659,32 @@ pub struct EcEnv {
     pub mon_cash: i32,
     /// the party's cash (cash steal by a monster)
     pub party_cash: i32,
+    /// round 6 BT -- steal by a monster: the party's bag as `(ITEM id, weight)` (SLUS 0x383660: every item held whose `(rec+4 >> 3) & 3` is
+    /// not 0 / 3, weight = count, x10 when `(rec+4 >> 5) & 3 == 1`)
+    pub party_bag: Vec<(i32, u32)>,
 }
 
 impl Default for EcEnv {
     fn default() -> Self {
-        EcEnv { power: 100, no_random: false, immune: 0, pc: 0, drops: [-1, -1], mon_cash: 0, party_cash: 0 }
+        EcEnv { power: 100, no_random: false, immune: 0, pc: 0, drops: [-1, -1], mon_cash: 0, party_cash: 0, party_bag: vec![] }
     }
+}
+
+/// The weights a monster's steal draws from (`EcEnv::party_bag`): `bag[id]` = count of `ITEM` id in the active bag.
+pub fn party_bag_weights(tables: &ActionTables, bag: &[u8]) -> Vec<(i32, u32)> {
+    tables
+        .items
+        .iter()
+        .enumerate()
+        .filter_map(|(id, rec)| {
+            let n = bag.get(id).copied().unwrap_or(0) as u32;
+            let class = (rec.flags >> 3) & 3;
+            if n == 0 || class == 0 || class == 3 {
+                return None;
+            }
+            Some((id as i32, if (rec.flags >> 5) & 3 == 1 { n * 10 } else { n }))
+        })
+        .collect()
 }
 
 /// Monster immunity mask of `EffectCodeFunc` (retail SLUS 0x36b410, the `uStack_680` set-up for `bFlagsB & 1` targets) from the bytes
@@ -1183,7 +1205,22 @@ pub fn effect_code(recs: &[EffRec], target: &mut Fighter, env: &EcEnv, rng: &mut
                     continue;
                 }
                 if !target.is_enemy {
-                    a.failed = true;
+                    // a monster steals from the party's bag: a weighted pick over the held items (SLUS 0x383660..0x3838c0)
+                    let total: u32 = env.party_bag.iter().map(|x| x.1).sum();
+                    if total == 0 {
+                        a.failed = true;
+                        continue;
+                    }
+                    let mut pick = (rng.rand().max(0) as u32) % total;
+                    let mut got = None;
+                    for &(id, w) in &env.party_bag {
+                        if pick < w {
+                            got = Some(id);
+                            break;
+                        }
+                        pick -= w;
+                    }
+                    a.bag_taken = got;
                     continue;
                 }
                 let id = match (env.drops[0] >= 0, env.drops[1] >= 0) {
@@ -1866,6 +1903,10 @@ pub fn attack_ring(data: &crate::data::BattleData, session: &sh2_menu::session::
 
 /// Inputs of [`resolve_action`] besides the fighters.
 pub struct ResolveCtx<'a> {
+    /// round 6 BT: item counts of the party's active bag (monster steals) -- empty = nothing to steal
+    pub bag: &'a [u8],
+    /// round 6 BT: `BTL0+0xc1c..`: one bit per unique item 400..499 the party owns (a steal skips such drops)
+    pub unique_owned: &'a [u8],
     pub tables: &'a ActionTables,
     /// per fighter: floor positions and radii for the area shapes ([`target_list`])
     pub pos: &'a [[f32; 3]],
@@ -1944,6 +1985,8 @@ pub struct Resolved {
     pub drained: i32,
     pub stolen: Vec<i32>,
     pub cash: i32,
+    /// round 6 BT: items a monster took out of the party's bag
+    pub bag_taken: Vec<i32>,
 }
 
 /// The record of command `cmd` (`EffectFunc`): kind 0 item, 1 crest magic (party) / `ITEM` "magic" (monsters, AIS token 0x26), 2 PC skill (the
@@ -1998,7 +2041,17 @@ pub fn resolve_action(ctx: &ResolveCtx, actor: usize, cmd: &crate::flow::Command
     // targets (`GetTargetList`)
     let berserk = !me.is_enemy && !matches!(my_ext.pc, 8..=10) && me.max_sp > 0 && me.sp < 1;
     let radius: Vec<f32> = (0..fighters.len()).map(|i| ctx.radius.get(i).copied().or(ext.get(i).map(|e| e.radius)).unwrap_or(3.0)).collect();
-    let list = target_list(fighters, ctx.pos, &radius, actor, cmd.p48, rec.side_class(), rec.shape(), rec.size(), rec.revive, berserk);
+    let mut list = target_list(fighters, ctx.pos, &radius, actor, cmd.p48, rec.side_class(), rec.shape(), rec.size(), rec.revive, berserk);
+    // round 6 BT -- 0xef *Deadly Throw* (`GetDeadlyThrowTarget`, JP 0x640540; US `EffectFunc` calls it right after `GetTargetList`): one more
+    // target, a random living opponent of the actor that is not on the list yet
+    if rec.effect_id.rem_euclid(1000) == 0xef {
+        let extra: Vec<usize> = (0..fighters.len())
+            .filter(|&k| fighters[k].as_ref().is_some_and(|f| !f.removed && f.hp > 0 && f.is_enemy != me.is_enemy) && !list.contains(&k))
+            .collect();
+        if !extra.is_empty() {
+            list.push(extra[rng.rand() as usize % extra.len()]);
+        }
+    }
     // the actor's INT / SATK for the kind 9 / 10 / 11 bonuses: `GetInt` for party members, `GetSAtk` for monsters
     let int_stat = my_ext.raw.map(|r| crate::rules::modded(r.int, &me.status, &me.passives, &[crate::rules::modkind::INT])).unwrap_or(me.satk / 2);
     let special = rec.effect_id.rem_euclid(1000);
@@ -2113,9 +2166,15 @@ pub fn resolve_action(ctx: &ResolveCtx, actor: usize, cmd: &crate::flow::Command
                 no_random: false,
                 immune: tex.immune,
                 pc: tex.pc,
-                drops: [0, 1].map(|s| if tex.items_stolen & (1 << s) != 0 { -1 } else { tex.drops[s] }),
+                // SLUS 0x3838c8: a drop slot already stolen, or a unique item 400..499 the party owns (`BTL0+0xc1c` bit `id - 400`), is skipped
+                drops: [0, 1].map(|s| {
+                    let id = tex.drops[s];
+                    let owned = (400..500).contains(&id) && ctx.unique_owned.get(((id - 400) >> 3) as usize).is_some_and(|b| b & (1 << ((id - 400) & 7)) != 0);
+                    if tex.items_stolen & (1 << s) != 0 || owned { -1 } else { id }
+                }),
                 mon_cash: if tex.cash_stolen { 0 } else { tex.mon_cash },
                 party_cash: ctx.party_cash,
+                party_bag: if me.is_enemy && !f.is_enemy { party_bag_weights(ctx.tables, ctx.bag) } else { vec![] },
             };
             // the damage words are `EffectDamageSet`'s; a fallen target only takes the revive records
             let rs: Vec<EffRec> = recs.iter().copied().filter(|r| !matches!(r.kind, 1 | 2)).collect();
@@ -2140,6 +2199,9 @@ pub fn resolve_action(ctx: &ResolveCtx, actor: usize, cmd: &crate::flow::Command
                 out.stolen.push(id);
             }
             out.cash += hit.applied.cash;
+            if let Some(id) = hit.applied.bag_taken {
+                out.bag_taken.push(id);
+            }
         }
         out.hits.push(hit);
     }
@@ -2434,6 +2496,28 @@ mod bp_tests {
         }
     }
 
+    /// Round 6 BT: a monster's steal takes one item from the party's bag by weight (SLUS 0x383660); an empty bag fails.
+    #[test]
+    fn monsters_steal_from_the_party_bag() {
+        let Some((_d, t)) = us() else { return };
+        let steal = EffRec { kind: mk::STEAL, percent: false, dur: 0, chance: 100, turns: 0, value: 0, element: 7, perm: false, all: 0, src: 1 };
+        let mut bag = vec![0u8; t.items.len()];
+        let w0 = party_bag_weights(&t, &bag);
+        assert!(w0.is_empty());
+        let mut f = unit(false, 100);
+        let a = effect_code(&[steal], &mut f, &EcEnv { party_bag: w0, ..Default::default() }, &mut Zero);
+        assert!(a.failed && a.bag_taken.is_none());
+        // two usable kinds in the bag: the pick is one of them
+        let usable: Vec<usize> = (0..t.items.len()).filter(|&i| { let c = (t.items[i].flags >> 3) & 3; c != 0 && c != 3 && !t.items[i].empty }).take(2).collect();
+        for &i in &usable {
+            bag[i] = 3;
+        }
+        let w = party_bag_weights(&t, &bag);
+        assert_eq!(w.len(), usable.len());
+        let a = effect_code(&[steal], &mut f, &EcEnv { party_bag: w, ..Default::default() }, &mut Zero);
+        assert!(a.bag_taken.is_some_and(|id| usable.contains(&(id as usize))), "{a:?}");
+    }
+
     /// Always-succeeding rolls (`rand() % 100 == 0`).
     struct Zero;
     impl Rng for Zero {
@@ -2563,7 +2647,7 @@ mod bp_tests {
         let learned = |_: usize, _: usize| true;
         let fr = |_: usize, _: usize| 0;
         let pos = [[0.0, 0.0, 0.0]; 12];
-        let ctx = ResolveCtx { tables: &t, pos: &pos, radius: &[], gm: GlobalMod::default(), ring: 1.0, combo: &[], friendship: &fr, party_cash: 0, fused: None, learned: &learned, turn_no: 0, hit_powers: &[] };
+        let ctx = ResolveCtx { bag: &[], unique_owned: &[], tables: &t, pos: &pos, radius: &[], gm: GlobalMod::default(), ring: 1.0, combo: &[], friendship: &fr, party_cash: 0, fused: None, learned: &learned, turn_no: 0, hit_powers: &[] };
         let mut rng = Lcg(3);
         // Arc Cure (MAGI 1): area 5 = every living ally, 16 MP, heals 50 + INT * 2 (INT = SATK / 2 without raw stats)
         let cmd = Command { p44: 1, p48: 0, p4c: 1, ..Default::default() };
@@ -2603,7 +2687,7 @@ mod bp_tests {
         ext[0].raw = Some(RawStats { int: 9, max_hp: 999, max_mp: 60, max_sp: 10, ..Default::default() });
         let learned = |_: usize, _: usize| true;
         let fr = |_: usize, _: usize| 0;
-        let ctx = ResolveCtx { tables: &t, pos: &[], radius: &[], gm: GlobalMod::default(), ring: 1.0, combo: &[], friendship: &fr, party_cash: 0, fused: None, learned: &learned, turn_no: 0, hit_powers: &[] };
+        let ctx = ResolveCtx { bag: &[], unique_owned: &[], tables: &t, pos: &[], radius: &[], gm: GlobalMod::default(), ring: 1.0, combo: &[], friendship: &fr, party_cash: 0, fused: None, learned: &learned, turn_no: 0, hit_powers: &[] };
         let r = resolve_action(&ctx, 0, &Command { p44: 0, p48: 0, p4c: 2, ..Default::default() }, &mut fighters, &mut ext, &mut Lcg(1));
         assert_eq!(r.hits[0].applied.hp, 68);
         assert_eq!(r.mp_cost, 6);
@@ -2754,7 +2838,7 @@ mod bp_coverage {
                 _ if rec.target_class() == crate::ai::TargetClass::Opponent || rec.target_class() == crate::ai::TargetClass::OpponentsAlive => 2,
                 _ => 2,
             };
-            let ctx = ResolveCtx { tables: &t, pos: &pos, radius: &[], gm: GlobalMod::default(), ring: 1.0, combo: &[0, 1], friendship: &fr, party_cash: 1000, fused: if fused >= 0 { Some(fused) } else { None }, learned: &learned, turn_no: 0, hit_powers: &[] };
+            let ctx = ResolveCtx { bag: &[], unique_owned: &[], tables: &t, pos: &pos, radius: &[], gm: GlobalMod::default(), ring: 1.0, combo: &[0, 1], friendship: &fr, party_cash: 1000, fused: if fused >= 0 { Some(fused) } else { None }, learned: &learned, turn_no: 0, hit_powers: &[] };
             let mut rng = crate::rules::Lcg(9);
             let r = resolve_action(&ctx, 0, &cmd, &mut fighters, &mut ext, &mut rng);
             let did = r.hits.iter().any(|h| h.damage != 0 || h.applied != Applied::default());
@@ -2777,7 +2861,7 @@ mod bp_coverage {
         let learned = |_: usize, _: usize| true;
         let fr = |_: usize, _: usize| 5000;
         let pos = [[0.0f32; 3]; 12];
-        let ctx = ResolveCtx { tables: &t, pos: &pos, radius: &[], gm: GlobalMod::default(), ring: 1.0, combo: &[], friendship: &fr, party_cash: 0, fused: None, learned: &learned, turn_no: 0, hit_powers: &[] };
+        let ctx = ResolveCtx { bag: &[], unique_owned: &[], tables: &t, pos: &pos, radius: &[], gm: GlobalMod::default(), ring: 1.0, combo: &[], friendship: &fr, party_cash: 0, fused: None, learned: &learned, turn_no: 0, hit_powers: &[] };
         let setup = || {
             let mut fighters: Vec<Option<Fighter>> = vec![Some(unit(false)), Some(unit(false)), Some(unit(true))];
             for f in fighters.iter_mut().flatten() {
@@ -2817,7 +2901,7 @@ mod bp_coverage {
         let fr = |_: usize, _: usize| 5000;
         let pos = [[0.0f32; 3]; 12];
         let run = |powers: &[i32]| {
-            let ctx = ResolveCtx { tables: &t, pos: &pos, radius: &[], gm: GlobalMod::default(), ring: 1.0, combo: &[], friendship: &fr, party_cash: 0, fused: None, learned: &learned, turn_no: 0, hit_powers: powers };
+            let ctx = ResolveCtx { bag: &[], unique_owned: &[], tables: &t, pos: &pos, radius: &[], gm: GlobalMod::default(), ring: 1.0, combo: &[], friendship: &fr, party_cash: 0, fused: None, learned: &learned, turn_no: 0, hit_powers: powers };
             let mut fighters: Vec<Option<Fighter>> = vec![Some(unit(false)), Some(unit(true))];
             fighters[1].as_mut().unwrap().hp = 300;
             fighters[1].as_mut().unwrap().status.clear();

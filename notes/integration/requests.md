@@ -714,3 +714,29 @@ Requests for **GP** (your files; measured in AP_02_U / battle, dev profile, see 
    (was 3; `camera_schedule` 3.5 -> 10 ms, `RenderContextState::apply` 68 -> 335 per frame) and the play build drops from 17.6 to 23.7 ms
    frames there on a quiet machine.  One atlas target (all casters in one pass, viewport per caster) or rendering only casters that moved
    would keep the GPU shadows from costing ~1 ms of render-thread CPU per actor.
+
+## Round 6 BT (battle, party + enemy, 2026-10-15)
+* **FX2 (done on the battle side, no edit in your files)**: `FxHost::warp` is wired for program 080 (*Gathering*) in `plugin.rs::begin_action_fx`:
+  the plan comes from `sh2_battle::warp::gather` (exact `GetWarpPos`, JP BtlFree 0x5e38a0 / US 0x631e30..0x632760) computed at program start, side 1
+  index `i` = the `i`-th gathered unit (box centre, PS2).  The battle applies the same plan when the flow reports `PartyEvent::Gather`.  The FX env
+  still has a single target (`FxEnv::targets`), so the program's per-target loop sees one unit -- a multi-target env is FX2's call.
+* **RG**: `sh2_battle::ring` is a small facade over the battle ring for other screens: `RingRun` (+ `start_event(areas (start, width, tag), period,
+  seed)` / `event_result` = callback 0x80 with `event_value`), `RingDriver` (ring + pointer trail + `Good!!` sprites, `tick(face_press)` / `draw(g,
+  art)`), `RingArtPlugin` (loads `HitArt` in any scene), re-exports of `draw_ring`, `HitArt`, `load_hit_art`, the jring types.  The paths you use today
+  (`hud_hits::{HitArt, load_hit_art, draw_ring, HitFx::{ring_mes, tick_ring_mes, draw_ring_mes, ring_mes_clear}}`) stay as they are.  Your request 1
+  (HitMes along the pointer direction, `HitArea` / `HitBar` flashes) is noted for BT.
+* **Everyone**: `flow::PartyEvent::Gather` now carries `to` (new places); new `PartyEvent::BossForm { joined, core, parts, to }`; new `Host` hooks
+  `chr_model(k)` / `take_boss_form()` (defaults 0 / None).  `models::WeaponSlot::Center` (`EX03`).  `ui::ALL_TARGET` (= 100) is the "All Enemies"
+  row of a shape-5 target page.
+* **CS2 (audio)**: the battle's hit / swing / voice sounds are `HNMSnd::PlaySE` global ids `0x6000_1001..0x6000_100a`, `0x6000_3005..3007`
+  (PC hits, chosen by `BtlChr+0xb4` bit 0 and `CBattle+0x45d6`), `0x7000_0000..0005`, `0x9000_0000..0002` (US BATTLE.BIN 0x4c6a40..0x4c9b40,
+  JP CBattle.c ~15580 / ~29770 / ~3390).  No SSE file on disc 1 carries wave bank 0x6000 / 0x7000 (`sh2_battle/examples/bt_se_banks`: M / W banks
+  0x90xx, C banks 0x91xx, SYSBTL 0x0200), so the driver must map these class ids (actor-relative bank?) before `FindSE`.  If you can say how,
+  BT will post them from the hit code (`models::drive_battle_models`).
+* **QA2 (one token in your file, compile fix)**: `sh2_app/examples/coverage/battle.rs` `EcEnv { pc: -1, ..env.clone() }` -- `EcEnv` is no longer
+  `Copy` (it carries the party bag for monster steals).  Also: `run_all.sh run battle party` regenerates `coverage.md` from every raw tsv; I put the
+  committed file back (battle 410 / 413, party 319 / 321 -- the stubs are FX's).
+* **RG**: your request 1 is done: grades fly out along the pointer's projected rim direction (misses stay left), `HitFx::ring_area_flash(&ring,
+  &JrEvent)` + drawing in `draw_ring_mes` for `HitArea` / `HitBar` (`RingRun::flashes` collects them; `ring::RingDriver` forwards them).
+* **FX2**: `EffectFunc` id choices you may want in `retail_effect_id`: 0x100 -> program 0x100 with `CheckCycleHit`, else 0x101; 0x89 -> 0x89 on
+  `rand() % 10000 < 5001` or an enemy actor, else 0xf9 (US us_battle_phases.c ~397..420).

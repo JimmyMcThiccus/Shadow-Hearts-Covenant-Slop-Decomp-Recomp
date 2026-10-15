@@ -38,6 +38,9 @@ impl RingDriver {
         for (area, variant) in self.run.mes.drain(..) {
             self.fx.ring_mes(&self.run.ring, area.as_ref(), variant);
         }
+        for e in self.run.flashes.drain(..) {
+            self.fx.ring_area_flash(&self.run.ring, &e);
+        }
         self.fx.tick_ring_mes(1.0 / 60.0);
         done
     }

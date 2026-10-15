@@ -395,6 +395,8 @@ fn drive(
                                 dd.tap_bits(padbit::CIRCLE)
                             }
                         }
+                        // `SH2_BATTLE_TARGET_ROW=<n>`: walk a target page down to row `n` first (e.g. Snap Shot on the 4th monster)
+                        Page::Target { .. } if m.cursor() < std::env::var("SH2_BATTLE_TARGET_ROW").ok().and_then(|v| v.parse().ok()).unwrap_or(0) => dd.tap_bits(padbit::DOWN),
                         Page::Target { .. } => dd.tap_bits(padbit::CIRCLE),
                         // sub-menu: confirm; when the entry refuses (no valid target, too expensive) step to the next one, and give the page up
                         // after 400 ticks (back to the root, next command of the script)

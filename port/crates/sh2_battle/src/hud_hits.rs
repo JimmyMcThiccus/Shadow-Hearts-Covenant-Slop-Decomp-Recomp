@@ -814,7 +814,24 @@ pub struct HitFx {
     pub trail_i: usize,
     /// live `HitMes` sprites of the ring
     pub ring_mes: Vec<RingMes>,
+    /// round 6 BT: live `HitArea` / `HitBar` flashes of the ring (RG request 1)
+    pub ring_flash: Vec<RingFlash>,
 }
+
+/// `HitArea` (a translucent copy of the hit area that grows past the rim and fades) / `HitBar` (a flash of the pointer bar at the stop
+/// angle), ~0.3 s each.
+#[derive(Clone, Debug)]
+pub struct RingFlash {
+    /// `Some((start, width, colour))` = `HitArea`, `None` = `HitBar` at `angle`
+    pub area: Option<(f32, f32, [u8; 4])>,
+    pub angle: f32,
+    pub centre: Vec2,
+    pub rot: [f32; 4],
+    pub t: f32,
+}
+
+/// Lifetime of a [`RingFlash`] (seconds).
+pub const RING_FLASH_SECS: f32 = 0.3;
 
 /// `HitMes`: the `Good!! / Strike!! / Perfect!! / Miss!! / nn%` sprite of a ring press (`JRING.BIN` texture 0).
 #[derive(Clone, Debug)]
@@ -924,24 +941,65 @@ impl HitFx {
 
     pub fn tick_ring_mes(&mut self, dt: f32) {
         self.ring_mes.retain_mut(|m| m.tick(dt));
+        self.ring_flash.retain_mut(|f| {
+            f.t += dt;
+            f.t < RING_FLASH_SECS
+        });
+    }
+
+    /// Round 6 BT (RG request 1): start the flash of a `JrEvent::HitArea` / `JrEvent::HitBar` (other events are ignored).
+    pub fn ring_area_flash(&mut self, ring: &JRing, ev: &sh2_gfx::effects::jring::JrEvent) {
+        use sh2_gfx::effects::jring::JrEvent as E;
+        let centre = Vec2::new(ring.center.0, ring.center.1);
+        match ev {
+            E::HitArea { start, width, col } => self.ring_flash.push(RingFlash { area: Some((*start, *width, *col)), angle: 0.0, centre, rot: ring.rot, t: 0.0 }),
+            E::HitBar { angle } => self.ring_flash.push(RingFlash { area: None, angle: *angle, centre, rot: ring.rot, t: 0.0 }),
+            _ => {}
+        }
     }
 
     pub fn ring_mes_clear(&mut self) {
         self.ring_mes.clear();
+        self.ring_flash.clear();
     }
 
-    /// `HitMes::MakePacket`: the word (or `nn%`) beside the ring, flipping in about its vertical axis.
-    ///
-    /// The JP code anchors the word at the pointer's rim point rotated like the ring; the live retail frames do not show that
-    /// (`01d` Miss!! at (-80, +10) from the centre with the pointer at the top, `01m` Good!! at (+80, -10) with the pointer at 70 deg,
-    /// `01h` Miss!! further left), so the retail rule used here is empirical: a miss sits left of the ring at centre height, every
-    /// other grade right of it, both drifting outwards with the `3 - 5.5t` px/frame speed of the original.
+    /// `HitMes::MakePacket`: the word (or `nn%`) beside the ring, flipping in about its vertical axis, drifting outwards with the
+    /// `3 - 5.5t` px/frame speed of the original.  Grades start at the pointer's projected rim point (JP reading, confirmed by RG's live
+    /// field rings and battle `01m`); a miss sits left of the ring at centre height (`01d` / `01h`).
     pub fn draw_ring_mes(&self, g: &mut dyn MenuGfx, art: &HitArt) {
+        // the flashes under the words: the area grows from the rim to 1.3x and fades, the bar fades
+        for f in &self.ring_flash {
+            let k = (f.t / RING_FLASH_SECS).clamp(0.0, 1.0);
+            let fade = 1.0 - k;
+            match f.area {
+                Some((start, width, col)) => wedge(g, f.centre, f.rot, 1.0 + 0.3 * k, start, width, col, fade),
+                None => {
+                    let a = (fade * 128.0) as u8;
+                    let side = ring_project(Vec3::new((f.angle + 90.0).to_radians().sin() * 2.5, -(f.angle + 90.0).to_radians().cos() * 2.5, 0.0), f.rot);
+                    let end = ring_project(ring_point(f.angle, ring_geom::BAR), f.rot);
+                    let c = Rgba::new(0x80, 0x80, 0x80, a);
+                    g.draw(DrawCmd::Quad {
+                        tex: None,
+                        v: [vtx(f.centre - side, Vec2::ZERO, c), vtx(f.centre + side, Vec2::ZERO, c), vtx(f.centre + end - side, Vec2::ZERO, c), vtx(f.centre + end + side, Vec2::ZERO, c)],
+                        blend: Blend::Add,
+                    });
+                }
+            }
+        }
         for m in &self.ring_mes {
             let Some(Some(tex)) = art.ring_words.get(m.csa) else { continue };
             let miss = m.csa == 2;
-            let side = if miss { -1.0 } else { 1.0 };
-            let at = m.centre + Vec2::new(side * (80.0 + (m.radius - 101.0 * 0.85).max(0.0)), -10.0 * side);
+            // round 6 BT: the grades leave the ring along the pointer (JP `HitMes::Initialize`: the pointer's rim point turned like the
+            // ring; live battle `01m` Good!! at (+80, -10) with the pointer at 70 deg = the projected rim direction, RG's live field rings: the
+            // words fly out along the pointer); a miss keeps the empirical place left of the ring (`01d`, `01h`)
+            let at = if miss {
+                m.centre + Vec2::new(-(80.0 + (m.radius - 101.0 * 0.85).max(0.0)), 10.0)
+            } else {
+                let deg = 90.0 - m.dir.to_degrees();
+                let rim = ring_project(ring_point(deg, 101.0), m.rot);
+                let dir = rim.try_normalize().unwrap_or(Vec2::X);
+                m.centre + rim + dir * (m.radius - 101.0 * 0.85).max(0.0)
+            };
             let c = grey((m.alpha * 128.0).clamp(0.0, 128.0) as u8);
             let flip = m.spin.cos();
             let mut cells: Vec<(f32, f32, f32, f32)> = vec![];

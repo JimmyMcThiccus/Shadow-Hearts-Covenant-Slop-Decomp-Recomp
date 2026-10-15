@@ -94,6 +94,10 @@ pub struct BtlHost {
     /// (phase 0xe, steps 10..13).  The script itself jumps back to its main block there (`9 4`), so the port starts the separation on
     /// that turn (where retail decides it is not traced: `AIIfFunc` 0x3f skips units with `+0xb2` bit 3, which the join sets).
     pub boss_joined_turns: u32,
+    /// `SH2_BATTLE_BOSS_JOIN` was applied
+    pub boss_dev_joined: bool,
+    /// round 6 BT: per fighter slot, the `bState` the AI sees ([`Host::unit_states`]; 7 standing, 0x11 guarding)
+    pub states: Vec<u8>,
 }
 
 /// Status bits a monster cannot receive: retail `AIIfFunc` case 0x3a / `GetTarget` criterion 130 decode `MONSTERParam+0x32..0x34` into the
@@ -198,6 +202,8 @@ impl BtlHost {
             boss_toggle: false,
             boss_form: None,
             boss_joined_turns: 0,
+            boss_dev_joined: false,
+            states: vec![],
         }
     }
 
@@ -278,7 +284,7 @@ impl BtlHost {
                         char_id: if x.is_enemy { -1 } else { x.char_id },
                         pos: self.pos.get(i).copied().unwrap_or([0.0; 3]),
                         radius: if x.is_enemy { 14.0 } else { 8.0 },
-                        state: 7,
+                        state: self.states.get(i).copied().unwrap_or(7),
                         skill0: s0,
                         skill1: s1,
                         last_target: -1,
@@ -530,6 +536,12 @@ impl Host for BtlHost {
                 return MenuEvent::Wait { actor: actor as i32 };
             }
         }
+        // development aid: `SH2_BATTLE_BOSS_JOIN=1` -- the last boss's core joins on its first turn (screenshots of the joined form)
+        if self.boss_parts.is_empty() && self.models.get(actor) == Some(&499) && std::env::var_os("SH2_BATTLE_BOSS_JOIN").is_some() && !std::mem::replace(&mut self.boss_dev_joined, true) {
+            self.boss_toggle = true;
+            self.engine_fx.push(("EFFECT/UNION.EFD".to_string(), actor, actor));
+            return MenuEvent::Wait { actor: actor as i32 };
+        }
         let chrs = self.snapshot(f);
         let tables = self.tables.ai_tables();
         let (combo_pend, combo_cnt) = (self.combo_pend, self.combo_cnt);
@@ -642,6 +654,10 @@ impl Host for BtlHost {
             }
             self.boss_form = Some((false, core, freed));
         }
+    }
+
+    fn unit_states(&mut self, states: Vec<u8>) {
+        self.states = states;
     }
 
     fn chr_model(&self, k: usize) -> u32 {

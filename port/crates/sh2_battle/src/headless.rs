@@ -222,6 +222,7 @@ pub fn run_set(data: &BattleData, tables: &Arc<ActionTables>, disc: &PkbDisc, se
     let mut host = BtlHost::new(seed, tables.clone(), setup.fighters.len());
     run.scripted = host.setup_monsters(data, &setup, &read, &|pc| session.save.btl.pc(pc as usize).map(|r| r.model_nums[0] as i32).unwrap_or(0));
     let mut b = Battle::new(host, setup.fighters.clone(), setup.ambush, setup.escape, seed as u64);
+    b.battle_type = setup.battle_type;
     // the party-side engine as the plugin sets it up (PC stats from the save, monster immunities / resists, item / spell / skill resolution for both
     // sides), then the harness party made sturdy again (`party_setup` re-derives the PC stats)
     crate::flow::party_setup(&mut b, data, tables.clone(), session, &setup.pc_ids);

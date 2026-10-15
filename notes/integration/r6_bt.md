@@ -1,62 +1,82 @@
-# Round 6 BT -- battle (party + enemy) (2026-10-14)
+# Round 6 BT -- battle (party + enemy) (2026-10-14 / 15)
 
-## Paused (coordinator, max 2 running agents)
+Owner files: `port/crates/sh2_battle/src/*.rs` except `effects_bridge.rs`.  Target dir `%USERPROFILE%\.cache\sh2-r6-bt` (dev profile).
+Verification (2026-10-15, after the resume): `cargo test -p sh2_battle` 248 green, `cargo check --workspace --all-targets` green,
+`tools/coverage/run_all.sh run battle party`: battles 410 / 413 ok, party 319 / 321 ok (the 5 stubs are FX: stage types 202 / 204, EFD 1131 /
+1096 never end) -- the regenerated `coverage.md` was put back to the committed one (the run regenerates every category from QA2's raw rows);
+dev-drive screenshots in `notes/integration/screens/r6_bt/`; autoplay sanity set (field, battle command menu, ring, victory, menu tour) as before.
 
-State: every file compiles; `cargo test -p sh2_battle` was green (245) before the last two edits (ui "All" row + its test); after them the
-targeted tests ran green (`gathering`, `last_boss`, `warp`, `ring`).  No locks held, no processes left.  Target dir `%USERPROFILE%\.cache\sh2-r6-bt`
-(env script: scratchpad `env.sh`, `CARGO_BUILD_JOBS=6`).
+## 1. Last boss (MONSET 302)
+* **Decoded `LastBossSpecial`** (JP 0x00640840; package tags resolved through JP BATTLE.BIN base 0x430a00: 0x655c98 `mdl`, 0x655ca0 `anm`,
+  0x655f30 `a3`, 0x655f38 `a2`, 0x655f40 `sdw`):
+  * join: the core drops `anm` + `a3`, loads `a2` (its joined motion set); each part's own `mdl` becomes a core weapon -- **502 Kusanagi Sword
+    right `EX01`, 501 Yata Mirror left `EX02`, 500 Yasakani Gem centre `EX03`** -- with the part's `a2` motions (only 500 has one); the parts
+    get `OTRelease` / `ShadowOff`, `+0xb2 |= 0xc`, `bState` 3.
+  * separate: `ReleaseWeapon(7)`, the core loads `anm` + `a3`; the parts are placed on **arcs**: 500 60..120 deg, 501 30..60, 502 120..150 (pi/32
+    steps), radius `R_core + R_part + 12`, `(x, z) = core + R (cos a, -sin a)`, inside the arena by R_part, farther than `R_part + R_i + 5` from
+    every opponent; random pick (retail divides by zero when nothing is free).
+* **Port**: `warp::last_boss_arc`, `Host::take_boss_form` + `Battle::boss_form` (positions), `PartyEvent::BossForm`; `models.rs`:
+  `LastBossCore` (two motion sets, swapped with `add_motion` = `createMotion`; motions read with FX2's `Package::motions(set)`),
+  `LastBossWeapon` (part model copies on the core's frames, `WeaponSlot::Center` = `EX03`), `drive_last_boss` (hides joined parts),
+  `apply_home_moves` (models jump to new homes).  Screens: `boss_start_separated.png`, `boss_joined.png` / `boss_joined_2.png` (the core holding
+  the sword and the mirror, the turn bar without the parts), `boss_separated_again.png`.
+* **Join length = retail 4 turns**: after the join the core's script (M095_000) plays its union block 0xfda -- skills 8 / 0xa / 9 / 0xb, one
+  per part -- then jumps back to its main block.  Live: 4 joined core turns, the 5th separates.  `BtlHost::boss_joined_turns` forces the
+  separating `LastBoss` on the 5th joined core turn (headless periods `[5, 5, ...]`, asserted).  Not traced: where retail itself decides it
+  (`AIIfFunc` 0x3f, US 0x6d5860, skips units with `+0xb2` bit 3, which the join sets -- that would send the script to its "parts gone" block
+  0xb30, which never separates).
+* **Core killed**: `Phase::Death` takes the living parts down with the core (joined or separated): the battle ends, as seen live.  The
+  separated case is not verified live.
+* Dev aid: `SH2_BATTLE_BOSS_JOIN=1` (the core joins on its first turn), and with `SH2_BATTLE_MODEL_SHOTS` an overview shot ~1.5 s after each
+  form change (`boss_joined_<tick>.png` / `boss_separated_<tick>.png`; the first is usually inside `UNION.EFD`, which hides the core).
 
-**In progress when paused:** weapon / voice SE triggers (requests CS1).  Found: US BATTLE.BIN calls `HNMSnd::PlaySE` (SLUS 0x0038a900) from
-~300 sites; the PC hit / swing code around 0x4c6a40..0x4c9b40 plays ids `0x6000_1001..0x100a` and `0x6000_3005..3007` (a1 = `lui 0x6000 | id`,
-chosen by `BtlChr+0xb4` bit 0 and `CBattle+0x45d6` bits 1..2 == 3), next to `jal 0x583320` (motion).  Not decoded yet: what selects 0x1xxx vs
-0x3xxx (weapon bank `%03dW%02d` vs voice `%03dC`), and how `0x6000` maps to the port's bank ids (`0x9000 | BCD(chr)`, `0x9100 | pc`).
+## 2. Gathering (effect 0x50)
+* `warp.rs` = exact `GetWarpPos(int, bool)` (JP BtlFree 0x5e38a0, US loop 0x631e30..0x632760): integer free-rectangle subtraction of the
+  boxes of the units on the **other side of the first target** (`CBattle+0x3d24` is the effect's target model set, not the actor -- i.e.
+  the party), the `short`-area merge pass, the largest rectangle's centre for the first target; the others on circles
+  `(int)(R_placed + R_k + 5)` around the placed list, keeping clear of opponents (+3) and -- retail slip -- of the units with index < count;
+  the loop counter is the `rand() % n` register (`mfhi s0`).  The last boss's core (CHR 499) is swapped to the front and never moved (US
+  EffectFunc ~0x4876xx).
+* Target page: shape 5 lists one **"All Enemies"** row (`ui::ALL_TARGET` = 100; "All Allies" / "Everyone" for the other classes;
+  `SetTargetMenu`).  Confirming casts on the first unit of the class.
+* `FxHost::warp` (FX2's hook) is wired for program 080: the plan is computed at program start (`plugin::gather_plan`) and the battle uses the
+  same plan when the flow reports the gather.
+* Screens: `gathering_all_enemies.png`, `gathering_cluster.png` (the four monsters clustered in front of Anastasia, MONSET 95).  The live
+  numbers (r5_lv check 5) are not reproduced exactly (live first point (5.6, 12.7) is not an integer, so it is not a `GetWarpPos` output).
 
-**Next steps, in order:**
-1. `cargo test -p sh2_battle` + `cargo check --workspace --all-targets` (with `CARGO_BUILD_JOBS=6`).
-2. Build `sh2_app` (was building when paused) and take dev-drive shots: `SH2_BATTLE_DEMO=302 SH2_BATTLE_BG=62` (last boss: parts as the core's
-   weapons while joined, arcs on separation) and a Gathering cast (Anastasia + crest 0x3f, `SH2_BATTLE_SAVE`), then the autoplay sanity set.
-3. `tools/coverage/run_all.sh run battle party`.
-4. Finish the SE item above; then the berserk tail (see Findings), tutorial prompts, `ConvertComboKeyDefault`.
-5. OUTLINE.md status paragraph; requests.md entries (below, not yet written there).
+## 3. Snap Shot album
+The plugin sets `BTL0+0xfc3` bits as soon as `stats.albums` has them: `album_same_battle.png` (Snap Shot on Pendulum, next turn: Album with
+Aqua Raise).  Dev aid: `SH2_BATTLE_TARGET_ROW=<n>` walks target pages to row n.
 
-## Done
+## 4. Berserk / steal / effect exceptions
+* `BerserkFunc` (US 0x690270) decompiled for the generic path (PC ids >= 12) with Ghidra: **item branch** (items of the bag whose
+  `(rec+4 & 0x1f) >> 3` and `(rec+4 & 0x7f) >> 5` are not 0 / 3 and that have a target; 15 %, 50 % for PC 4; `BtlChr+0x1c2` = 8), then crest
+  magic 20 % (`+0x1c2` = 7, no spells under Seal or PC 6 with a flag), else attack.  Ported (`Battle::bag`, refreshed by the plugin, minus the
+  stolen items).  The jump-table tail 0x694778 (PCs 8..11 directly) is a **special-skill branch** over the character's whole `SKIL` group (no
+  learned mask), 20 %, `+0x1c2` = 22 (23 for PC 11) -- ported for PCs 8..11.  Not ported: the per-character antics blocks 0x691090 ..
+  0x694198 (PC ids 1..7; Ghidra cannot follow the jump table, disassembly needed).  Test `berserk_members_use_items_from_the_bag`.
+* **Monster steal from the party** (SLUS 0x383660..0x3838c0): weighted pick over the held items (`(rec+4 >> 3) & 3` not 0 / 3; weight = count,
+  x10 when `(rec+4 >> 5) & 3 == 1`), one taken out of the bag (`Applied::bag_taken`, `PartyEvent::BagStolen`, `BattleStats::bag_lost`,
+  written back at the end).  **Unique drops 400..499** the party owns (`BTL0+0xc1c` bit `id - 400`) are skipped by the party's steal.  Test
+  `monsters_steal_from_the_party_bag`.
+* **Deadly Throw 0xef** (`GetDeadlyThrowTarget`, JP 0x640540): one extra target, a random living opponent not yet on the list.
+* 0x89 / 0x100 are effect-program choices (0x100: `CheckCycleHit` -> program 0x100 else 0x101; 0x89: 50 % or an enemy actor -> 0x89 else
+  0xf9) -- FX2's `retail_effect_id`; 0x86 stops combos like a non-offensive action; 0xa8 goes to `EffectFunc` step 0x28 (not decoded).
 
-1. **Last boss (MONSET 302)**
-   * `LastBossSpecial` decoded from JP 0x640840 + strings (JP BATTLE.BIN base 0x430a00): joined = core deletes `anm` / `a3`, loads `a2`; each
-     part's `mdl` becomes a core weapon -- **502 right `EX01`, 501 left `EX02`, 500 centre `EX03`** -- with the part's own `a2` motion (only 500
-     has one); separated = `ReleaseWeapon(7)`, core loads `anm` + `a3`, parts placed on arcs **500: 60..120 deg, 501: 30..60, 502: 120..150**
-     (pi/32 steps), radius `R_core + R_part + 12`, `(x, z) = core + R (cos a, -sin a)`, inside the arena by R_part, > `R_part + R_i + 5` from
-     every opponent, random pick.
-   * Port: `warp::last_boss_arc`; `Host::take_boss_form` + `Battle::boss_form` place released parts and emit `PartyEvent::BossForm`;
-     `BtlHost::after_ai_command` records it.  `models.rs`: `LastBossCore` (two motion sets swapped with `add_motion` = `createMotion`),
-     `LastBossWeapon` (part model copies mounted on the core, hidden while separated), `drive_last_boss` (hides joined parts), new
-     `WeaponSlot::Center` (`EX03`), `apply_home_moves` (teleports models to new homes).  `BattleRuntime::{home_moves, boss_joined}`.
-   * **Join length**: the core's script (M095_000) plays its union block 0xfda after the join: skills 8 / 0xa / 9 / 0xb on the next 4 turns,
-     then jumps back to its main block.  Live: 4 joined core turns, the 5th separates.  Port: `BtlHost::boss_joined_turns` forces the
-     separating `LastBoss` on the 5th joined core turn.  Headless: periods `[5, 5, 5, ...]` (4 + the separating turn), test asserts it.
-     Open question kept in the code: retail `AIIfFunc` 0x3f (US 0x6d5860) skips units with `+0xb2` bit 3 (set by the join), so where retail
-     decides to separate is not traced; the port keeps BE's "attached parts are visible to the AI" so the union block's part bits work.
-   * **Core killed**: `Phase::Death` now takes the parts (500..502) down with the core (joined or separated), so the battle ends as seen live.
-     Not verified live for the separated case.
-2. **Gathering** (effect 0x50): `warp.rs` = exact port of `GetWarpPos` (JP BtlFree 0x5e38a0; US loop at 0x631e30..0x632760): free-rectangle
-   subtraction of the other side's boxes + the `short`-area merge pass, largest rectangle's centre for the first target; the others on
-   circles around the placed list with the retail register-reuse slip (`mfhi s0` = loop counter) and the "index < count" check; CHR 499
-   stays and is swapped to the front (US EffectFunc ~0x4876xx).  `flow.rs` uses it (`Battle::arena` = BBG DAT - 10, set by the plugin);
-   `PartyEvent::Gather { to }` carries the new places, the plugin moves homes + models.  Target page: shape 5 lists one **"All Enemies"**
-   row (`ui::ALL_TARGET` = 100, `SetTargetMenu`; "All Allies" / "Everyone" for the other classes), confirming casts on the first unit.
-   Tests `warp::tests::*`, `ui::tests::gathering_targets_all_enemies`.  The live numbers (r5_lv check 5) are not reproduced exactly (the
-   first live point (5.6, 12.7) is not an integer, so it was not a `GetWarpPos` output -- unexplained).
-3. **Snap Shot album**: the plugin writes `BTL0+0xfc3` bits every tick from `stats.albums`, so `Album` is on the menu next turn.
-4. **Ring API for RG**: `sh2_battle::ring` (`RingRun`, `RingDriver` = ring + trail + hit sprites, `RingArtPlugin`, re-exports of `draw_ring`,
-   `HitArt`, `load_hit_art`, jring types); `RingRun::start_event` (tagged step areas) + `RingRun::event_result` (callback 0x80).  RG's
-   `field_ring.rs` already uses `hud_hits::{draw_ring, HitFx, HitArt, load_hit_art}` directly -- those paths stay stable.
-5. Examples: `bt_pkg` (package entries of battle CHR files), `be_ais_scan --mon <id>` (dump the AIS of a monster).
+## 5. AI / tutorial / ring
+* The AI sees `bState` 0x11 for units in a Defend / guard stance (`Host::unit_states`; condition 0x3d, `GetTarget` 132), 7 otherwise.
+* Tutorial fights (battle types 1 / 2) keep no ring score statistics (US `EffectFunc` / phase 5 skip `BTL0+0x150c / 0x1510`).  Their
+  tutorial pages (BtlMenu mode 0x16, steps 0x67 / 100 by `CBattle+0x4867`) are not ported.
+* Ring: the `Good!!` words leave the ring along the pointer's projected rim direction (RG's live field evidence + battle `01m`), misses stay
+  left; new `HitArea` / `HitBar` flashes (`HitFx::ring_area_flash`, drawn by `draw_ring_mes`; `RingRun::flashes`).
+* `sh2_battle::ring` facade for other screens (RingRun, RingDriver, RingArtPlugin, `start_event` / `event_result`).
 
-## Findings for later
-* `BerserkFunc` shared tail (US 0x694778) starts with the PC's **own `SKIL` group** (`GetRegDat(0x3c, pc)`, `berserk_last` 22 / 23 for PC 11),
-  not crest magic as ported in round 5 -- re-derive before porting the item branch / other antics.
-* Retail combine excludes petrified parts from the UNION effect's generator list (JP LastBossFunc step 1).
-
-## Requests to write into requests.md (not yet posted)
-* FX2: `btlGetWarpPos` (1118) can now be answered from `sh2_battle::warp::get_warp_pos` (the effects bridge owns the call).
-* RG: optional `sh2_battle::ring` facade (see Done 4).
+## Open (priority)
+1. Weapon / voice SE: the retail hit / swing code (US 0x4c6a40..0x4c9b40, JP CBattle.c ~15580 / ~29770) plays global ids `0x6000_1001..100a`,
+   `0x6000_3005..3007`, `0x7000_000x`, `0x9000_000x` through `HNMSnd::PlaySE` (SLUS 0x38a900, queued as is).  No SSE bank on the disc has wave
+   bank 0x6000 / 0x7000 (`examples/bt_se_banks`: battle banks are 0x90xx M/W, 0x91xx C, 0x92xx.., system 0x0200), so these are class ids the
+   sound driver maps -- asked CS2 (requests.md).
+2. Berserk antics of PC ids 1..7 (disassembly of 0x691090..0x694198).
+3. Panic beyond the x3 SP drain (not looked into); the AI's skill-block records, dispel test, Joachim filter.
+4. Tutorial pages (battle types 1 / 2).
+5. Last boss: where retail triggers the separation; the separated-core-death case live.

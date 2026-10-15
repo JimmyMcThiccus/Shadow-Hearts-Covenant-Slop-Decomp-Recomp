@@ -510,6 +510,9 @@ pub trait Host {
     fn take_boss_form(&mut self) -> Option<(bool, usize, Vec<usize>)> {
         None
     }
+    /// round 6 BT: the units' `bState` as the AI sees it, refreshed before every AI decision (7 = standing, 0x11 = in a Defend / guard
+    /// stance -- AI condition 0x3d, `GetTarget` 132)
+    fn unit_states(&mut self, _states: Vec<u8>) {}
     /// Evaluate an item/magic/skill effect (`EffectCodeFunc`).  Returns damage (+) / heal (-) per target.
     ///
     /// The hook may also change the fighters (MP / SP costs, status, revive); HP changes should be returned so that they produce
@@ -648,6 +651,8 @@ pub enum PartyEvent {
     /// round 6 BT -- `LastBossSpecial`: the parts (CHR 500..502) joined the core (`joined`: they become its weapons and leave the turn order /
     /// target lists) or were released and placed at `to` (Bevy world; 60..120 deg for CHR 500, 30..60 for 501, 120..150 for 502)
     BossForm { joined: bool, core: usize, parts: Vec<usize>, to: Vec<[f32; 3]> },
+    /// round 6 BT: monster `by` stole `item` from the party's bag
+    BagStolen { by: usize, item: i32 },
     /// Snap Shot: `SetBtlMessage(0x7a)` "You got the "%s" Album!" (album `index` = Anastasia's `SKIL` group 4 record)
     Album { index: u8, name: String },
 }
@@ -710,6 +715,13 @@ pub struct Battle<H: Host> {
     pub hit_powers: Vec<i32>,
     /// `CBattle+0x3f14 / 0x3f1c`: the arena (BBG `DAT` x / z - 10) for [`crate::warp`]
     pub arena: [f32; 2],
+    /// round 6 BT: item counts of the active bag by `ITEM` id (`BTL0 + bag * 0x200 + 0xabc + id`; set by [`party_setup`], refreshed by the plugin)
+    /// -- the berserk item branch picks from it
+    pub bag: Vec<u8>,
+    /// round 6 BT: `BTL0+0xc1c..0xc29`: owned unique items 400..499 (one bit each), see [`crate::actions::ResolveCtx::unique_owned`]
+    pub unique_owned: Vec<u8>,
+    /// `MonsterSet` flags >> 2 (`CBattle+0x4866`): 1 / 2 = the tutorial fights ("Battle Basics" / "Combos"), see [`crate::bridge::BattleSetup::battle_type`]
+    pub battle_type: u8,
     pending: Option<MenuEvent>,
 }
 
@@ -752,6 +764,8 @@ pub struct BattleStats {
     pub permanent: Vec<(u8, u8, i32)>,
     /// Anastasia's albums gained by Snap Shot this battle (`SKIL` group 4 record = bit of `BTL0+0xfc3`)
     pub albums: Vec<u8>,
+    /// round 6 BT: items monsters stole out of the party's bag (taken off the save's bag at the end)
+    pub bag_lost: Vec<i32>,
 }
 
 
@@ -799,6 +813,9 @@ impl<H: Host> Battle<H> {
             albums_owned: vec![],
             hit_powers: vec![],
             arena: [190.0, 190.0],
+            bag: vec![],
+            unique_owned: vec![],
+            battle_type: 0,
             pending: None,
         }
     }
@@ -1058,6 +1075,8 @@ impl<H: Host> Battle<H> {
                 let enemy = self.fighters[i].as_ref().unwrap().is_enemy;
                 let berserk = !enemy && self.ext.get(i).map(|e| e.berserk).unwrap_or(false);
                 let ev = if enemy {
+                    let states: Vec<u8> = (0..self.fighters.len()).map(|k| if self.ext.get(k).is_some_and(|e| e.guard != crate::actions::Guard::None) { 0x11 } else { 7 }).collect();
+                    self.host.unit_states(states);
                     let ev = self.host.choose_ai_command(i, &self.fighters);
                     self.host.after_ai_command(i, &mut self.fighters);
                     if let Some((joined, core, parts)) = self.host.take_boss_form() {
@@ -1392,7 +1411,8 @@ impl<H: Host> Battle<H> {
             total += dmg;
         }
         // ring statistics of a party member's attack (score page: attack rings total / every area hit, perfect = every hit a strike)
-        if !att.is_enemy && !self.ring_hits.is_empty() {
+        // (the tutorial fights, battle types 1 / 2, keep no ring statistics: US `EffectFunc` / phase 5 skip `BTL0+0x150c / 0x1510` there)
+        if !att.is_enemy && !self.ring_hits.is_empty() && !matches!(self.battle_type, 1 | 2) {
             let pc = self.ext.get(a).map(|e| e.pc).unwrap_or(att.char_id).clamp(0, 13) as usize;
             self.stats.ring_total[pc] += 1;
             if self.ring_hits.iter().all(|&g| g > 0.0) {
@@ -1602,7 +1622,7 @@ impl<H: Host> Battle<H> {
     /// directly): with a 20 % chance one of the equipped crests' learned spells whose class (`rec+4 & 0x1f >> 3`) is not 0 / 3 and which has a
     /// target -- the target is the caster for side 0, everybody for side 3 / shape 5, else a random unit the spell can reach (enemies *and*
     /// allies); otherwise a plain attack on a random living unit (live, pine_us_refinement 9.1: berserk PCs hit each other and the enemies).
-    /// Not ported: the item branch (15 %, 50 % for PC 4: a random usable battle item of the bag), the other characters' antics blocks
+    /// Round 6 BT: the item branch (15 %, 50 % for PC 4) is ported from the generic path.  Not ported: the other characters' antics blocks
     /// (Karin 0x691090, ... Kurando 0x694198).
     fn berserk_command(&mut self, i: usize) -> MenuEvent {
         let Some(me) = self.fighters.get(i).and_then(|f| f.clone()) else { return MenuEvent::Wait { actor: i as i32 } };
@@ -1626,6 +1646,89 @@ impl<H: Host> Battle<H> {
                 let id = opts[self.rng.rand() as usize % opts.len()];
                 set_last(self, 12);
                 return MenuEvent::Fusion { id };
+            }
+        }
+        // the special-skill branch of the jump-table tail (US 0x694778; PCs 8..11 go there directly): with a 20 % chance one record of the
+        // character's own `SKIL` group (every record, no learned mask) that has a target; `BtlChr+0x1c2` = 22 (23 for PC 11), never twice in a
+        // row, not under Seal
+        if (8..=11).contains(&ext.pc) && !sealed && last != if ext.pc == 11 { 23 } else { 22 } {
+            if let Some(t) = self.engine.clone() {
+                let radius: Vec<f32> = self.ext.iter().map(|e| e.radius).collect();
+                let group = t.groups.get(ext.pc as usize).cloned().unwrap_or_default();
+                let mut usable: Vec<(usize, Vec<usize>)> = vec![];
+                for (k, rec) in group.iter().enumerate() {
+                    if rec.empty {
+                        continue;
+                    }
+                    let reach: Vec<usize> = if rec.side_class() == 0 {
+                        vec![i]
+                    } else {
+                        (0..self.fighters.len())
+                            .filter(|&u| self.fighters[u].as_ref().map(|f| !f.removed && (f.hp > 0 || rec.revive)).unwrap_or(false))
+                            .filter(|&u| !crate::actions::target_list(&self.fighters, &self.positions, &radius, i, u as i32, rec.side_class(), rec.shape(), rec.size(), rec.revive, true).is_empty())
+                            .collect()
+                    };
+                    if !reach.is_empty() {
+                        usable.push((k, reach));
+                    }
+                }
+                if !usable.is_empty() && self.rng.rand() % 10000 <= 2000 {
+                    let (k, reach) = usable[self.rng.rand() as usize % usable.len()].clone();
+                    let rec = &group[k];
+                    let side = rec.side_class();
+                    let target = if side == 0 {
+                        i as i32
+                    } else if side == 3 || rec.shape() == 5 {
+                        -1
+                    } else {
+                        reach[self.rng.rand() as usize % reach.len()] as i32
+                    };
+                    set_last(self, if ext.pc == 11 { 23 } else { 22 });
+                    return MenuEvent::Special { a: rec.id, b: target, enemy_like: false };
+                }
+            }
+        }
+        // the item branch (US BATTLE.BIN 0x690270 generic path, decompiled round 6 BT): every item of the bag whose class `(rec+4 & 0x1f) >> 3`
+        // and `(rec+4 & 0x7f) >> 5` are not 0 / 3 and that has a target; 15 % (50 % for Anastasia, PC 4); target = the user for side 0,
+        // everybody for side 3 / shape 5, else a random unit the item can reach (either side); `BtlChr+0x1c2` = 8
+        if let Some(t) = self.engine.clone() {
+            let radius: Vec<f32> = self.ext.iter().map(|e| e.radius).collect();
+            let mut usable: Vec<(usize, Vec<usize>)> = vec![];
+            for (id, rec) in t.items.iter().enumerate() {
+                if rec.empty || self.bag.get(id).copied().unwrap_or(0) == 0 {
+                    continue;
+                }
+                let (c1, c2) = ((rec.flags & 0x1f) >> 3, (rec.flags & 0x7f) >> 5);
+                if c1 == 0 || c1 == 3 || c2 == 0 || c2 == 3 {
+                    continue;
+                }
+                let side = rec.side_class();
+                let reach: Vec<usize> = if side == 0 {
+                    vec![i]
+                } else {
+                    (0..self.fighters.len())
+                        .filter(|&k| self.fighters[k].as_ref().map(|f| !f.removed && (f.hp > 0 || rec.revive)).unwrap_or(false))
+                        .filter(|&k| !crate::actions::target_list(&self.fighters, &self.positions, &radius, i, k as i32, rec.side_class(), rec.shape(), rec.size(), rec.revive, true).is_empty())
+                        .collect()
+                };
+                if !reach.is_empty() {
+                    usable.push((id, reach));
+                }
+            }
+            let chance = if ext.pc == 4 { 5000 } else { 1500 };
+            if !usable.is_empty() && self.rng.rand() % 10000 <= chance {
+                let (id, reach) = usable[self.rng.rand() as usize % usable.len()].clone();
+                let rec = &t.items[id];
+                let side = rec.side_class();
+                let target = if side == 0 {
+                    i as i32
+                } else if side == 3 || rec.shape() == 5 {
+                    -1
+                } else {
+                    reach[self.rng.rand() as usize % reach.len()] as i32
+                };
+                set_last(self, 8);
+                return MenuEvent::Item { item: id as i32, target };
             }
         }
         // the crest-spell branch
@@ -1698,7 +1801,11 @@ impl<H: Host> Battle<H> {
         let radius: Vec<f32> = self.ext.iter().map(|e| e.radius).collect();
         let host = &self.host;
         let friendship = |a: usize, b: usize| host.friendship(a, b);
+        let bag = self.bag.clone();
+        let unique = self.unique_owned.clone();
         let ctx = crate::actions::ResolveCtx {
+            bag: &bag,
+            unique_owned: &unique,
             tables: &tables,
             pos: &self.positions,
             radius: &radius,
@@ -1823,6 +1930,14 @@ impl<H: Host> Battle<H> {
                 }
             }
         }
+        // round 6 BT: a monster's steal empties one item of the party's bag (the bag is written back at the battle's end)
+        for &id in &r.bag_taken {
+            if let Some(n) = self.bag.get_mut(id as usize) {
+                *n = n.saturating_sub(1);
+            }
+            self.stats.bag_lost.push(id);
+            self.events.push(BattleEvent::Party(PartyEvent::BagStolen { by: i, item: id }));
+        }
         if !r.stolen.is_empty() || r.cash != 0 {
             self.events.push(BattleEvent::Party(PartyEvent::Stolen { items: r.stolen.clone(), cash: r.cash }));
             self.party_cash = (self.party_cash + r.cash).max(0);
@@ -1874,6 +1989,10 @@ impl<H: Host> Battle<H> {
 /// resists, drops, raw stats), the action tables, the learned crest columns and the party's cash.  `pc_ids[i]` = the PC id of fighter `i`
 /// (`None` for monsters, whose `char_id` is the `MONSTERParam` id).
 pub fn party_setup<H: Host>(b: &mut Battle<H>, data: &crate::data::BattleData, tables: Arc<ActionTables>, session: &sh2_menu::session::GameSession, pc_ids: &[Option<u8>]) {
+    b.bag = (0..tables.items.len()).map(|i| session.save.btl.item_count(i)).collect();
+    if session.save.btl.is_retail() {
+        b.unique_owned = (0..13).map(|k| session.save.btl.retail.get(0xc1c + k).copied().unwrap_or(0)).collect();
+    }
     b.engine = Some(tables);
     b.party_cash = session.cash() as i32;
     if session.save.btl.is_retail() {
@@ -1972,6 +2091,14 @@ pub fn apply_battle_end<H: Host>(b: &Battle<H>, session: &mut sh2_menu::session:
         if item >= 0 {
             if let Some(slot) = session.save.btl.data.get_mut(sh2_menu::save::BtlSave::OFF_ITEMS + bag + item as usize) {
                 *slot = slot.saturating_add(1).min(99);
+            }
+        }
+    }
+    // items monsters stole from the bag
+    for &item in &b.stats.bag_lost {
+        if item >= 0 {
+            if let Some(slot) = session.save.btl.data.get_mut(sh2_menu::save::BtlSave::OFF_ITEMS + bag + item as usize) {
+                *slot = slot.saturating_sub(1);
             }
         }
     }
@@ -2488,6 +2615,35 @@ mod bp_flow_tests {
         // Karin never fuses
         for _ in 0..50 {
             assert!(!matches!(b.berserk_command(1), MenuEvent::Fusion { .. }));
+        }
+    }
+
+    /// Round 6 BT: `BerserkFunc`'s item branch -- a berserk member with usable items in the bag uses one on ~15 % of the turns (Anastasia 50 %).
+    #[test]
+    fn berserk_members_use_items_from_the_bag() {
+        let Some((data, tables, s)) = us() else { return };
+        let (mut b, _) = battle(&data, &tables, &s, &[5], 2);
+        // a bag with every usable item once
+        b.bag = vec![1; tables.items.len()];
+        let mut runs = [0usize; 2];
+        for (pc, n) in [(5i32, 0usize), (4, 1)] {
+            let slot = 0;
+            b.ext[0].pc = pc as _;
+            for _ in 0..400 {
+                b.ext[slot].berserk_last = 0;
+                if let MenuEvent::Item { item, .. } = b.berserk_command(slot) {
+                    assert!(b.bag[item as usize] > 0);
+                    runs[n] += 1;
+                }
+            }
+        }
+        eprintln!("berserk items: Karin {} / 400, Anastasia {} / 400", runs[0], runs[1]);
+        assert!(runs[0] > 30 && runs[0] < 100, "{runs:?}");
+        assert!(runs[1] > 150 && runs[1] < 260, "{runs:?}");
+        // an empty bag: never
+        b.bag = vec![0; tables.items.len()];
+        for _ in 0..100 {
+            assert!(!matches!(b.berserk_command(0), MenuEvent::Item { .. }));
         }
     }
 

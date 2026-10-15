@@ -521,14 +521,15 @@ pub fn spawn_battle_models(
     spawn_last_boss_weapons(&mut commands, &disc, &mut gpu, &spawned);
 }
 
-/// Motion entries of a package by tag (`anm`, `a2`, `a3`).
+/// Motion entries of a package by motion set (`anm`, `a2`, `a3`; FX2's `sh2_formats::pkb::Package::motions(set)`).
 pub fn package_motions(bytes: &[u8], tag: &str) -> Vec<Arc<sh2_formats::motion::Motion>> {
-    package_entries(bytes)
-        .into_iter()
-        .filter(|(t, _)| t == tag)
-        .filter_map(|(_, off)| sh2_formats::motion::Motion::parse(&bytes[off..]).ok())
-        .map(Arc::new)
-        .collect()
+    let set = match tag {
+        "a2" => 2,
+        "a3" => 3,
+        _ => 0,
+    };
+    let Some(pkg) = sh2_formats::pkb::parse_package(bytes, 0) else { return vec![] };
+    pkg.motions(set).filter_map(|e| bytes.get(e.offset..)).filter_map(|b| sh2_formats::motion::Motion::parse(b).ok()).map(Arc::new).collect()
 }
 
 /// The last boss's core (CHR 499): its two motion sets (`LastBossSpecial`: separated = the `anm` + `a3` entries of `CHRANM/499.ANM`,
@@ -600,14 +601,29 @@ pub fn apply_home_moves(rt: Option<ResMut<BattleRuntime>>, mut models: Query<&mu
 
 /// Round 6 BT: the last boss's joined form (`BattleRuntime::boss_joined`): the parts' own models hide and appear as the core's weapons, and
 /// the core swaps its motion set; separated, the reverse.
+#[allow(clippy::too_many_arguments)]
 pub fn drive_last_boss(
-    rt: Option<Res<BattleRuntime>>,
+    mut commands: Commands,
+    rt: Option<ResMut<BattleRuntime>>,
     mut cores: Query<&mut LastBossCore>,
     mut models: Query<&mut BattleModel>,
     mut anims: Query<&mut AnimatedModel, Without<LastBossWeapon>>,
     mut weapons: Query<(&LastBossWeapon, &mut Visibility)>,
+    mut shot: Local<Option<(u32, String)>>,
 ) {
-    let Some(rt) = rt else { return };
+    let Some(mut rt) = rt else { return };
+    // development screenshots (`SH2_BATTLE_MODEL_SHOTS`): the overview 1.5 s after each form change
+    if let Some((n, name)) = shot.as_mut() {
+        *n = n.saturating_sub(1);
+        if *n == 0 {
+            if let Some(dir) = std::env::var_os("SH2_BATTLE_MODEL_SHOTS") {
+                use bevy::render::view::screenshot::{save_to_disk, Screenshot};
+                let path = std::path::PathBuf::from(dir).join(format!("{name}.png"));
+                commands.spawn(Screenshot::primary_window()).observe(save_to_disk(path));
+            }
+            *shot = None;
+        }
+    }
     let joined_parts: Vec<usize> = rt.boss_joined.as_ref().map(|(_, p)| p.clone()).unwrap_or_default();
     let joined = !joined_parts.is_empty();
     for mut m in models.iter_mut() {
@@ -628,6 +644,11 @@ pub fn drive_last_boss(
         }
         c.is_joined = joined;
         let core = c.chr;
+        log::info!("battle: last boss {} (core {core}, parts {joined_parts:?})", if joined { "joined" } else { "separated" });
+        if std::env::var_os("SH2_BATTLE_MODEL_SHOTS").is_some() {
+            rt.cam.set(crate::camera::CamRequest::Overview, true);
+            *shot = Some((90, format!("boss_{}_{}", if joined { "joined" } else { "separated" }, rt.ticks)));
+        }
         // separating: the parts' models come back (their `ShadowOn` / `OTEntry`)
         if !joined {
             for mut m in models.iter_mut() {

@@ -4,7 +4,7 @@
 //!
 //! * `first == true`: the last boss's core (CHR 499) stays where it is (it only joins the list).  Any other unit goes to the centre of the
 //!   **largest free rectangle** of the arena (`CBattle+0x3f14 / 0x3f1c`, the BBG `DAT` size - 10) once the boxes of every unit on the other
-//!   side of the *acting* unit (`CBattle+0x3d24`; for *Gathering* = the enemies themselves) are cut out: an integer rectangle
+//!   side of the first target (`CBattle+0x3d24`, the effect's target model set; for *Gathering* = the party) are cut out: an integer rectangle
 //!   subtraction (`[x - (r + .5), z - (r + .5), 2r + .5, 2r + .5]` per box) followed by a merge pass that joins side-by-side rectangles
 //!   whenever the joined one is larger than both (areas in `short`, as retail).  The list restarts with this unit.
 //! * `first == false`: for each unit of the list, candidate points on the circle of radius `(int)(R_placed + R_k + 5)` around it
@@ -181,7 +181,7 @@ pub fn free_rects(arena: Rect, boxes: &[Rect]) -> Vec<Rect> {
 
 /// `GetWarpPos(k, first)`: the new box centre of unit `k` (also written to `units[k].pos`); `actor_enemy` = side of the acting unit
 /// (`CBattle+0x3d24`), `arena` = `CBattle+0x3f14 / 0x3f1c`, `placed` = the list at `CBattle+0x45d4`, `rand` = the C `rand()`.
-pub fn get_warp_pos(units: &mut [WarpUnit], k: usize, first: bool, actor_enemy: bool, arena: [f32; 2], placed: &mut Vec<usize>, rand: &mut dyn FnMut() -> u32) -> [f32; 2] {
+pub fn get_warp_pos(units: &mut [WarpUnit], k: usize, first: bool, _actor_enemy: bool, arena: [f32; 2], placed: &mut Vec<usize>, rand: &mut dyn FnMut() -> u32) -> [f32; 2] {
     let Some(me) = units.get(k).copied() else { return [0.0, 0.0] };
     if first {
         placed.clear();
@@ -191,7 +191,9 @@ pub fn get_warp_pos(units: &mut [WarpUnit], k: usize, first: bool, actor_enemy: 
         }
         let boxes: Vec<Rect> = units
             .iter()
-            .filter(|u| u.present && u.enemy != actor_enemy)
+            // `CBattle+0x3d24` is the effect's first *target* (the target model set, see `LastBossFunc`), so the cut-out boxes are those of
+            // the other side of the gathered units -- the casters' party (live r5_lv check 5: the cluster lands in front of the party)
+            .filter(|u| u.present && u.enemy != me.enemy)
             .map(|u| {
                 let w = (u.radius * 2.0 + 0.5) as i32;
                 [(u.pos[0] - (u.radius + 0.5)) as i32, (u.pos[1] - (u.radius + 0.5)) as i32, w, w]
