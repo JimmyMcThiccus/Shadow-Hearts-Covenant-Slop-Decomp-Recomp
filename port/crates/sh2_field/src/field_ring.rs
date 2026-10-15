@@ -156,6 +156,10 @@ pub struct FieldRingRun {
     pub trail_i: usize,
     /// `HitMes` requests of the last ticks (drained by the renderer)
     pub mes: Vec<(Option<jring::JrArea>, i16)>,
+    /// `HitArea` / `HitBar` flashes of the last ticks (drained by the renderer: `HitFx::ring_area_flash`)
+    pub flashes: Vec<JrEvent>,
+    /// `HNMSnd::PlaySE` / `SetSEEnd` of the ring (global ids, `true` = play), drained by the plugin
+    pub sounds: Vec<(u32, bool)>,
     pub kind: i32,
     ticks: u32,
 }
@@ -187,7 +191,7 @@ impl FieldRingRun {
         }
         ring.ring_active(&mut rng);
         ring.events.clear();
-        FieldRingRun { ring, rng, phase: Phase::Start, ms: 0.0, result: None, dim: 0, trail: [0.0; 9], trail_i: 0, mes: vec![], kind, ticks: 0 }
+        FieldRingRun { ring, rng, phase: Phase::Start, ms: 0.0, result: None, dim: 0, trail: [0.0; 9], trail_i: 0, mes: vec![], flashes: vec![], sounds: vec![], kind, ticks: 0 }
     }
 
     /// One 60 Hz frame with the face buttons pressed this frame.  Returns the result once the whole sequence is over.
@@ -206,6 +210,9 @@ impl FieldRingRun {
                     }
                 }
                 JrEvent::HitMes { area, variant } => self.mes.push((area, variant)),
+                e @ (JrEvent::HitArea { .. } | JrEvent::HitBar { .. }) => self.flashes.push(e),
+                JrEvent::Se(id) => self.sounds.push((id, true)),
+                JrEvent::SeEnd(id) => self.sounds.push((id, false)),
                 _ => {}
             }
         }
@@ -273,7 +280,8 @@ impl FieldRingRun {
                 return 0;
             }
             for a in r.areas.iter().filter(|a| a.kind.is_some() && a.tag == c as i16) {
-                if inside(a) {
+                // aim at the middle half of the area (the pointer stops one turn later, a few tenths of a degree off)
+                if jring::easy_area_hit_check(ang, a.start + a.width / 4, a.width / 2) {
                     return jring::PAD_CIRCLE;
                 }
             }
@@ -317,6 +325,13 @@ pub struct FieldRingScreen {
     pub seed: u64,
     /// the results of every ring played (dev drive / tests)
     pub log: Vec<(String, i32, i32)>,
+    /// control states 1..2: the frame capture (`CScrCapture`) the ring waits for -- the screenshot slot and the frames waited
+    capture_slot: Option<std::sync::Arc<std::sync::Mutex<Option<Image>>>>,
+    capture_wait: u32,
+    /// the captured field picture (a `UiTextures` id), drawn under the dim until the hold ends (`CScrCapture::Delete` + `CField::Dsp`)
+    pub capture: Option<sh2_menu::gfx::TextureId>,
+    /// the looping ring sounds started and not released yet
+    loops: Vec<u32>,
 }
 
 pub struct FieldRingPlugin;
@@ -337,19 +352,61 @@ impl Plugin for FieldRingPlugin {
     }
 }
 
-fn clear_ring(mut scr: ResMut<FieldRingScreen>, mut canvas: ResMut<UiCanvas>) {
+/// Release what a ring holds: its looping sounds and the captured picture.
+fn release(scr: &mut FieldRingScreen, textures: Option<&mut sh2_menu::bevy_ui::UiTextures>) {
+    for id in scr.loops.drain(..) {
+        sh2_audio::post(sh2_audio::AudioRequest::StopGlobalSe { id });
+    }
+    if let (Some(t), Some(tex)) = (scr.capture.take(), textures) {
+        tex.remove(t);
+    }
+    scr.capture_slot = None;
+    scr.capture_wait = 0;
+}
+
+fn clear_ring(mut scr: ResMut<FieldRingScreen>, mut canvas: ResMut<UiCanvas>, textures: Option<ResMut<sh2_menu::bevy_ui::UiTextures>>) {
     scr.run = None;
     scr.hits.ring_mes_clear();
+    release(&mut scr, textures.map(|t| t.into_inner()));
     canvas.clear(RING_LAYER);
 }
 
+/// The 4:3 picture of a window screenshot as RGBA (`present_rect` crop, BGRA swapped).
+fn capture_rgba(img: &Image) -> Option<(Vec<u8>, u32, u32)> {
+    let (w, h) = (img.width(), img.height());
+    let data = img.data.as_ref()?;
+    if w == 0 || h == 0 || data.len() < (w * h * 4) as usize {
+        return None;
+    }
+    let bgra = matches!(img.texture_descriptor.format, bevy::render::render_resource::TextureFormat::Bgra8Unorm | bevy::render::render_resource::TextureFormat::Bgra8UnormSrgb);
+    let (x0, y0, cw, ch) = sh2_gfx::bevy::screen::present_rect(w, h, false);
+    let (x0, y0) = (x0.min(w - 1), y0.min(h - 1));
+    let (cw, ch) = (cw.min(w - x0), ch.min(h - y0));
+    let mut out = Vec::with_capacity((cw * ch * 4) as usize);
+    for y in 0..ch {
+        let row = (((y0 + y) * w + x0) * 4) as usize;
+        for px in data[row..row + (cw * 4) as usize].chunks_exact(4) {
+            if bgra {
+                out.extend_from_slice(&[px[2], px[1], px[0], 255]);
+            } else {
+                out.extend_from_slice(&[px[0], px[1], px[2], 255]);
+            }
+        }
+    }
+    Some((out, cw, ch))
+}
+
 /// Start the ring when `RingControl` waits for it, step it with the pad, post the result, draw it.
+#[allow(clippy::too_many_arguments)]
 pub fn field_ring_tick(
+    mut commands: Commands,
     pad: Res<GamePad>,
     rt: Option<ResMut<FieldRuntime>>,
     mut scr: ResMut<FieldRingScreen>,
     mut canvas: ResMut<UiCanvas>,
     art: Option<Res<sh2_battle::hud_hits::HitArt>>,
+    mut textures: Option<ResMut<sh2_menu::bevy_ui::UiTextures>>,
+    mut images: Option<ResMut<Assets<Image>>>,
 ) {
     let Some(mut rt) = rt else { return };
     let scr = &mut *scr;
@@ -362,6 +419,18 @@ pub fn field_ring_tick(
                 log::info!("field ring: {} kind {} lap {} ms arg {} spec \"{}\"", rt.map, r.kind, r.lap_ms, r.arg, r.spec);
                 scr.run = Some(FieldRingRun::new(&r, scr.seed));
                 scr.hits.ring_mes_clear();
+                // control 1..2: freeze the field picture (`CScrCapture` on OT layer 10) before the ring starts
+                if images.is_some() && textures.is_some() {
+                    let slot = std::sync::Arc::new(std::sync::Mutex::new(None));
+                    let s2 = slot.clone();
+                    commands.spawn(bevy::render::view::screenshot::Screenshot::primary_window()).observe(move |ev: On<bevy::render::view::screenshot::ScreenshotCaptured>| {
+                        if let Ok(mut g) = s2.lock() {
+                            *g = Some(ev.image.clone());
+                        }
+                    });
+                    scr.capture_slot = Some(slot);
+                    scr.capture_wait = 0;
+                }
             }
             None => {
                 // `RingControl` without a `SetRing`: retail's `RingResult` would never answer; do not hang the script
@@ -370,9 +439,28 @@ pub fn field_ring_tick(
             }
         }
     }
-    let Some(run) = scr.run.as_mut() else {
+    if scr.run.is_none() {
         return;
-    };
+    }
+    // waiting for the capture (a few frames; give up after 12 and run over the live field)
+    if let Some(slot) = scr.capture_slot.clone() {
+        let got = slot.lock().ok().and_then(|mut g| g.take());
+        scr.capture_wait += 1;
+        match got {
+            Some(img) => {
+                scr.capture_slot = None;
+                if let (Some((rgba, w, h)), Some(tex), Some(imgs)) = (capture_rgba(&img), textures.as_deref_mut(), images.as_deref_mut()) {
+                    scr.capture = Some(tex.add(imgs, w, h, rgba));
+                }
+            }
+            None if scr.capture_wait < 12 => return,
+            None => {
+                log::warn!("field ring: no frame capture, the field stays live behind the ring");
+                scr.capture_slot = None;
+            }
+        }
+    }
+    let Some(run) = scr.run.as_mut() else { return };
     let press = match scr.auto {
         Some(c) => run.auto_press((c > 0).then_some(c)),
         None => pad.press(),
@@ -381,11 +469,46 @@ pub fn field_ring_tick(
     for (area, variant) in run.mes.drain(..) {
         scr.hits.ring_mes(&run.ring, area.as_ref(), variant);
     }
+    for e in run.flashes.drain(..) {
+        scr.hits.ring_area_flash(&run.ring, &e);
+    }
+    // `HNMSnd::PlaySE(id)` / `SetSEEnd(id)`: global ids (0x2001.. = SYSREG bank 0, 0x0300_0000 the event-ring loop)
+    for (id, play) in run.sounds.drain(..) {
+        if play {
+            sh2_audio::post(sh2_audio::AudioRequest::PlayGlobalSe { id });
+            if matches!(id, jring::se::RING_LOOP | jring::se::RING_LOOP_EVENT) && !scr.loops.contains(&id) {
+                scr.loops.push(id);
+            }
+        } else {
+            sh2_audio::post(sh2_audio::AudioRequest::StopGlobalSe { id });
+            scr.loops.retain(|l| *l != id);
+        }
+    }
     scr.hits.tick_ring_mes(1.0 / 60.0);
+    // the hold is over: the capture goes, the live field shows through the fade (control 6 -> 7)
+    if matches!(run.phase, Phase::FadeOut | Phase::Done) {
+        if let (Some(t), Some(tex)) = (scr.capture.take(), textures.as_deref_mut()) {
+            tex.remove(t);
+        }
+    }
     {
         let mut g = canvas.begin(RING_LAYER);
-        if run.dim > 0 {
-            bevy_ui::rect(&mut g, 0.0, 0.0, bevy_ui::VIRT_W, bevy_ui::VIRT_H, Rgba::new(0, 0, 0, run.dim));
+        if let Some(t) = scr.capture {
+            use sh2_menu::gfx::{Blend, DrawCmd, MenuGfx, Vertex};
+            // the fader darkens the captured frame in gamma space (`x * (1 - a)`); the vertex grey multiplies in linear light, so
+            // (1 - a)^0.8 instead of (1 - a) (sRGB is not a pure power curve: a = 0.5 then gives 65 -> ~32 on the field, measured 26 with 0.5)
+            let k = (0x80 as f32 * (1.0 - run.dim as f32 / 128.0).powf(0.8)).round() as u8;
+            let c = Rgba::new(k, k, k, 0x80);
+            let v = |x: f32, y: f32, u: f32, w: f32| Vertex { pos: Vec2::new(x, y), uv: Vec2::new(u, w), color: c };
+            let (vw, vh) = (bevy_ui::VIRT_W, bevy_ui::VIRT_H);
+            g.draw(DrawCmd::Quad { tex: Some(t), v: [v(0.0, 0.0, 0.0, 0.0), v(0.0, vh, 0.0, 1.0), v(vw, 0.0, 1.0, 0.0), v(vw, vh, 1.0, 1.0)], blend: Blend::Alpha });
+        }
+        if run.dim > 0 && scr.capture.is_none() {
+            // over the live field (fade back, or no capture): the GS darkens in gamma space (`dst * (1 - a)`), the canvas blends in linear
+            // light; black at a' = 1 - (1 - a)^1.5 is the best single alpha for the dark field colours (a = 0.5: 64 -> ~36, 24 -> ~11;
+            // exact would be 32 / 12)
+            let a = 1.0 - (1.0 - run.dim as f32 / 128.0).powf(1.5);
+            bevy_ui::rect(&mut g, 0.0, 0.0, bevy_ui::VIRT_W, bevy_ui::VIRT_H, Rgba::new(0, 0, 0, (a * 128.0).round() as u8));
         }
         if let Some(a) = art.as_deref().filter(|a| a.ring_ok()) {
             sh2_battle::hud_hits::draw_ring(&mut g, a, &run.ring, &run.trail, run.trail_i);
@@ -398,6 +521,7 @@ pub fn field_ring_tick(
         rt.st.ring_answer = Some(v);
         scr.run = None;
         scr.hits.ring_mes_clear();
+        release(scr, textures.as_deref_mut());
         canvas.clear(RING_LAYER);
     }
 }
@@ -491,7 +615,7 @@ fn ring_dev_driver(
         return;
     }
     if !dev.called {
-        if f.cover.clear() && f.st.ticks > 120 && !f.st.msg_active() && !f.st.event_running {
+        if f.cover.clear() && f.st.ticks > 120 && !f.st.msg_active() && !f.st.event_running && f.st.mces.state == 0 {
             dev.called = true;
             log::info!("ring dev: calling map event {} (arg 1)", dev.event);
             if f.vm.call_event(dev.event, &[1]) {
@@ -533,7 +657,7 @@ fn ring_dev_driver(
             commands.spawn(bevy::render::view::screenshot::Screenshot::primary_window()).observe(bevy::render::view::screenshot::save_to_disk(path));
         }
     }
-    let end = dev.done_at.map(|d| t > d + 60).unwrap_or(false) || t > 60 * 120;
+    let end = dev.done_at.map(|d| t > d + 60).unwrap_or(false) || t > 60 * 300;
     if end {
         log::info!("ring dev: finished ({:?})", scr.log);
         exit.write(AppExit::Success);
@@ -678,3 +802,4 @@ mod live_cmp {
         panic!("no result");
     }
 }
+

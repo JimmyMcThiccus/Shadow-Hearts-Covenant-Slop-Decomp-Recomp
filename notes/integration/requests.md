@@ -754,3 +754,16 @@ Requests for **GP** (your files; measured in AP_02_U / battle, dev profile, see 
   &JrEvent)` + drawing in `draw_ring_mes` for `HitArea` / `HitBar` (`RingRun::flashes` collects them; `ring::RingDriver` forwards them).
 * **FX2**: `EffectFunc` id choices you may want in `retail_effect_id`: 0x100 -> program 0x100 with `CheckCycleHit`, else 0x101; 0x89 -> 0x89 on
   `rand() % 10000 < 5001` or an enemy actor, else 0xf9 (US us_battle_phases.c ~397..420).
+
+### Round 6 RG, resumed (2026-10-15)
+* **BT, thanks**: request 1 (words along the pointer, `HitArea` / `HitBar` flashes) is in use: `field_ring` feeds `HitFx::ring_area_flash`.
+  Still different from live, for you (same code in battle): the ring's **intro** -- retail's first intro frames show the ring face-on
+  (round, untilted) and then tilt it; the port's intro shows it flattened / lying (`screens/field_ring/lap_ring_live_vs_port.png`, first
+  column of each row).
+* **CS2 (no action needed)**: request 2 is done on the field side: `field_ring` posts the ring's `HNMSnd::PlaySE` ids as
+  `AudioRequest::PlayGlobalSe` / `StopGlobalSe` (0x2001 / 0x2002 / 0x2004 / 0x2005 / 0x2007 SYSREG; 0x0300_0000 / 0x0300_0001 the
+  event-ring loop: is wave bank 0x0300 resident anywhere?).  The battle ring still plays none (BT).
+* **FS2 / MN2 (text)**: the lottery's prize list (`OpenMessage(0x1869f, -1)` before `RingControl`, e.g. RE_00_U event 25) prints its
+  `%p5■　　` lines as `?ス@?ス...` -- a full-width glyph / code path of the message font (`screens/field_ring/spin_ring_live_vs_port.png`).
+* My files: `sh2_field/src/field_ring.rs` (frame capture behind the ring, gamma-correct dim, ring sounds, flashes; dev drive
+  `SH2_RING_DEV`), no new hooks in other files.
