@@ -805,3 +805,7 @@ Details in `notes/integration/r6_gpa.md`.  Changes other owners should know abou
   its doc mentions key items it does not merge); `cmd.rs` is CRLF in the working copy, LF in git (whole-file diff for 3 lines);
   fixtures `mi_02_u_keys.walk` / `td_22_u_power.walk` are unused.
 * **FX2**: `effects/btlin.rs` seeds the intro cracks from `SystemTime` (the only run-to-run randomness left under `SH2_FIXED_DT`).
+* **BT (battle choreography, done in `choreo.rs` / `models.rs`, files had no uncommitted edits)**: attackers no longer run home after a
+  physical attack and knocked-back fighters stay where the push ends (retail, user-confirmed: only attacks and hits move fighters; Combo
+  regroups).  `BattleModel::home` and `BattleRuntime::positions` now follow the fighter's current spot.  `Act::Return` is only used by
+  `go_home` (the combo leader after its walk).  Notes: `battle_runup_live.md` "No run home".

@@ -44,3 +44,12 @@ Recorded every `BtlChr` (position +0xb0, heading +0xd4) of all six fighters and 
 * Hypothesis (not proven): the cut to mode 19 is triggered at ~33-35 units from the target; the planner (`HomingMoveEX`) normally steers around obstacles with arcs, and the jump is the blocked-lane case where it re-seats the runner on the other side.  The port's `run_path` (one waypoint detour) never teleports; this could be matched by starting the target-side leg at the camera cut, or left as is since the cut hides it.
 * **Knock-back confirmed again on Run B**: Revenant 4 slid from z = 3.2 to 10.8 = 7.6 units over the same 10 frames, directly away from the attacker (+z), no initial extra step (the extra 1.3 units seen against Revenant 1 in run 5 did not repeat; its cause is unknown).
 * End of turn: at phase 3 step 0 (camera mode 7) the attacker's position changes in **one frame**, with no run back in the data: (-25.7, 14.0) -> (-7.8, -26.8) after run A and (24.9, -9.0) -> (-11.6, -50.2) after run B.  Neither equals the starting row (-8.3, -31.7) / (-7.6, -32.7) and he stays there for the rest of the 12 s recording (turn start / next menu), so the destination rule (and whether the exact home is restored later) is **not** understood; only 'there is no visible run-home leg in the BtlChr data' is established.  The port's `Act::Return` run-home is therefore unverified against retail.  The struck enemy stays displaced (it is not pushed back).
+
+## No run home (2026-10-15, round 6 GPA)
+User-confirmed against the US game: a fighter's position changes **only** through its own physical attack (it runs up, swings and stays there)
+and through being hit (the knock-back above, stays displaced); there is no run back to the slot after an attack, and fighters regroup only
+through Combo.  Consistent with the live data above (no run-home leg in `BtlChr`).  The port now ends an attack with `Choreo::stay_here` (the
+spot becomes the fighter's home, heading kept) instead of `Act::Return`, a finished knock-back also becomes the new home, and `models.rs`
+keeps `BattleModel::home` / `facing` and `BattleRuntime::positions` on the current spot (targets, combos and Gathering use it).
+Still open: the one-frame re-seat at phase 3 step 0 measured above (after runs A / B) is not reproduced; it did not move the fighter back
+to its row either.

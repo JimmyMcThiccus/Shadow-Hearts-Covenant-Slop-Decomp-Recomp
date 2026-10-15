@@ -1015,6 +1015,12 @@ pub fn drive_battle_models(
         }
         m.pos = m.ch.pos;
         m.yaw = m.ch.yaw;
+        // the fighter's place moves with its attacks and knock-backs (`Choreo::stay_here`): targeting, combos and Gathering use the current one
+        m.home = m.ch.home;
+        m.facing = m.ch.facing;
+        if let Some(p) = rt.positions.get_mut(m.chr) {
+            *p = m.ch.home;
+        }
         tf.translation = m.pos;
         tf.rotation = Quat::from_rotation_y(m.yaw);
         tf.scale = Vec3::splat(m.ch.scale.max(0.001));

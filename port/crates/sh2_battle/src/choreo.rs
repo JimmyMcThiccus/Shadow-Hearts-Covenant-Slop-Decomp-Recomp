@@ -640,12 +640,14 @@ impl Choreo {
         true
     }
 
-    fn start_return(&mut self, ms: &dyn MotionSet) {
-        let obs: Vec<(Vec3, f32)> = self.obstacles.iter().copied().filter(|(p, _)| (p.with_y(0.0) - self.pos.with_y(0.0)).length() > 1.0 && (p.with_y(0.0) - self.home.with_y(0.0)).length() > 1.0).collect();
-        let path = run_path(self.pos, self.home, self.radius, &obs, self.arena);
-        let v = ms.root_speed(names::DASH).max(90.0);
-        let dur = run_time(path_len(&path), v).clamp(0.2, 1.4);
-        self.set(Act::Return { path, dur });
+    /// The end of a physical attack.  Retail has no run home: the attacker stays where the swing ended, still facing the target, and that is its
+    /// place from now on (positions change only by attacking and by being hit; the combo walk regroups -- user-confirmed against the US game,
+    /// and live: no run-home leg in the `BtlChr` data, notes/integration/battle_runup_live.md).  Round 6 GPA (was a timed run back to the slot).
+    fn stay_here(&mut self, out: &mut Frame) {
+        self.home = self.pos;
+        self.facing = Vec3::new(self.yaw.sin(), 0.0, self.yaw.cos());
+        self.set(Act::Idle);
+        out.events.push(Ev::ActionOver);
     }
 
     /// The fighter stands away from its slot while idle (a combo leader that waited for its partner): run back.
@@ -681,6 +683,10 @@ impl Choreo {
             self.pos += p.step(dt);
             if p.finished() {
                 self.push = None;
+                // the struck fighter stays where the push left it (retail: no walk back; only attacks and hits move fighters)
+                if matches!(self.act, Act::Idle | Act::Hit { .. } | Act::GuardHit) {
+                    self.home = self.pos;
+                }
             }
         }
         let idle = idle_name(ms, w.hp_frac);
@@ -755,8 +761,8 @@ impl Choreo {
                         self.set(Act::Finish { name: can });
                         want = Some((can.into(), 0.1));
                     } else {
-                        self.start_return(ms);
-                        want = Some((names::DASH.into(), 0.1));
+                        self.stay_here(&mut out);
+                        want = Some((idle.into(), 0.15));
                     }
                 } else {
                     want = Some((n.into(), 0.08));
@@ -764,8 +770,8 @@ impl Choreo {
             }
             Act::Finish { name } => {
                 if (anim.finished && playing(name) && self.t > 0.05) || self.t > STEP_TIMEOUT {
-                    self.start_return(ms);
-                    want = Some((names::DASH.into(), 0.1));
+                    self.stay_here(&mut out);
+                    want = Some((idle.into(), 0.15));
                 } else {
                     want = Some((name.into(), 0.1));
                 }
@@ -1126,7 +1132,7 @@ pub mod tests {
     }
 
     #[test]
-    fn attack_runs_in_swings_hits_and_returns() {
+    fn attack_runs_in_swings_hits_and_stays() {
         let f = Fake::party();
         let mut p = Player::new(&f);
         let mut c = party();
@@ -1138,12 +1144,16 @@ pub mod tests {
         let (evs, names) = run(&mut c, &f, &mut p, 4.0, 1.0, false, false);
         let kinds: Vec<&Ev> = evs.iter().map(|e| &e.1).collect();
         assert_eq!(kinds, vec![&Ev::Arrived, &Ev::HitFrame(0), &Ev::ActionOver], "{evs:?}");
-        // dash, swing at the first MosEvent (0.3 s after the swing began), dash back, idle
+        // dash, swing at the first MosEvent (0.3 s after the swing began), idle where the swing ended (retail: no run back)
         // one hit of three: the swing is cut at the first `MosCncel`, `can1` closes it
-        assert_eq!(names, vec!["dsh", "atck", "can1", "dsh", "idla"]);
+        assert_eq!(names, vec!["dsh", "atck", "can1", "idla"]);
         let (arrived, hit) = (evs[0].0, evs[1].0);
         assert!((hit - arrived - 0.3).abs() < 0.05, "hit {hit} arrived {arrived}");
+        // the attacker stays near the target, and that spot is its place from now on
+        let start = Vec3::new(-10.0, 0.0, -40.0);
         assert!((c.pos - c.home).length() < 0.01 && c.act == Act::Idle);
+        assert!((c.pos - start).length() > 30.0 && (c.pos - Vec3::new(20.0, 0.0, 30.0)).length() < 40.0, "pos {:?}", c.pos);
+        assert!(!c.displaced(), "nothing sends it back");
         assert!(!c.holding_attack() && !c.busy());
     }
 
