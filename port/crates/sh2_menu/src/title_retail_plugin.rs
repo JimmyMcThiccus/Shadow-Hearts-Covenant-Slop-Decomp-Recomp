@@ -851,19 +851,26 @@ fn image_from(images: &mut Assets<Image>, w: u32, h: u32, rgba: Vec<u8>) -> Hand
 /// The swirl textures (#13..#18) are white strokes on black.  `mSetupTitleWin` draws them with `setBlendMode(1)` = `ALPHA_1 0x48` = `Cs*As + Cd`
 /// (**additive**, `getPacket__6prim2DFv` 0x003da1f0 maps blend mode 0 / 1 / 2 to ALPHA_1 0x44 / 0x48 / 0x42 = alpha / additive / subtractive; an earlier
 /// reading of this table as "subtractive" made the strokes dark, which the real frame disproves: strokes are *lighter* than the mist) with colour
-/// (0x7f, 0x7f, 0x7f) and alpha 0x19.  Bevy UI has no additive blend, but the backdrop is the pale mist (~220..255), so `Cd + Cs*a` (clamped) is
-/// reproduced by alpha-blending white with alpha `luminance * SWIRL_ALPHA`: `Cd + (255 - Cd) * lum * 0.5` agrees with the clamped additive result
-/// within a few levels over the mist's range.  `SWIRL_ALPHA` = 0.5 was fitted to the real capture (`notes/integration/menu_m1.md`: the capture shows
-/// +17 / 255 on a 203 / 255 mist where the 0x19 / 128 alpha predicts +33; the factor between them is not explained by the decompilation).
-pub const SWIRL_ALPHA: f32 = 0.5;
+/// (0x7f, 0x7f, 0x7f) and alpha 0x19.  Bevy UI has no additive blend, but the backdrop is the pale mist (~200..255), so `Cd + Cs*a` (clamped) is
+/// reproduced by alpha-blending white with alpha `luminance * SWIRL_ALPHA`: `Cd + (255 - Cd) * lum * k`, which the UI now really computes on display
+/// values (gamma-space compositing, round 6 GPA).  `SWIRL_ALPHA` = 1.0 was fitted (round 6 GPA) against 17 live US title frames (PCSX2, 4..20 s after
+/// the title appears) versus port frames at the same swirl time (`SH2_DRIVE`, `SH2_FIXED_DT=60`, `SH2_SWIRL_ALPHA` 0 / 0.5 / 1 / 1.27): the swirl
+/// region's brightness distribution matches at 1.0 (live p25 / p50 / mean 204 / 229 / 219.6, port 205 / 229 / 220.3; 0.5 gave 204 / 221 / 218.1).
+/// The earlier 0.5 (`notes/integration/menu_m1.md`, "+17 on a 203 mist") was fitted under linear-light UI blending.
+pub const SWIRL_ALPHA: f32 = 1.0;
+/// [`SWIRL_ALPHA`], or `SH2_SWIRL_ALPHA=<f>` (dev knob for fitting the strength against live captures).
+pub fn swirl_alpha() -> f32 {
+    std::env::var("SH2_SWIRL_ALPHA").ok().and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.0..=4.0).contains(v)).unwrap_or(SWIRL_ALPHA)
+}
 fn ring_tint(rgba: &[u8]) -> Vec<u8> {
+    let k = swirl_alpha();
     let mut out = rgba.to_vec();
     for p in out.chunks_exact_mut(4) {
         let lum = (p[0] as u32 + p[1] as u32 + p[2] as u32) / 3;
         p[0] = 255;
         p[1] = 255;
         p[2] = 255;
-        p[3] = (lum as f32 * SWIRL_ALPHA) as u8;
+        p[3] = (lum as f32 * k).min(255.0) as u8;
     }
     out
 }
