@@ -38,6 +38,8 @@ pub struct FieldTables {
     pub rd_num: [u8; 11],
     /// `PC_L`-independent name lookup (kind, index) -> Shift-JIS bytes, built from `SSHMES` (optional)
     pub names: Option<Arc<dyn Fn(u8, u32) -> Option<Vec<u8>> + Send + Sync>>,
+    /// the retail `SSHMES.NA` / `SSHDAT.NA` pair (`GetRegDat` records for `GetFieldData(0x26)`), `(mes, dat)`
+    pub us_rd: Option<Arc<(Vec<u8>, Vec<u8>)>>,
 }
 
 impl Default for FieldTables {
@@ -48,6 +50,7 @@ impl Default for FieldTables {
             param_chg: [1, 3, 5, 0x12, 0, 0, 0, 2, 4, 6],
             rd_num: [0, 9, 6, 7, 8, 0xd, 0x11, 0xb, 0x10, 0, 0xa],
             names: None,
+            us_rd: None,
         }
     }
 }
@@ -2526,6 +2529,29 @@ impl FieldHost<'_> {
             }
             // 0x2e: the GS chunk word +0x46 (US 0x003f4fe0(-2) = read)
             0x2e => self.session.as_deref_mut().map(|s| gs_word46(s, -2)).unwrap_or(-1),
+            // 0x26: the pit-fight (Wolf Bout) table, US 0x004fc418: `a` = mode | record << 8 | field << 16.  Mode 0: the number of
+            // `GetRegDat(0x53)` records; 1: string `GetRegDat(0x2d, record)` (a host pointer); 2: a field of record `GetRegDat(0x53, record)`
+            // ([`pit_fight_field`])
+            0x26 => {
+                let Some(rd) = self.tables().us_rd.clone() else { return -1 };
+                let Some(db) = sh2_core::regdat::UsRegDat::new(&rd.0, &rd.1) else { return -1 };
+                let (mode, rec, field) = (a & 0xff, ((a >> 8) & 0xff) as usize, (a >> 16) & 0xff);
+                match mode {
+                    0 => db.count(0x53, 0).map(|n| n as i32).unwrap_or(-1),
+                    1 => match db.string(0x2d, rec, -1) {
+                        Some(bytes) => {
+                            let end = bytes.iter().position(|&c| c == 0).unwrap_or(bytes.len());
+                            let p = sh2_script::memory::SEG_HOST + ctx.mem.host.len() as u32;
+                            ctx.mem.host.extend_from_slice(&bytes[..end]);
+                            ctx.mem.host.push(0);
+                            p as i32
+                        }
+                        None => -1,
+                    },
+                    2 => pit_fight_field(&db, rec, field),
+                    _ => -1,
+                }
+            }
             // 0x36: always 2 (retail); 0x37: availability bits of world-map point `a` (`WM` chunk byte & 3)
             0x36 => 2,
             0x37 => self
@@ -3387,5 +3413,27 @@ mod tests {
         assert!((b[2] + 50.0).abs() < 1e-2, "{b:?}");
         let c = angles_target([0.0; 3], 25.0, 70.0, 50.0);
         assert!(((c[0] * c[0] + c[1] * c[1] + c[2] * c[2]).sqrt() - 50.0).abs() < 1e-2);
+    }
+}
+
+/// `GetFieldData(0x26, 2 | record << 8 | field << 16)` (US 0x004fc418, mode 2): a field of the pit-fight record `GetRegDat(0x53, record)`
+/// (jump table 0x610b70: 1 = +6 & 7, 2 = u16 +0x10, 3 = s16 +0x12, 4 = s8 +0x16, 5 = s16 +0x14, 6 = u32 +8, 7 = u32 +0xc, 8 = s8 +0x17,
+/// 9 = u32 +0x18; 0 / others / no record = -1).
+pub fn pit_fight_field(db: &sh2_core::regdat::UsRegDat, rec: usize, field: i32) -> i32 {
+    let Some(r) = db.record(0x53, rec, -1) else { return -1 };
+    let u8_ = |o: usize| r.get(o).copied().unwrap_or(0);
+    let u16_ = |o: usize| u16::from_le_bytes([u8_(o), u8_(o + 1)]);
+    let u32_ = |o: usize| u32::from_le_bytes([u8_(o), u8_(o + 1), u8_(o + 2), u8_(o + 3)]);
+    match field {
+        1 => (u8_(6) & 7) as i32,
+        2 => u16_(0x10) as i32,
+        3 => u16_(0x12) as i16 as i32,
+        4 => u8_(0x16) as i8 as i32,
+        5 => u16_(0x14) as i16 as i32,
+        6 => u32_(8) as i32,
+        7 => u32_(0xc) as i32,
+        8 => u8_(0x17) as i8 as i32,
+        9 => u32_(0x18) as i32,
+        _ => -1,
     }
 }

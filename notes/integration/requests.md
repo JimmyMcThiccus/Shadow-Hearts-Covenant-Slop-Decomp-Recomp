@@ -773,6 +773,12 @@ Requests for **GP** (your files; measured in AP_02_U / battle, dev profile, see 
   are Shift-JIS (RE_00_U data 0x23d5 `$%p5■　　%p0`).  `CScript::format` now works on bytes (`Memory::cstr_bytes`), copies a Shift-JIS pair
   whole and leaves non-conversion `%` codes (`%p5`, `%t0`) as written (test `cscript::sprintf_tests`).  No menu-side change needed (MN2).
 
+* **GPA (your review, done)**: GT_10 test now checks `host::pit_fight_field` against `GetRegDat(0x53)`; `SH2_WALK_QUEUE` default 256;
+  `minigame_press` only while a TD_14_U lane is up; `merge_bag` 0x40 item slots; `cmd.rs` / `cscript.rs` / `memory.rs` back to LF;
+  `mi_02_u_keys.walk` is used by the new Mikasa plan test, `td_22_u_power.walk` moved to the scratchpad.
+* **Coordinator / QA**: Mikasa (0x3f) is played from `sh2_field/tests/walk/mi_02_u_keys.plan` (route from the user's lparchive reference);
+  `Walker::plan` / `SH2_WALK_PLAN=MAP:text;..` scripts any puzzle the same way, `examples/walk_probe` finds the action names.
+
 ## Round 6 MN2 (menus / meta screens, 2026-10-15)
 Small hooks in files other agents own (please keep them):
 * **FS2 `sh2_field/src/lib.rs`**: `pub mod menu_model; cmd_library_retail; cmd_ring_retail; cmd_sechar;`.

@@ -1,0 +1,60 @@
+# Mikasa two-party security keys (flag 0x3f), from mi_02_u_keys.walk: one walker step per line, MAP:text of the trial to take.
+# Route from the user's walkthrough reference (lparchive.org Shadow Hearts Covenant, update 76); action names found with walk_probe.
+# Use: SH2_WALK_PLAN="$(grep -v '^#' FILE | paste -sd';')" story_walk --load mi_02_u_keys.walk
+MI_02_U:talk slot 3
+MI_02_U:examine box 2 (ev 3) [1]
+MI_02_U:press pad 0x8000
+MI_11_U:enter box 1
+MI_10_U:enter box 0
+MI_09_U:talk slot 3
+MI_09_U:examine box 1 (ev 2) []
+MI_09_U:press pad 0x8000
+MI_02_U:examine box 2 (ev 3) [1]
+MI_02_U:enter box 3
+MI_03_U:enter box 1
+MI_04_U:enter box 1
+MI_06_U:examine box 2 (ev 4) []
+MI_06_U:press pad 0x8000
+MI_09_U:examine box 1 (ev 2) []
+MI_09_U:enter box 0
+MI_10_U:enter box 2
+MI_12_U:talk slot 3
+MI_12_U:enter box 0
+MI_10_U:enter box 1
+MI_11_U:examine box 3
+MI_17_U:examine box 1 (ev 2) []
+MI_17_U:press pad 0x8000
+MI_06_U:enter box 1
+MI_07_U:examine box 5 (ev 8) []
+MI_07_U:press pad 0x8000
+MI_17_U:examine box 0
+MI_11_U:enter box 1
+MI_10_U:enter box 0
+MI_09_U:examine box 1 (ev 2) []
+MI_09_U:press pad 0x8000
+MI_07_U:enter box 0
+MI_06_U:examine box 2 (ev 4) []
+MI_06_U:enter box 0
+MI_04_U:enter box 0
+MI_03_U:enter box 0
+MI_02_U:examine box 2 (ev 3) [1]
+MI_02_U:press pad 0x8000
+MI_09_U:examine box 1 (ev 2) [1]
+MI_09_U:enter box 0
+MI_10_U:enter box 1
+MI_11_U:enter box 2
+MI_13_U:examine box 2 (ev 4) []
+MI_13_U:press pad 0x8000
+MI_02_U:examine box 2 (ev 3) [1]
+MI_02_U:enter box 3
+MI_03_U:press pad 0x8000
+MI_13_U:examine box 2 (ev 4) []
+MI_13_U:press pad 0x8000
+MI_03_U:enter box 2
+MI_05_U:enter box 1
+MI_14_U:examine box 3 (ev 4) []
+MI_14_U:press pad 0x8000
+MI_13_U:enter box 1
+MI_14_U:talk slot 1
+MI_14_U:enter box 2
+MI_15_U:examine box 1

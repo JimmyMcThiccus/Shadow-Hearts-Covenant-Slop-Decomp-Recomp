@@ -1357,10 +1357,11 @@ impl CScript {
             }
             0xab => {
                 let dst = a(&self.mem, 0);
-                let fmt = self.mem.cstr(a(&self.mem, 1)).unwrap_or_default();
+                // byte-wise: the format strings and `%s` arguments are Shift-JIS (the lottery prize list's `%p5■　` lines came out as
+                // `?ス@` when this went through UTF-8)
+                let fmt = self.mem.cstr_bytes(a(&self.mem, 1)).unwrap_or_default();
                 let rest: Vec<u32> = (2..argc as u32).map(|i| a(&self.mem, i)).collect();
-                let s = self.format(&fmt, &rest);
-                let mut b = s.into_bytes();
+                let mut b = self.format(&fmt, &rest);
                 b.push(0);
                 let _ = self.mem.write(dst, &b);
                 ExResult::Void
@@ -1404,52 +1405,72 @@ impl CScript {
     }
 
     // JP: 0x002981d0 ifc_xprintf__7CScriptFPcPciP9_ParStack
-    fn format(&self, fmt: &str, args: &[u32]) -> String {
-        let mut out = String::new();
+    /// `sprintf` over raw bytes: `%[0][width][.prec](d|x|X|c|s|f)`; the trail byte of a Shift-JIS pair is copied as is.
+    fn format(&self, fmt: &[u8], args: &[u32]) -> Vec<u8> {
+        let mut out: Vec<u8> = Vec::new();
         let mut spec = String::new();
         let mut in_spec = false;
         let mut ai = 0usize;
-        for ch in fmt.chars() {
+        let mut i = 0usize;
+        while i < fmt.len() {
+            let ch = fmt[i];
+            i += 1;
+            if in_spec && !matches!(ch, b'0'..=b'9' | b'.' | b'-' | b'l' | b'h' | b'd' | b'x' | b'X' | b'c' | b's' | b'f') {
+                // not a conversion: a message control code such as `%p5` / `%t0` -- copied as written
+                out.extend_from_slice(spec.as_bytes());
+                in_spec = false;
+                spec.clear();
+                if ch == b'%' {
+                    in_spec = true;
+                    spec.push('%');
+                    continue;
+                }
+            }
             if in_spec {
-                spec.push(ch);
-                if matches!(ch, 'd' | 'x' | 'X' | 'c' | 's' | 'f') {
+                spec.push(ch as char);
+                if matches!(ch, b'd' | b'x' | b'X' | b'c' | b's' | b'f') {
                     let v = args.get(ai).copied().unwrap_or(0);
-                    if ai + 1 < args.len() || ai < args.len() {
+                    if ai < args.len() {
                         ai += 1;
                     }
                     let body = &spec[1..spec.len() - 1];
                     let (zero, width, prec) = parse_spec(body);
-                    let s = match ch {
-                        'd' => format!("{}", v as i32),
-                        'x' => format!("{:x}", v),
-                        'X' => format!("{:X}", v),
-                        'c' => ((v & 0xff) as u8 as char).to_string(),
-                        's' => self.mem.cstr(v).unwrap_or_default(),
-                        _ => format!("{:.*}", prec.unwrap_or(6), f32::from_bits(v) as f64),
+                    let s: Vec<u8> = match ch {
+                        b'd' => format!("{}", v as i32).into_bytes(),
+                        b'x' => format!("{:x}", v).into_bytes(),
+                        b'X' => format!("{:X}", v).into_bytes(),
+                        b'c' => vec![(v & 0xff) as u8],
+                        b's' => self.mem.cstr_bytes(v).unwrap_or_default(),
+                        _ => format!("{:.*}", prec.unwrap_or(6), f32::from_bits(v) as f64).into_bytes(),
                     };
-                    let pad = width.saturating_sub(s.chars().count());
-                    if zero && ch != 's' {
-                        if let Some(rest) = s.strip_prefix('-') {
-                            out.push('-');
-                            out.push_str(&"0".repeat(pad));
-                            out.push_str(rest);
+                    let pad = width.saturating_sub(s.len());
+                    if zero && ch != b's' {
+                        if let Some(rest) = s.strip_prefix(b"-") {
+                            out.push(b'-');
+                            out.extend(std::iter::repeat(b'0').take(pad));
+                            out.extend_from_slice(rest);
                         } else {
-                            out.push_str(&"0".repeat(pad));
-                            out.push_str(&s);
+                            out.extend(std::iter::repeat(b'0').take(pad));
+                            out.extend_from_slice(&s);
                         }
                     } else {
-                        out.push_str(&" ".repeat(pad));
-                        out.push_str(&s);
+                        out.extend(std::iter::repeat(b' ').take(pad));
+                        out.extend_from_slice(&s);
                     }
                     in_spec = false;
                     spec.clear();
                 }
-            } else if ch == '%' {
+            } else if ch == b'%' {
                 in_spec = true;
                 spec.clear();
                 spec.push('%');
             } else {
                 out.push(ch);
+                // Shift-JIS lead byte: copy the trail byte too (it may be any byte 0x40..0xfc)
+                if matches!(ch, 0x81..=0x9f | 0xe0..=0xfc) && i < fmt.len() {
+                    out.push(fmt[i]);
+                    i += 1;
+                }
             }
         }
         out
@@ -1469,4 +1490,18 @@ fn parse_spec(body: &str) -> (bool, usize, Option<usize>) {
         None => (rest, None),
     };
     (zero, w.parse::<usize>().unwrap_or(0), p)
+}
+
+#[cfg(test)]
+mod sprintf_tests {
+    use super::*;
+
+    #[test]
+    fn sprintf_keeps_shift_jis_bytes() {
+        let vm = CScript::new(16, 64, 1);
+        // `%p5■　%d` (■ = 81 a1, full-width space = 81 40)
+        let fmt = [b'%', b'p', b'5', 0x81, 0xa1, 0x81, 0x40, b'%', b'0', b'3', b'd'];
+        let out = vm.format(&fmt, &[7]);
+        assert_eq!(out, vec![b'%', b'p', b'5', 0x81, 0xa1, 0x81, 0x40, b'0', b'0', b'7']);
+    }
 }

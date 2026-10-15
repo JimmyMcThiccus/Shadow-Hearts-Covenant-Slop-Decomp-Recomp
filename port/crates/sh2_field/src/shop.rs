@@ -1057,7 +1057,8 @@ impl FieldScreen for ShopScreen {
                             }
                         }
                         2 => {
-                            io.open_menu = Some(CmdPage::Equipment);
+                            // retail: the member pick first (`CmdMenu` page 19, SECHAR), then the Equipment page
+                            io.open_menu = Some(if sh2_core::boot::is_retail() { CmdPage::SelectChar } else { CmdPage::Equipment });
                         }
                         _ => {
                             self.phase = Phase::Leaving;

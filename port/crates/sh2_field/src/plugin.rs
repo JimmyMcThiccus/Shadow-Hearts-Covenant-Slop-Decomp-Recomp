@@ -107,7 +107,7 @@ pub(crate) fn disc_root(cfg: Option<&AppConfig>) -> std::path::PathBuf {
 }
 
 /// Item / monster / PC name lookup for `GetFieldData(0x1c)` and `TreasureControl(2)` from `COMMON/SSHMES.*` (RegDat name kinds).
-fn name_lookup(pkb: &PkbSet) -> Option<std::sync::Arc<dyn Fn(u8, u32) -> Option<Vec<u8>> + Send + Sync>> {
+pub(crate) fn name_lookup(pkb: &PkbSet) -> Option<std::sync::Arc<dyn Fn(u8, u32) -> Option<Vec<u8>> + Send + Sync>> {
     // retail build: the English `.NA` pair first (its kinds are translated by `RegDat::name_any`)
     let retail = sh2_core::boot::is_retail();
     let pick = |names: &[&str]| names.iter().find_map(|n| pkb.read(n));
@@ -120,6 +120,14 @@ fn name_lookup(pkb: &PkbSet) -> Option<std::sync::Arc<dyn Fn(u8, u32) -> Option<
         let n = b.iter().position(|&c| c == 0).unwrap_or(b.len().min(0x40));
         Some(b[..n.min(0x40)].to_vec())
     }))
+}
+
+/// The retail `SSHMES.NA` / `SSHDAT.NA` pair (`FieldTables::us_rd`), `None` on the JP demo.
+pub(crate) fn us_regdat(pkb: &PkbSet) -> Option<std::sync::Arc<(Vec<u8>, Vec<u8>)>> {
+    let mes = pkb.read("COMMON/SSHMES.NA")?;
+    let dat = pkb.read("COMMON/SSHDAT.NA")?;
+    sh2_core::regdat::UsRegDat::new(&mes, &dat)?;
+    Some(std::sync::Arc::new((mes, dat)))
 }
 
 /// The `DTCH` data container (`TRES`, `BBTL` ...): `FIELD/FIELD_T.DAT` on the JP demo, `FIELD/FIELD.DAT` on the US retail disc (same format; without it
@@ -138,6 +146,7 @@ fn load_field_data(mut commands: Commands, cfg: Option<Res<AppConfig>>) {
                 tables.from_field_t(&d);
             }
             tables.names = name_lookup(&pkb);
+            tables.us_rd = us_regdat(&pkb);
             commands.insert_resource(FieldData { pkb, enc_table, tables: std::sync::Arc::new(tables) });
         }
         Err(e) => log::error!("field: cannot open disc at {}: {e}", root.display()),

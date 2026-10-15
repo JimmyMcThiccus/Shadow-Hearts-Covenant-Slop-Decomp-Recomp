@@ -52,8 +52,8 @@ pub fn apply_party_ops_system(rt: Option<ResMut<crate::plugin::FieldRuntime>>, d
 
 /// One case of the retail `BtlSaveSec::SetSceneInit(scene, ..)` (US 0x003bc710, 15 cases; read from the disassembly, see
 /// `notes/integration/r5_fs.md`): the bag the scenario uses (`BTL0+2`), whether that bag is cleared first, the party records created
-/// (`PCInit` / `PCAddInit`) and the `SCEN` row group applied (`RegDat 0x47`).  Cases 3, 4, 7, 9..13 only move flags / records between bags and
-/// are not reproduced yet.
+/// (`PCInit` / `PCAddInit`) and the `SCEN` row group applied (`RegDat 0x47`).  Cases 3, 4, 7, 9, 11..13 (party bits and bag merges) are
+/// in `scene_init`; case 10 (0x003bdb08) partly (see there).
 pub struct SceneCase {
     pub bag: Option<u8>,
     pub clear_bag: bool,
@@ -109,6 +109,87 @@ fn scene_init(data: &BattleData, session: &mut GameSession, scene: usize) -> Str
             }
             return "SceneInit(4): Karin rejoins with her equipment".into();
         }
+        // cases 7 / 9 (US 0x003bda90 / 0x003be7e0): bag 0, the other bag merged in (7 also ORs the "seen" bits first,
+        // 0x003bf8e0), every present record of 0..7 back in the party
+        7 | 9 => {
+            session.save.btl.data[BtlSave::OFF_BAG] = 0;
+            if scene == 7 {
+                merge_bag(session, true);
+            }
+            merge_bag(session, false);
+            for pc in 0..8u8 {
+                if pc_present(session, pc) {
+                    crate::host::set_pc_flag(session, pc, 2, true);
+                }
+            }
+            return format!("SceneInit({scene}): bag 0, the other bag merged in, records 0..7 in the party");
+        }
+        // case 10 (0x003bdb08): record 1's equipment is taken out of the current bag's counts, then bag 1 is cleared and becomes the
+        // current one ("seen" bits merged), and every other record leaves the party (record 1 alone stays).  Not reproduced: the key-item
+        // and skill-bit bookkeeping of record 1's +0x12e.. bytes and the call 0x003be870(1)
+        10 => {
+            if let Some(r) = session.save.btl.pc(1) {
+                let bag = session.save.btl.bag() as usize * BtlSave::BAG_STRIDE;
+                let mut take = |base: usize, idx: i8| {
+                    if idx >= 0 {
+                        if let Some(c) = session.save.btl.data.get_mut(base + bag + idx as usize) {
+                            *c = c.saturating_sub(1);
+                        }
+                    }
+                };
+                take(BtlSave::OFF_WEAPONS, r.weapon);
+                take(BtlSave::OFF_ARMOR, r.armor);
+                for a in r.accessories {
+                    take(BtlSave::OFF_ACCESSORIES, a);
+                }
+            }
+            session.save.btl.data[BtlSave::OFF_BAG] = 1;
+            let b1 = BtlSave::BAG_STRIDE;
+            for base in [BtlSave::OFF_ITEMS, BtlSave::OFF_WEAPONS, BtlSave::OFF_ARMOR, BtlSave::OFF_ACCESSORIES] {
+                let n = match base {
+                    BtlSave::OFF_ITEMS => 0x40,
+                    BtlSave::OFF_WEAPONS => 0x60,
+                    BtlSave::OFF_ARMOR => 0x30,
+                    _ => 0x50,
+                };
+                for k in 0..n {
+                    if let Some(x) = session.save.btl.data.get_mut(base + b1 + k) {
+                        *x = 0;
+                    }
+                }
+            }
+            merge_bag(session, true);
+            for pc in 0..8u8 {
+                if pc != 1 && pc_present(session, pc) {
+                    crate::host::set_pc_flag(session, pc, 2, false);
+                }
+            }
+            return "SceneInit(10): record 1 alone, bag 1 cleared and current".into();
+        }
+        // case 11 (0x003be250): the stash list (`BTL0+0x20bc` {id, count} pairs, 0x003bf5c0) goes into the other bag -- not reproduced
+        // (the working copy has no stash list); record 1 back in the party
+        11 => {
+            crate::host::set_pc_flag(session, 1, 2, true);
+            return "SceneInit(11): record 1 in the party (stash list not reproduced)".into();
+        }
+        // case 12 (0x003be278): bag 0, "seen" bits merged; present records 0..7 in the party except 1 and 7
+        12 => {
+            session.save.btl.data[BtlSave::OFF_BAG] = 0;
+            merge_bag(session, true);
+            for pc in 0..8u8 {
+                if pc_present(session, pc) {
+                    crate::host::set_pc_flag(session, pc, 2, pc != 1 && pc != 7);
+                }
+            }
+            return "SceneInit(12): bag 0, records 0..7 in the party except 1 and 7".into();
+        }
+        // case 13 (0x003be320): the other bag merged in; records 1 and 7 in the party
+        13 => {
+            merge_bag(session, false);
+            crate::host::set_pc_flag(session, 1, 2, true);
+            crate::host::set_pc_flag(session, 7, 2, true);
+            return "SceneInit(13): the other bag merged in, records 1 and 7 in the party".into();
+        }
         _ => {}
     }
     let Some(c) = scene_case(scene) else { return format!("SceneInit({scene}): case not reproduced (flags only)") };
@@ -160,4 +241,40 @@ fn scene_init(data: &BattleData, session: &mut GameSession, scene: usize) -> Str
         }
     }
     format!("SceneInit({scene}): bag {}, records {:?}, {rows} SCEN rows", session.save.btl.bag(), c.pcs)
+}
+
+fn pc_present(session: &GameSession, pc: u8) -> bool {
+    let o = sh2_menu::save::PC_REC_BASE + pc as usize * sh2_menu::save::PC_REC_SIZE;
+    session.save.btl.data.get(o).map(|b| b & 1 != 0).unwrap_or(false)
+}
+
+/// `0x003bebe0` (`seen_only` = false) / `0x003bf8e0` (true): merge the other bag (bag 1 when the current one is 0, else bag 0) into the
+/// current one -- item / weapon / armour / accessory counts added (cap 99; the same ranges case 10 clears), the "seen" and skill bits ORed.  On the
+/// demo-shaped working copy (`BtlSave` constants; `BAG_MAP` translates to the retail block).
+fn merge_bag(session: &mut GameSession, seen_only: bool) {
+    use sh2_menu::save::BtlSave;
+    let d = &mut session.save.btl.data;
+    let cur = d[BtlSave::OFF_BAG] as usize;
+    let other = if cur == 0 { 1 } else { 0 };
+    let (c, o) = (cur * BtlSave::BAG_STRIDE, other * BtlSave::BAG_STRIDE);
+    let or_ranges: &[(usize, usize)] = if seen_only { &[(BtlSave::OFF_ITEM_SEEN, 0x40)] } else { &[(BtlSave::OFF_ITEM_SEEN, 0x40), (BtlSave::OFF_SKILL_BITS, 0xa), (BtlSave::OFF_SKILL_BITS2, 0xa)] };
+    for &(base, n) in or_ranges {
+        for k in 0..n {
+            let v = d.get(o + base + k).copied().unwrap_or(0);
+            if let Some(x) = d.get_mut(c + base + k) {
+                *x |= v;
+            }
+        }
+    }
+    if seen_only {
+        return;
+    }
+    for (base, n) in [(BtlSave::OFF_ITEMS, 0x40), (BtlSave::OFF_WEAPONS, 0x60), (BtlSave::OFF_ARMOR, 0x30), (BtlSave::OFF_ACCESSORIES, 0x50)] {
+        for k in 0..n {
+            let v = d.get(o + base + k).copied().unwrap_or(0);
+            if let Some(x) = d.get_mut(c + base + k) {
+                *x = x.saturating_add(v).min(99);
+            }
+        }
+    }
 }

@@ -47,6 +47,8 @@ pub enum CmdPage {
     Option = 16,
     /// 17: key customize (`CmdKeyCustom`, 0x1c10)
     KeyCustom = 17,
+    /// 19: retail character select (`CmdRetailPage06`, `SECHAR.MSD`): the member pick of the shop's Equip, then the Equipment page
+    SelectChar = 19,
     /// 0x15: Solomon (the demon-fusing shop) launched from the menu (`solomon`, 0xbd0, see `crate::solomon`)
     Solomon = 0x15,
 }
@@ -83,6 +85,7 @@ impl CmdPage {
             Self::PropertyList => ("CmdPropertyList", 0x16c),
             Self::Option => ("CmdOption", 0x2640),
             Self::KeyCustom => ("CmdKeyCustom", 0x1c10),
+            Self::SelectChar => ("CmdRetailPage06", 0),
             Self::Solomon => ("solomon", 0xbd0),
         }
     }

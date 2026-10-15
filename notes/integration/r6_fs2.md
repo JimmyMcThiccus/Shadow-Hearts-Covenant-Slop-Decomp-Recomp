@@ -1,11 +1,78 @@
 # Round 6 FS2: story to the end, field scripts
 
-## Paused (2026-10-14, coordinator: CPU budget, 2 agents at a time)
+## Status (2026-10-15, after the coordinator pause)
 
-**Chapters reached so far:** the same as at the end of round 5. Nothing new has been reached yet in round 6.
-- First half: 28 of 34 (0x08 and 0x18..0x1c missing).
-- Second half: 14 of 26 (0x41, 0x4c..0x55 missing; 0x3f and 0x47 still come from the round-5 hand skips).
+**Chapters reached (story flags set by walks, union with round 5):**
+- First half: 28 of 34 (unchanged: 0x08 and 0x18..0x1c missing).
+- Second half: **22 of 26** (was 14): new this round 0x4c Mt. Fuji, 0x4e Inugami 2, 0x4f Foreign cemetery 2, 0x50 Azabu mansion,
+  0x51 Inugami 3, 0x52 Queen's garden, 0x53 Wales 3, 0x54 Inugami 4 -- all played (Fuji by the puzzle search, the rest by the novelty
+  walk with `--search-on-stall`), and the walk then enters the last dungeon (`AI_05_U` -> `AI_00_U` "Vessel"; its own search: 416
+  states, closed, see below).  Missing: 0x41 Mikasa 2, 0x4d Graveyard 2, 0x55 Last dungeon -- **no script references these three flags
+  at all** (`flag_xref --flags`: no set / clr / chk with a constant; the same holds for 0x08 and 0x19), so they are probably debug-menu
+  chapter markers that the story never sets.  0x47 (Todo lab 2) is set by hand (`--flags 0x47`) and not counted; 0x3f is now played
+  (Mikasa plan below, no more `--goto MI_16_U`).
 - Hidden: 0 of 6.
+
+**Second-half chain** (checkpoints in `fs2/chain/`, resume with `story_walk --load F [--goto MAP:ENTRY]`):
+`1_post4e_00037_IN_04_U` (Fuji search result) -> `2_post4f_AP_02_A` (+ `--goto KA_09_U:0`) -> `3_post51_IN_02_U` (+ `--goto QG_14_U:0`)
+-> `4_post53_WE_00_U` -> `5_post54_IN_00_U` -> `6_last_dungeon_AI_00_U`.  Logs: `fs2/fu5.err`, `w1.err`, `w2a.err`, `w3a.err`,
+`w4a.err`, `w5.err`, `ai1.err`.
+
+**This session:**
+- GPA review fixes: the GT_10_U test now checks the pit-fight table directly (`host::pit_fight_field`, `GetRegDat(0x53)` answers for
+  every record; no talk on a fresh GT_10_U reaches `GetFieldData(0x26)` -- the old assertion could never match); `SH2_WALK_QUEUE`
+  default 256 (~1.3 GB) and a dropped state is no longer marked seen; `minigame_press` only takes over TD_14_U while a lane is non-zero
+  (traced: all 8 lane states are 0 before the first and after the last target); `merge_bag` adds the same 0x40 item slots case 10
+  clears (doc no longer claims key items); `cmd.rs`, `cscript.rs`, `memory.rs` back to LF (their diffs are now just the real lines).
+- World-map choice (`Walker::pick_world_point`): a point whose `WM` byte changed since the last look (initialised at the walk start,
+  so a resumed walk does not count everything as changed) beats the next chapter's area (`next_chapter_area`, from the static setters:
+  0x18 ND, 0x1b SM, 0x1c CA, 0x4c FU, 0x4e IN, 0x4f GB, 0x50 KA, 0x51 IN, 0x52 QG, 0x53 WE, 0x54 IN), which beats the world the screen
+  opens on, which beats a "new" point.  Before, the walker toured Europe for hundreds of decisions after 0x4f / 0x53 (the screen opens
+  on Europe).  Trial scores: outside the next chapter's area a jump into it +300, the world map +250 (WE_00_U's ev 7 used to win with
+  its jump into Nemeton).
+- `story_walk`: `--points` (open world points, `SH2_WALK_POINTS=1` adds the `WM` bytes), `--search-world 0`.
+- `SetSceneInit` 7 / 9 / 10 / 12 / 13 in `party.rs` (10 partly, 11 only the party bit; see the code comments), `GetFieldData(0x26)`.
+
+**Mikasa (0x3f) solved by a scripted route:** the route comes from **the user's reference** (lparchive.org, Shadow Hearts Covenant
+Let's Play update 76, relayed by the coordinator), turned into 57 walker steps with the new `walk_probe` example (tries every action of a
+state and prints texts / register changes) and stored as `sh2_field/tests/walk/mi_02_u_keys.plan`.  `Walker::plan` / `SH2_WALK_PLAN`
+(`MAP:text;...`) take the first trial on that map whose `"{action} {choices:?}"` contains the text.  Findings: square (`press pad
+0x8000`) switches parties; keyhole prompts are 4-item lists (`[0]` = the other keyhole / insert, `[1]` = take out / keyhole 2 when
+inserting at MI_02_U); key values: 0x110 = 1 / 2 (MI_02_U holes 1 / 2), 3 (MI_06_U console); 0x111 = 1 / 2 (MI_09_U), 5 / 4 (MI_13_U
+holes "1" / "4"); levers A (MI_17_U cabin, Cabin Key from MI_12_U), B (MI_07_U), C (MI_14_U); the parties meet in MI_14_U (talk slot 1),
+MI_15_U examine box 1 -> MI_16_U boss -> 0x3f, and the walk goes on through Todo lab 1 (0x40).  Test
+`retail_story::mikasa_security_keys_plan_reaches_the_boss` (ignored, release).  The blind search before it: 616 states in 2290 s, no
+result.
+
+**Open puzzles:**
+- Todo lab 2 (0x47), from `fs2/chain/td_22_u_power.walk` (moved out of `tests/walk`, no test uses it yet): the search (world map off)
+  closes after 419 states in 70 s.  Probed route (`walk_probe`, register byte 0x33b): TD_22_U examine box 5 (beat the guards, 1 -> 2),
+  examine box 1 -> TD_00_U, enter box 8 ("You're Stag Team", 2 -> 3), examine box 1 -> TD_21_U (-> 4), examine box 1 -> TD_16_U (the
+  experiment, -> 5, back in TD_21_U), the elevator (TD_21_U examine box 0) "power is off", examine box 2 -> TD_15_U (robot room: Evasion
+  Down 3 / Thera Root; examine box 4 sets 0x325 bit 0x10), examine box 1 -> TD_02_U = "wrong way" dead end.  The walkthrough (lparchive
+  update 91, "Escaping the Lab") goes TD_15 "exit on the lower level" -> Dragonsword chest room -> shooting range -> galleries -> Kato's
+  lab -> stairs B7..1 -> lobby -> Hojo boss.  TD_15_U enter boxes 2 / 3 do nothing for the walker: probably the lower-level exit needs
+  the player on the lower floor (height) -- check how `Action::Enter` places the player against the box's floor.
+- Last dungeon (`AI_00_U` Vessel): the search from `6_last_dungeon_AI_00_U` without the world map closes after 416 states (AI_00 / 01 /
+  05, GY_05_F).  Walkthrough (lparchive update 135, "Inside the Vessel"): each floor's altar has a **ring that is turned** to line up
+  colours (floor 2: match the second ring with green in front; floor 3: yellow then green; floor 4: yellow -> blue, then green), which
+  moves the light elevators; the Seventh Key / Crucifix chests, then the light elevator to Kato and the final question (top choice =
+  good ending).  The walker tries only two answers of the first two prompts, so the ring turns (AI_01_U look 0x1 ev 70, 3 answers,
+  probably repeated) need a `walk_probe` session and a plan like Mikasa's.  0x55 itself is never set by a script.
+
+**Next steps:**
+1. Todo lab 2: the TD_15_U lower exit (above), then a plan file like Mikasa's; drop the `--flags 0x47` skip.
+2. Vessel ring puzzle with `walk_probe` + a plan (the route above), then ED_00_U from the walk.
+3. First half 0x18..0x1c (ND_14_U via Nemeton's stone sled; the ND_07 / ND_09 search explodes with the world map on -- use
+   `--search-world 0`, and the walkthrough for the sled).
+4. `SetSceneInit` 10 (key items / skill bits of record 1, 0x003be870) and 11 (the stash list) on the retail-shaped save.
+
+**Files (this session):** `sh2_field/src/story.rs` (plan, world-map choice, area hint, queue cap, `minigame_press`, `wm_seen` init),
+`host.rs` (`pit_fight_field`), `party.rs` (`merge_bag`), `examples/story_walk.rs` (`--points`, `--search-world`), new
+`examples/walk_probe.rs`, `tests/retail_story.rs` (GT_10 table test, Mikasa plan test), `tests/walk/mi_02_u_keys.plan`;
+`cmd.rs` / `cscript.rs` / `memory.rs` line endings only.
+
+## Earlier (round 6 before the pause)
 
 **What is done (compiles: `cargo check -p sh2_field -p sh2_script --examples` is clean):**
 - `sh2_field/src/host.rs` op 0x64 `RingControl`: a ring-screen hook for RG.
@@ -44,7 +111,7 @@
 
 **In progress when paused:** the first `--search 1500` from `cp42/00493_FU_00_U.walk` (Mt. Fuji). It had expanded 280 states (397 distinct, about 1 s per state, about 340 MB) and found nothing yet when it was stopped.
 
-**Exact next steps:**
+**Exact next steps (as of the pause; superseded by Status):**
 1. Rerun the Fuji search with a bigger budget, preferably from `cp42/03234_FU_06_U.walk` (it holds all 3 crystals at one point; check with `--regs 0x15f,0x160,0x161,0x162,0x163,0x164`), or from FU_00 with `--search 4000`. If the state count explodes, mask noise bytes in `state_key` (diff two sibling states to find them).
 2. Mikasa: `story_walk --load <OLD>/cp34/00009_MI_02_U.walk --search 3000` (goal 0x3f).
 3. Todo lab 2: `--load <OLD>/cp40/00240_TD_22_U.walk --search 3000` (goal 0x47).
@@ -54,7 +121,8 @@
 **Paths:**
 - `<OLD>` = `%TEMP%\claude\C--Users-jamie-Documents-SH2-Sh2-Decomp\cdb345cf-8b06-46bf-bd5a-4ebc033e3db5\scratchpad\fs`: the round-5 checkpoints cp8..cp42.
 - New work: `...\scratchpad\fs2`.
-  - `env.sh`: env + `CARGO_BUILD_JOBS=6`.
+  - `env.sh`: env + `CARGO_BUILD_JOBS=10`.
+  - `chain/`: the second-half checkpoints (see Status) and `td_22_u_power.walk`; `mi_plan*.txt`, `td_plan.txt`: probe plans.
   - `sync.sh`: a private build copy of the tree, `git archive HEAD` + my crates. Used while sh2_battle did not compile; the main tree compiles again now.
   - `msc/`: dumped map scripts.
 - Target dir: `%USERPROFILE%\.cache\sh2-r6-fs2` (release, for the walker).

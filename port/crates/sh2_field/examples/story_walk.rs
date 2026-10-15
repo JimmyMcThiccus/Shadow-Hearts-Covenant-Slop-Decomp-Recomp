@@ -51,15 +51,7 @@ fn main() {
             sh2_battle::bridge::init_new_game(b, &mut s);
         }
     }
-    // a resumed walk has no models from the previous map: give it the player (slot 0 = the "controlled character" register byte 0), shown
-    let carry = loaded.then(|| {
-        let id = (s.regs.first().copied().unwrap_or(0) & 0xff) as i32;
-        let mut t = sh2_field::script_actors::ActorTable::default();
-        t.load(0, &format!("{id:03}"), id, 0);
-        let mut c = t.carry_over();
-        c.ctrl_shown = true;
-        c
-    });
+
     // `--regs 0x115f,0x1163`: print those register bytes at the start and at the end of the walk
     let show: Vec<usize> = get("--regs").map(|v| v.split(',').map(|t| usize::from_str_radix(t.trim_start_matches("0x"), 16).unwrap()).collect()).unwrap_or_default();
     let dump = |regs: &[u32], when: &str| {
@@ -69,7 +61,8 @@ fn main() {
         }
     };
     dump(&s.regs, "at the start");
-    let game = Game::enter_carry(&env, s, &map, entry, carry).expect("map");
+    // a resumed walk has no models from the previous map: `Game::resume_at` carries the player in
+    let game = if loaded { Game::resume_at(&env, s, &map, entry) } else { Game::enter_carry(&env, s, &map, entry, None) }.expect("map");
     let mut w = Walker::new(&env, game);
     w.checkpoint_dir = get("--checkpoints").map(std::path::PathBuf::from);
     if let Some(d) = &w.checkpoint_dir {
@@ -78,6 +71,15 @@ fn main() {
     w.verbose = a.iter().any(|x| x == "-v") || std::env::var_os("SH2_WALK_STREAM").is_some();
     // `--search N`: start with a breadth-first puzzle search of at most N states; `--search-on-stall N`: search when the walk stagnates
     w.search_budget = get("--search-on-stall").and_then(|v| v.parse().ok()).unwrap_or(0);
+    // `--search-world 0`: the searches do not take the world map (one dungeon's puzzle)
+    w.search_world = get("--search-world").map(|v| v != "0").unwrap_or(true);
+    // `--points`: print the world-map points open in this state and stop
+    if a.iter().any(|x| x == "--points") {
+        for (m, e) in w.open_world_points(&w.game) {
+            println!("point {m}:{e}");
+        }
+        return;
+    }
     let t0 = std::time::Instant::now();
     if let Some(n) = get("--search").and_then(|v| v.parse().ok()) {
         if !w.search(n) {

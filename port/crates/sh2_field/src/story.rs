@@ -140,6 +140,17 @@ pub fn story_flags(regs: &[u32]) -> Vec<u32> {
     (8..0x70).filter(|&n| flag(regs, n)).collect()
 }
 
+/// The area (map-name prefix) whose script sets a chapter flag with a constant argument (`flag_xref --set-only`), for the chapters the
+/// walker has to reach through the world map.  A player learns where to go from the story; the walker takes it from here.
+const CHAPTER_AREAS: [(u32, &str); 11] =
+    [(0x18, "ND"), (0x1b, "SM"), (0x1c, "CA"), (0x4c, "FU"), (0x4e, "IN"), (0x4f, "GB"), (0x50, "KA"), (0x51, "IN"), (0x52, "QG"), (0x53, "WE"), (0x54, "IN")];
+
+/// The area of the next chapter after the highest one reached (see [`CHAPTER_AREAS`]); `None` when it is not known.
+pub fn next_chapter_area(regs: &[u32]) -> Option<&'static str> {
+    let top = story_flags(regs).into_iter().filter(|&f| f < 0x64 && story_flag_name(f).is_some()).max()?;
+    CHAPTER_AREAS.iter().find(|(f, _)| *f > top && !flag(regs, *f)).map(|x| x.1)
+}
+
 /// Disc data the walker needs.
 pub struct Env {
     pub pkb: PkbSet,
@@ -156,6 +167,8 @@ impl Env {
         if let Some(d) = read_field_t(&pkb) {
             t.from_field_t(&d);
         }
+        t.names = crate::plugin::name_lookup(&pkb);
+        t.us_rd = crate::plugin::us_regdat(&pkb);
         let wm = std::fs::read(dir.as_ref().join("FIELD.BIN")).ok().and_then(|b| RetailWorldTable::from_field_bin(&b));
         let battle = sh2_battle::pkb_compat::PkbDisc::open(dir.as_ref()).ok().and_then(|d| sh2_battle::data::BattleData::load(&d).ok()).map(Arc::new);
         Some(Env { pkb, tables: Arc::new(t), wm, battle })
@@ -210,31 +223,31 @@ pub struct Game {
     /// map waits for cross) and the engine-call count of the last tick
     quiet: u32,
     last_calls: u64,
+    /// last window text printed (`SH2_WALK_TEXT=MAP`)
+    last_txt: String,
 }
 
-/// Button minigames the walker plays like a player who reads the screen.  TD_14_U (Todo lab shooting range, "destroy the 30 targets"): target
-/// symbols rise on stands (attached to a stand model, `AttachCharacter`); the button to press is the symbol's: models 292 / 293 / 294 / 295 =
-/// circle / square / triangle / cross (the script's slot switch at 0x7b99: slots 0x0f..0x16 in pairs; the other course, switch 0x7219, uses
-/// slots 0x13..0x1a with the same order).  A press hits the nearest raised target with that button (`0x79a7`).  `None` = not a minigame
-/// moment (normal circle presses), `Some(0)` = hold still.
+/// Button minigames the walker plays like a player who reads the screen.  TD_14_U (Todo lab shooting range, "destroy the 30 targets"):
+/// targets rise in 8 lanes; the press handler (`0x79a7`) hits the nearest lane whose state (`bss+0x98 + 4i`) is 4 / 5 (up) and whose
+/// button mask (`bss+0xf8 + 4i`, the symbol on the stand) matches the press.  A press with no such lane is a miss ("What do you think
+/// you're aiming at?!"), so while the range runs nothing else is pressed.  The range runs while some lane state is non-zero (traced:
+/// all lanes are 0 before the first target and after the last, at least one is non-zero in between).  `None` = not a minigame moment
+/// (normal circle presses), `Some(0)` = hold still.
 pub fn minigame_press(rt: &FieldRuntime) -> Option<u16> {
     if rt.map != "TD_14_U" || rt.st.msg_active() || rt.st.ui.select.active {
         return None;
     }
-    const ORDER: [u16; 4] = [padbit::CIRCLE, padbit::SQUARE, padbit::TRIANGLE, padbit::CROSS];
-    let mut out = None;
-    for (slot, a) in rt.st.actors.slots.iter().enumerate() {
-        let Some(a) = a else { continue };
-        if !a.disp || a.attach == 0xff {
-            continue;
-        }
-        let by_name = a.model_name.trim_end_matches(".SET").parse::<usize>().ok().filter(|n| (292..=295).contains(n)).map(|n| ORDER[n - 292]);
-        let by_slot = (0x13..=0x1a).contains(&slot).then(|| ORDER[(slot - 0x13) % 4]);
-        if let Some(b) = by_name.or(by_slot) {
-            out = Some(b);
+    let r = |o: u32| rt.vm.mem.r32(sh2_script::memory::SEG_BSS + o).unwrap_or(0);
+    if (0..8).all(|i| r(0x98 + 4 * i) == 0) {
+        return None;
+    }
+    for i in 0..8 {
+        let (st, mask) = (r(0x98 + 4 * i), r(0xf8 + 4 * i));
+        if (st == 4 || st == 5) && mask != 0 && mask <= 0xffff {
+            return Some(mask as u16);
         }
     }
-    out
+    Some(0)
 }
 
 /// `GameSession` wrapper with `Clone`.
@@ -312,7 +325,23 @@ impl Game {
         let prev = std::mem::replace(&mut session.map, map.to_string());
         let mut rt = crate::plugin::build_runtime_carry(&env.pkb, None, Some(env.tables.clone()), map, entry, &session, carry)?;
         rt.st.prev_map = if prev != map { prev } else { session.chr_pos.as_ref().map(|_| String::new()).unwrap_or_default() };
-        Some(Game { rt, session: GameSessionBox(session), battle: env.battle.clone(), party_log: vec![], idle_root: 0, no_ctrl: 0, pad: 0, quiet: 0, last_calls: 0 })
+        Some(Game { rt, session: GameSessionBox(session), battle: env.battle.clone(), party_log: vec![], idle_root: 0, no_ctrl: 0, pad: 0, quiet: 0, last_calls: 0, last_txt: String::new() })
+    }
+
+    /// Resume a walk checkpoint ([`read_checkpoint`]): the resumed map has no models from the previous one, so the player (slot 0 = the
+    /// "controlled character" register byte 0) is carried in, shown.
+    pub fn resume(env: &Env, path: &std::path::Path) -> Option<Game> {
+        let (s, map, entry) = read_checkpoint(path)?;
+        Self::resume_at(env, s, &map, entry)
+    }
+
+    pub fn resume_at(env: &Env, s: GameSession, map: &str, entry: i32) -> Option<Game> {
+        let id = (s.regs.first().copied().unwrap_or(0) & 0xff) as i32;
+        let mut t = crate::script_actors::ActorTable::default();
+        t.load(0, &format!("{id:03}"), id, 0);
+        let mut c = t.carry_over();
+        c.ctrl_shown = true;
+        Self::enter_carry(env, s, map, entry, Some(c))
     }
 
     pub fn map(&self) -> &str {
@@ -419,6 +448,19 @@ impl Game {
                         }
                     }
                 }
+            }
+        }
+        if std::env::var_os("SH2_WALK_LANES").is_some() && rt.map == "TD_14_U" && (rt.st.ticks % 6 == 0 || press != 0) {
+            let r = |o: u32| rt.vm.mem.r32(sh2_script::memory::SEG_BSS + o).unwrap_or(0);
+            eprintln!("  [TD_14_U t{}] press {press:#x} lanes {:?} masks {:x?}", rt.st.ticks, (0..8).map(|i| r(0x98 + 4 * i)).collect::<Vec<_>>(), (0..8).map(|i| r(0xf8 + 4 * i)).collect::<Vec<_>>());
+        }
+        if std::env::var("SH2_WALK_TEXT").map(|m| m == rt.map).unwrap_or(false) {
+            // debugging: the text of the open windows when it changes
+            let txt: Vec<String> = rt.st.ui.windows.iter().filter(|w| w.is_open() && !w.raw.is_empty()).map(|w| String::from_utf8_lossy(&w.raw).replace('$', " / ")).collect();
+            let txt = txt.join(" | ");
+            if !txt.is_empty() && txt != self.last_txt {
+                eprintln!("  [{} t{}] text: {txt}", rt.map, rt.st.ticks);
+                self.last_txt = txt;
             }
         }
         if let Ok(pat) = std::env::var("SH2_WALK_GREP") {
@@ -672,6 +714,11 @@ pub struct Walker<'e> {
     /// when the walk stagnates, run a breadth-first puzzle search ([`Walker::search`]) of at most this many states before backtracking
     /// (0 = off); searches from the same state are not repeated
     pub search_budget: usize,
+    /// the search also takes the world map (every open point is a successor)
+    pub search_world: bool,
+    /// a scripted route (`MAP:text` steps, e.g. a walkthrough's puzzle solution): while the next step's map is the current one, the
+    /// decision takes the first trial whose `"{action} {choices:?}"` contains `text` and the step is used up (`SH2_WALK_PLAN=a;b;..`)
+    pub plan: std::collections::VecDeque<(String, String)>,
     searched: std::collections::HashSet<u64>,
 }
 
@@ -725,11 +772,22 @@ impl<'e> Walker<'e> {
             t_decide: 0.0,
             trial_ticks: 0,
             search_budget: 0,
+            search_world: true,
+            plan: std::env::var("SH2_WALK_PLAN")
+                .map(|v| v.split(';').filter_map(|p| p.split_once(':')).map(|(m, t)| (m.trim().to_string(), t.to_string())).collect())
+                .unwrap_or_default(),
             searched: Default::default(),
         };
         let r = w.game.regs();
         w.mark_seen(&r);
         *w.visits.entry(w.game.map().to_string()).or_default() += 1;
+        // the world-map points as they are now (a resumed walk: only what the story opens from here on counts as changed)
+        if let Some(wm) = w.env.wm.as_ref() {
+            let chunk = w.game.session.0.save.field.find(sh2_menu::save::FieldSave::TAG_WM).map(|c| c.payload.clone()).unwrap_or_default();
+            for e in wm.worlds.iter().flat_map(|x| x.list.iter()) {
+                w.wm_seen.insert(e.id, chunk.get(0xc + e.id as usize).copied().unwrap_or(0));
+            }
+        }
         w
     }
 
@@ -921,14 +979,18 @@ impl<'e> Walker<'e> {
         dist
     }
 
-    /// The world-map point the walker picks: a point in the "new" state first, else the open point whose map was visited least.
+    /// The world-map point the walker picks: a changed point, the next chapter's area, the current world, a "new" point, then the open point
+    /// whose map was visited least.
     pub fn pick_world_point(&mut self, world: i32) -> Option<(String, i32)> {
         let wm = self.env.wm.as_ref()?;
         let chunk = self.game.session.0.save.field.find(sh2_menu::save::FieldSave::TAG_WM);
         let byte = |id: usize| chunk.and_then(|c| c.payload.get(0xc + id).copied()).unwrap_or(0);
         let mut best: Option<(i64, String, i32)> = None;
+        let next_area = next_chapter_area(&self.game.regs());
         for (wi, w) in wm.worlds.iter().enumerate() {
-            // the screen opens on `world` (`WorldMapJump(world, ..)`; < 0 = the remembered one): its points come first
+            // a point the story opened / changed since the walker last looked comes first in every world (e.g. KA_09_U, opened in Japan
+            // by the foreign cemetery 2 while the screen opens on Europe); then the next chapter's area; then the points of `world`, the one the screen opens on
+            // (`WorldMapJump(world, ..)`; < 0 = the remembered one); then the "new" ones
             let here = world < 0 || wi as i32 == world;
             for e in &w.list {
                 let st = point_state(byte(e.id as usize));
@@ -940,9 +1002,10 @@ impl<'e> Walker<'e> {
                     continue;
                 }
                 let v = *self.visits.get(&p.map).unwrap_or(&0) as i64;
-                // a point the story re-opened / changed since the walker last looked at the world map comes first after the "new" ones
+                // changed: the WM byte differs from the last look (or from the walk's start)
                 let changed = self.wm_seen.get(&e.id).map(|b| *b != byte(e.id as usize)).unwrap_or(true);
-                let score = if here { 2_000_000 } else { 0 } + if st == 2 { 1_000_000 } else { 0 } + if changed { 500_000 } else { 0 } + if self.since_progress.contains(&p.map) { 0 } else { 1000 } - v * 10;
+                let goal = next_area.map(|a| p.map.starts_with(a)).unwrap_or(false);
+                let score = if changed { 8_000_000 } else { 0 } + if goal { 4_000_000 } else { 0 } + if here { 2_000_000 } else { 0 } + if st == 2 { 1_000_000 } else { 0 } + if self.since_progress.contains(&p.map) { 0 } else { 1000 } - v * 10;
                 if best.as_ref().map(|b| score > b.0).unwrap_or(true) {
                     best = Some((score, p.map.clone(), (p.entry & 0xff) as i32));
                 }
@@ -1007,6 +1070,16 @@ impl<'e> Walker<'e> {
             Stop::Timeout => s -= 50_000,
             Stop::Free => {}
         }
+        // the next chapter is in another area: head for it (a jump into that area; else the world map beats a jump into a new map)
+        if let Some(area) = next_chapter_area(&self.game.regs()) {
+            if !self.game.map().starts_with(area) {
+                match &o.stop {
+                    Stop::Jump(m, _) if m.starts_with(area) => s += 300,
+                    Stop::WorldMap(..) => s += 250,
+                    _ => {}
+                }
+            }
+        }
         s
     }
 
@@ -1023,11 +1096,8 @@ impl<'e> Walker<'e> {
         }
         // every action (with the other answers of its first two prompts) on its own copy of the game, in parallel
         let this = &*self;
-        let per_action: Vec<Vec<(Outcome, Game)>> = std::thread::scope(|sc| {
-            let hs: Vec<_> = acts
-                .iter()
-                .map(|a| {
-                    sc.spawn(move || {
+        let per_action: Vec<Vec<(Outcome, Game)>> = par_map(&acts, |a| {
+                    {
                         let (o, g) = this.try_action(a, vec![]);
                         let seen = o.policy.seen.clone();
                         // a field ring was played: also try every other colour it could stop on
@@ -1053,10 +1123,7 @@ impl<'e> Walker<'e> {
                             }
                         }
                         variants
-                    })
-                })
-                .collect();
-            hs.into_iter().map(|h| h.join().expect("trial thread")).collect()
+                    }
         });
         let mut outs: Vec<(i64, Outcome, Game)> = vec![];
         let here = self.game.map().to_string();
@@ -1098,7 +1165,23 @@ impl<'e> Walker<'e> {
                 outs.iter().position(|(_, o, _)| format!("{} {:?}", o.action, o.policy.choices).contains(t))
             })
         });
-        let pick = if let Some(i) = forced {
+        // the scripted route: the next step on this map
+        let planned = match self.plan.front() {
+            Some((m, t)) if m == self.game.map() => {
+                let i = outs.iter().position(|(_, o, _)| format!("{} {:?}", o.action, o.policy.choices).contains(t.as_str()));
+                if i.is_none() {
+                    let have: Vec<String> = outs.iter().map(|(_, o, _)| format!("{} {:?}", o.action, o.policy.choices)).collect();
+                    self.log(format!("plan step {m}:{t} has no trial here ({have:?})"));
+                }
+                i
+            }
+            _ => None,
+        };
+        if planned.is_some() {
+            let (m, t) = self.plan.pop_front().unwrap();
+            self.log(format!("plan step {m}:{t} ({} left)", self.plan.len()));
+        }
+        let pick = if let Some(i) = planned.or(forced) {
             i
         } else if progress {
             0
@@ -1307,8 +1390,8 @@ fn fnv(h: &mut u64, b: &[u8]) {
     }
 }
 
-/// What makes two free-control states the same for the puzzle search: map, register file, treasure / world-map chunks and the
-/// battle save (bag: key items).  The position on the map is not part of it (every action puts the player on its spot).
+/// What makes two free-control states the same for the puzzle search: map, register file, treasure / world-map chunks and which
+/// items the bag holds (key items).  The position on the map is not part of it (every action puts the player on its spot).
 pub fn state_key(g: &Game) -> u64 {
     let mut h: u64 = 0xcbf29ce484222325;
     fnv(&mut h, g.map().as_bytes());
@@ -1319,7 +1402,14 @@ pub fn state_key(g: &Game) -> u64 {
             fnv(&mut h, &c.payload);
         }
     }
-    fnv(&mut h, &g.session.0.save.btl.data);
+    // the bag as "has / has not" per item (counts, HP / MP and the skill bits change with repeatable events and would make every state new)
+    let d = &g.session.0.save.btl.data;
+    let bag = d.get(sh2_menu::save::BtlSave::OFF_BAG).copied().unwrap_or(0) as usize * sh2_menu::save::BtlSave::BAG_STRIDE;
+    let have: Vec<u8> = (sh2_menu::save::BtlSave::OFF_ITEMS..sh2_menu::save::BtlSave::OFF_SKILL_BITS)
+        .filter(|o| !(sh2_menu::save::BtlSave::OFF_ITEM_SEEN..sh2_menu::save::BtlSave::OFF_WEAPONS).contains(o))
+        .map(|o| (d.get(bag + o).copied().unwrap_or(0) != 0) as u8)
+        .collect();
+    fnv(&mut h, &have);
     h
 }
 
@@ -1331,51 +1421,111 @@ struct SearchNode {
 }
 
 impl<'e> Walker<'e> {
-    /// Follow a scene change of a trial game to the next free control (map jumps, scripted battles; at most 8 hops).  The world map
-    /// ends the search branch (`None`), so does a stop the walk cannot go on from.
-    fn follow(&self, mut g: Game, mut stop: Stop, path: &mut Vec<String>) -> Option<(Game, Stop)> {
-        for _ in 0..8 {
-            match stop {
-                Stop::Free | Stop::Ending => return Some((g, stop)),
-                Stop::Jump(map, entry) => {
-                    if map == crate::worldmap::WORLDMAP_NAME || !self.env.has_map(&map) {
-                        return None;
-                    }
-                    let mut s = clone_session(&g.session.0);
-                    save_regs(&g.rt, &mut s);
-                    let carry = g.rt.st.actors.carry_over();
-                    path.push(format!("-> {map}:{entry}"));
-                    g = Game::enter_carry(self.env, s, &map, entry, Some(carry))?;
+    /// The world-map points the player could pick in `g` (open, not a portal, with a map): `(map, entry)`.
+    pub fn open_world_points(&self, g: &Game) -> Vec<(String, i32)> {
+        let Some(wm) = self.env.wm.as_ref() else { return vec![] };
+        let chunk = g.session.0.save.field.find(sh2_menu::save::FieldSave::TAG_WM);
+        let byte = |id: usize| chunk.and_then(|c| c.payload.get(0xc + id).copied()).unwrap_or(0);
+        let mut out: Vec<(String, i32)> = vec![];
+        for w in &wm.worlds {
+            for e in &w.list {
+                let st = point_state(byte(e.id as usize));
+                if st == 0 || st == 3 || e.portal >= 0 {
+                    continue;
                 }
-                Stop::Battle(b) => {
-                    let map = g.map().to_string();
-                    let mut s = clone_session(&g.session.0);
-                    save_regs(&g.rt, &mut s);
-                    s.chr_pos = Some(ChrPos { map: map.clone(), pos: g.rt.sim.player.pos, yaw: g.rt.sim.player.yaw });
-                    let map = g.rt.st.retail.socket_map.clone().unwrap_or(map);
-                    s.battles_won += 1;
-                    s.ssh_sys = [2, 1, 0, s.ssh_sys[3]];
-                    let prev = g.rt.st.prev_map.clone();
-                    path.push(format!("battle: monster set {} -> {map}", b.monster_set));
-                    g = Game::enter(self.env, s, &map, FieldRequest::RESTORE)?;
-                    if g.rt.st.prev_map.is_empty() {
-                        g.rt.st.prev_map = prev;
-                    }
+                let Some(p) = wm.points.get(e.id as usize) else { continue };
+                let v = (p.map.clone(), (p.entry & 0xff) as i32);
+                if std::env::var_os("SH2_WALK_POINTS").is_some() {
+                    eprintln!("  point {} id {} WM byte {:#x}", p.map, e.id, byte(e.id as usize));
                 }
-                _ => return None,
+                if !p.map.is_empty() && self.env.has_map(&p.map) && !out.contains(&v) {
+                    out.push(v);
+                }
             }
-            let mut pol = Policy::default();
-            let (s, _) = g.settle(&mut pol, self.max_settle);
-            stop = s;
         }
-        None
+        out
     }
 
-    /// Breadth-first search over the free-control states reachable from the current one without the world map, until one sets a story
+    /// Follow a scene change of a trial game to the next free control (map jumps, scripted battles, the world map: one successor per
+    /// open point; at most 8 hops).  Stops the walk cannot go on from give no successor.
+    fn follow(&self, g: Game, stop: Stop, path: Vec<String>, hops: u32) -> Vec<(Game, Stop, Vec<String>)> {
+        let mut path = path;
+        let next = match stop {
+            Stop::Free | Stop::Ending => return vec![(g, stop, path)],
+            _ if hops >= 8 => return vec![],
+            Stop::Jump(map, entry) => {
+                if map == crate::worldmap::WORLDMAP_NAME {
+                    return self.follow(g, Stop::WorldMap(-1, 0, 0), path, hops + 1);
+                }
+                if !self.env.has_map(&map) {
+                    return vec![];
+                }
+                let mut s = clone_session(&g.session.0);
+                save_regs(&g.rt, &mut s);
+                let carry = g.rt.st.actors.carry_over();
+                path.push(format!("-> {map}:{entry}"));
+                match Game::enter_carry(self.env, s, &map, entry, Some(carry)) {
+                    Some(n) => n,
+                    None => return vec![],
+                }
+            }
+            Stop::Battle(b) => {
+                let map = g.map().to_string();
+                let mut s = clone_session(&g.session.0);
+                save_regs(&g.rt, &mut s);
+                s.chr_pos = Some(ChrPos { map: map.clone(), pos: g.rt.sim.player.pos, yaw: g.rt.sim.player.yaw });
+                let map = g.rt.st.retail.socket_map.clone().unwrap_or(map);
+                s.battles_won += 1;
+                s.ssh_sys = [2, 1, 0, s.ssh_sys[3]];
+                let prev = g.rt.st.prev_map.clone();
+                path.push(format!("battle: monster set {} -> {map}", b.monster_set));
+                match Game::enter(self.env, s, &map, FieldRequest::RESTORE) {
+                    Some(mut n) => {
+                        if n.rt.st.prev_map.is_empty() {
+                            n.rt.st.prev_map = prev;
+                        }
+                        n
+                    }
+                    None => return vec![],
+                }
+            }
+            Stop::WorldMap(..) => {
+                let mut s = clone_session(&g.session.0);
+                save_regs(&g.rt, &mut s);
+                let mut out = vec![];
+                for (map, entry) in self.open_world_points(&g) {
+                    let Some(mut n) = Game::enter(self.env, clone_session(&s), &map, entry) else { continue };
+                    let mut p = path.clone();
+                    p.push(format!("world map -> {map}:{entry}"));
+                    let mut pol = Policy::default();
+                    let (st, _) = n.settle(&mut pol, self.max_settle);
+                    out.extend(self.follow(n, st, p, hops + 1));
+                }
+                return out;
+            }
+            _ => return vec![],
+        };
+        let mut g = next;
+        let mut pol = Policy::default();
+        let (st, _) = g.settle(&mut pol, self.max_settle);
+        self.follow(g, st, path, hops + 1)
+    }
+
+    /// Breadth-first search over the free-control states reachable from the current one (world map included unless `search_world` is
+    /// off), until one sets a story
     /// flag that is not set now (or ends the game).  For the state puzzles the novelty walk gets lost in (Mikasa's two-party security keys,
     /// Mt. Fuji's crystal gates, Todo lab 2's power relay): every state is expanded with every action and the other answers of its first
     /// two prompts.  On success the walk continues from the state found and the path is logged; `max_nodes` bounds the expansions.
     pub fn search(&mut self, max_nodes: usize) -> bool {
+        // start from free control (a resumed walk is at a map entry)
+        for _ in 0..8 {
+            if self.game.is_free() {
+                break;
+            }
+            if !self.settle() {
+                return false;
+            }
+        }
         let root_regs = self.game.regs();
         let root_map = self.game.map().to_string();
         let mut seen: std::collections::HashSet<u64> = std::collections::HashSet::new();
@@ -1383,6 +1533,7 @@ impl<'e> Walker<'e> {
         let mut queue: std::collections::VecDeque<SearchNode> = std::collections::VecDeque::new();
         queue.push_back(SearchNode { game: self.game.clone(), path: vec![] });
         let mut expanded = 0usize;
+        let max_queue: usize = std::env::var("SH2_WALK_QUEUE").ok().and_then(|v| v.parse().ok()).unwrap_or(256);
         let t0 = std::time::Instant::now();
         let goal = |g: &Game, st: &Stop| -> bool { *st == Stop::Ending || story_flags(&g.regs()).iter().any(|&f| !flag(&root_regs, f) && story_flag_name(f).is_some()) };
         while let Some(node) = queue.pop_front() {
@@ -1395,11 +1546,8 @@ impl<'e> Walker<'e> {
             let wr = &w;
             let ng = &node.game;
             // every action and its prompt variants on a copy, in parallel
-            let results: Vec<Vec<(Outcome, Game)>> = std::thread::scope(|sc| {
-                let hs: Vec<_> = acts
-                    .iter()
-                    .map(|a| {
-                        sc.spawn(move || {
+            let results: Vec<Vec<(Outcome, Game)>> = par_map(&acts, |a| {
+                        {
                             let (o, g) = wr.trial(ng, a, vec![], None);
                             let seen = o.policy.seen.clone();
                             let ring_cols: Vec<i32> = g.rt.st.ring.as_ref().map(crate::field_ring::possible_results).unwrap_or_default();
@@ -1415,21 +1563,18 @@ impl<'e> Walker<'e> {
                                 }
                             }
                             v
-                        })
-                    })
-                    .collect();
-                hs.into_iter().map(|h| h.join().expect("search thread")).collect()
+                        }
             });
             for variants in results {
                 for (o, g) in variants {
                     self.trial_ticks += o.ticks as u64;
-                    if matches!(o.stop, Stop::Timeout | Stop::GameOver | Stop::WorldMap(..)) {
+                    if matches!(o.stop, Stop::Timeout | Stop::GameOver) || (matches!(o.stop, Stop::WorldMap(..)) && !self.search_world) {
                         continue;
                     }
                     let mut path = node.path.clone();
                     let ch = if o.policy.choices.is_empty() { String::new() } else { format!(" choices {:?}", o.policy.choices) };
                     path.push(format!("[{}] {}{ch}{}", ng.map(), o.action, o.policy.ring.map(|r| format!(" ring {r}")).unwrap_or_default()));
-                    let Some((g2, stop)) = self.follow(g, o.stop.clone(), &mut path) else { continue };
+                    for (g2, stop, path) in self.follow(g, o.stop.clone(), path, 0) {
                     if goal(&g2, &stop) {
                         self.log(format!("search: found after {expanded} states ({:.0} s) from {root_map}, {} steps:", t0.elapsed().as_secs_f64(), path.len()));
                         for p in &path {
@@ -1451,8 +1596,17 @@ impl<'e> Walker<'e> {
                     if !matches!(stop, Stop::Free) {
                         continue;
                     }
-                    if seen.insert(state_key(&g2)) {
+                    // the queue holds whole games (~5 MB each): bounded (`SH2_WALK_QUEUE`, default 256, ~1.3 GB)
+                    if std::env::var_os("SH2_WALK_KEYDIFF").is_some() {
+                        // debugging the state key: register bytes that differ from the parent state
+                        let (pb, cb) = (reg_bytes(&ng.regs()), reg_bytes(&g2.regs()));
+                        let d: Vec<String> = (0..cb.len()).filter(|&i| pb.get(i) != cb.get(i)).map(|i| format!("{i:#x}:{:#x}>{:#x}", pb.get(i).copied().unwrap_or(0), cb[i])).collect();
+                        let bag = ng.session.0.save.btl.data.iter().zip(&g2.session.0.save.btl.data).enumerate().filter(|(_, (a, b))| a != b).map(|(i, _)| format!("{i:#x}")).collect::<Vec<_>>();
+                        eprintln!("    keydiff {} -> {} {}: regs {d:?} btl {bag:?}", ng.map(), g2.map(), o.action);
+                    }
+                    if queue.len() < max_queue && seen.insert(state_key(&g2)) {
                         queue.push_back(SearchNode { game: g2, path });
+                    }
                     }
                 }
             }
@@ -1479,4 +1633,22 @@ impl WalkerView {
         let (stop, ticks) = g.settle(&mut pol, self.max_action);
         (Outcome { action: a.clone(), stop, ticks, novel: 0, new_flags: vec![], changed_bytes: 0, save_changed: 0, picked_up: false, policy: pol }, g)
     }
+}
+
+/// `f` over `items` on at most `SH2_WALK_THREADS` (default 8) worker threads, results in order.
+pub fn par_map<T: Sync, R: Send>(items: &[T], f: impl Fn(&T) -> R + Sync) -> Vec<R> {
+    let n = std::env::var("SH2_WALK_THREADS").ok().and_then(|v| v.parse().ok()).unwrap_or(8usize).max(1).min(items.len().max(1));
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let out: Vec<std::sync::Mutex<Option<R>>> = items.iter().map(|_| std::sync::Mutex::new(None)).collect();
+    std::thread::scope(|sc| {
+        for _ in 0..n {
+            sc.spawn(|| loop {
+                let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let Some(x) = items.get(i) else { break };
+                let r = f(x);
+                *out[i].lock().unwrap() = Some(r);
+            });
+        }
+    });
+    out.into_iter().map(|m| m.into_inner().unwrap().expect("par_map result")).collect()
 }

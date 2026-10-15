@@ -113,6 +113,23 @@ impl Memory {
         }
         Ok(String::from_utf8_lossy(&v).into_owned())
     }
+    /// Raw bytes of the NUL-terminated string at `a` (Shift-JIS text must not go through UTF-8).
+    pub fn cstr_bytes(&self, a: u32) -> Result<Vec<u8>, BadAddr> {
+        let mut v = Vec::new();
+        let mut p = a;
+        loop {
+            let c = self.r8(p)?;
+            if c == 0 {
+                break;
+            }
+            v.push(c);
+            p += 1;
+            if v.len() > 4096 {
+                return Err(BadAddr(a));
+            }
+        }
+        Ok(v)
+    }
     /// Allocate a NUL-terminated string in host scratch and return its pointer.
     pub fn host_str(&mut self, s: &str) -> u32 {
         let p = SEG_HOST + self.host.len() as u32;

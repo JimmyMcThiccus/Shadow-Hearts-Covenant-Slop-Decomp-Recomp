@@ -128,3 +128,91 @@ fn ed_00_u_ends_the_game() {
     assert!(w.battles.iter().any(|b| b.1 == 302 && b.2), "final boss: {:?}", w.battles);
     assert!(w.ended, "the walk reaches the ending hand-over: {:?}", w.steps.iter().map(|s| &s.what).collect::<Vec<_>>());
 }
+
+fn walk_env() -> Option<sh2_field::story::Env> {
+    us()?;
+    sh2_field::story::Env::open(std::env::var_os("SH2_US_DISC_DIR")?)
+}
+
+fn fixture(name: &str) -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/walk").join(name)
+}
+
+/// TD_14_U, Todo lab shooting range ("destroy the 30 targets"): the walker presses the button of the lane the script itself accepts
+/// (`0x79a7`: lane state 4 / 5, lane button mask) and nothing else, so no press scores a miss.
+#[test]
+fn td_14_u_shooting_range_has_no_miss() {
+    let Some(env) = walk_env() else { return };
+    let mut g = sh2_field::story::Game::resume(&env, &fixture("td_14_u_range.walk")).unwrap();
+    let mut pol = sh2_field::story::Policy::default();
+    let mut texts = vec![];
+    let mut stop = None;
+    for _ in 0..8000 {
+        if let Some(s) = g.tick(&mut pol) {
+            stop = Some(s);
+            break;
+        }
+        for w in g.rt.st.ui.windows.iter().filter(|w| w.is_open() && !w.raw.is_empty()) {
+            let t = String::from_utf8_lossy(&w.raw).to_string();
+            if !texts.contains(&t) {
+                texts.push(t);
+            }
+        }
+        if g.is_free() {
+            stop = Some(sh2_field::story::Stop::Free);
+            break;
+        }
+    }
+    assert_eq!(stop, Some(sh2_field::story::Stop::Free), "texts {texts:?}");
+    assert!(texts.iter().any(|t| t.contains("30 targets")), "the range ran: {texts:?}");
+    assert!(!texts.iter().any(|t| t.contains("aiming at")), "a press missed: {texts:?}");
+}
+
+/// GT_10_U, pit fights: `GetFieldData(0x26, ..)` (US 0x004fc418) answers from `GetRegDat(0x53)` (the retail `SSHMES.NA` / `SSHDAT.NA`
+/// pair the field tables now carry) instead of -1, so the arena's talks no longer loop.
+#[test]
+fn gt_10_u_pit_fight_table_answers() {
+    let Some(env) = walk_env() else { return };
+    let rd = env.tables.us_rd.clone().expect("retail RegDat pair");
+    let db = sh2_core::regdat::UsRegDat::new(&rd.0, &rd.1).unwrap();
+    let n = db.count(0x53, 0).expect("pit-fight records");
+    assert!(n > 0);
+    // every record answers every field; field 1 (rank, +6 & 7) is 0..7, an unknown field / record is -1
+    for rec in 0..n {
+        assert!((0..8).contains(&sh2_field::host::pit_fight_field(&db, rec, 1)), "record {rec}");
+    }
+    assert_eq!(sh2_field::host::pit_fight_field(&db, 0, 0), -1);
+    assert_eq!(sh2_field::host::pit_fight_field(&db, 0, 10), -1);
+}
+
+/// Mt. Fuji (flag 0x4c): the crystal gates.  The puzzle search ([`Walker::search`]) finds the way from the mountain's foot: collect the
+/// three crystals (FU_01 / FU_02 / FU_04), put crystal 4 into FU_06_U's gate, FU_12 .. FU_18_U.  Release build, ~15 min:
+/// `cargo test --release -p sh2_field --test retail_story -- --ignored fuji`.
+#[test]
+#[ignore]
+fn fuji_crystal_search_reaches_mt_fuji() {
+    let Some(env) = walk_env() else { return };
+    let g = sh2_field::story::Game::resume(&env, &fixture("fu_00_u_fuji.walk")).unwrap();
+    let mut w = sh2_field::story::Walker::new(&env, g);
+    w.search_world = false;
+    assert!(w.search(3000), "{:?}", w.steps.iter().rev().take(5).map(|s| &s.what).collect::<Vec<_>>());
+    assert!(sh2_field::story::flag(&w.game.regs(), 0x4c));
+}
+
+/// Mikasa (flag 0x3f): the two-party security-key puzzle, played from `tests/walk/mi_02_u_keys.plan` (the route of the user's walkthrough
+/// reference, written as walker steps).  The keyholes move the keys (register bytes 0x110 / 0x111), the levers A / B / C open the doors,
+/// the parties meet in MI_14_U, MI_15_U leads to the boss in MI_16_U.  Release build, ~8 min:
+/// `cargo test --release -p sh2_field --test retail_story -- --ignored mikasa`.
+#[test]
+#[ignore]
+fn mikasa_security_keys_plan_reaches_the_boss() {
+    let Some(env) = walk_env() else { return };
+    let g = sh2_field::story::Game::resume(&env, &fixture("mi_02_u_keys.walk")).unwrap();
+    let mut w = sh2_field::story::Walker::new(&env, g);
+    let plan = std::fs::read_to_string(fixture("mi_02_u_keys.plan")).unwrap();
+    w.plan = plan.lines().filter(|l| !l.starts_with('#') && !l.trim().is_empty()).filter_map(|l| l.split_once(':')).map(|(m, t)| (m.to_string(), t.to_string())).collect();
+    assert_eq!(w.plan.len(), 57);
+    w.run(64);
+    assert!(w.plan.is_empty(), "plan stuck at {:?}", w.plan.front());
+    assert!(sh2_field::story::flag(&w.game.regs(), 0x3f), "{:?}", w.steps.iter().rev().take(5).map(|s| &s.what).collect::<Vec<_>>());
+}
