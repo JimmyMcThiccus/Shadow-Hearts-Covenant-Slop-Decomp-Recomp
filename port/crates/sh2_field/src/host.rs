@@ -293,6 +293,13 @@ pub struct ScriptState {
     pub ring: Option<FieldRing>,
     /// result `RingControl` reports instead of "every area hit" (tests / the story walker)
     pub ring_override: Option<i32>,
+    /// a field Judgement Ring screen exists (RG's `field_ring.rs` plugin sets it): `RingControl` waits for `ring_answer` instead of
+    /// answering at once
+    pub ring_screen: bool,
+    /// `RingControl` is waiting for the ring screen (the screen shows `ring` while this is set)
+    pub ring_wait: bool,
+    /// the ring screen's result: the colour code of the area the pointer stopped in (0 = missed); `RingControl` takes it and returns
+    pub ring_answer: Option<i32>,
     pub treasure_msg_quiet: bool,
     pub bg_models: usize,
     /// cumulative count of events queued for the VM (tests)
@@ -326,6 +333,11 @@ pub struct ScriptState {
 pub struct FieldRing {
     pub kind: i32,
     pub lap_ms: i32,
+    /// (RG round 6) `SetRing` arg 2: laps of a kind-1 ring, else the `SetEventRingAbnormal` kind (-1 = none); arg 3 / 4: the
+    /// initial ring position (retail moves every field ring to (341.33, 224) right after)
+    pub arg: i32,
+    pub x: i32,
+    pub y: i32,
     /// number of hit areas in the spec
     pub areas: i32,
     pub spec: String,
@@ -1630,19 +1642,39 @@ impl FieldHost<'_> {
                 let spec = if ctx.argc > 5 { ascii(&raw_cstr(ctx, ctx.arg(5))) } else { String::new() };
                 let areas = spec.matches('S').count() as i32;
                 let colours = ring_colours(&spec);
-                self.st.ring = Some(FieldRing { kind: ctx.arg_i32(0), lap_ms: ctx.arg_i32(1), areas, spec, colours });
+                self.st.ring = Some(FieldRing { kind: ctx.arg_i32(0), lap_ms: ctx.arg_i32(1), arg: ctx.arg_i32(2), x: ctx.arg_i32(3), y: ctx.arg_i32(4), areas, spec, colours });
                 ExResult::Void
             }
             // 0x64 RingControl(1, ..): run the ring and wait for its result (US 0x004f9948 -> 0x004fb3e0: `CField+0x8b0` once the ring is over).
             // The port has no field ring screen yet: the ring is "played" at once with `ring_result` (default: every area hit = the area count).
             0x64 => {
-                if first {
+                // Ring screen hook (agent RG, `field_ring.rs`): with `ring_screen` on (the Bevy plugin sets it; the headless walker and the
+                // tests leave it off) the call starts the ring (`ring_wait`) and waits until the screen posts the colour code of the area the
+                // pointer stopped in (`ring_answer`; 0 = missed).  `ring_override` (walker / tests) always answers at once.
+                if self.st.ring_screen && self.st.ring_override.is_none() {
+                    if first {
+                        self.st.ring_answer = None;
+                        self.st.ring_wait = true;
+                        return ExResult::Yield(-1);
+                    }
+                    match self.st.ring_answer.take() {
+                        None if self.st.ring_wait => return ExResult::Yield(-1),
+                        Some(r) => {
+                            self.st.ring_wait = false;
+                            self.st.ring_result = r;
+                            ctx.set_ret(r as u32);
+                            return ExResult::Int;
+                        }
+                        None => {}
+                    }
+                } else if first {
                     return ExResult::Yield(-10);
                 }
                 // the JRing reports through its event 0x80 (`cbRing` US 0x004faf20 stores the result word at `CField+0x8b0`); for these
                 // "event" rings with coloured areas the scripts compare it with the colour codes 1..4: the colour of the area the pointer
-                // stopped in.  Without a ring screen the port answers the first area's colour (`ring_override` for tests / the walker)
-                let r = self.st.ring_override.unwrap_or_else(|| self.st.ring.as_ref().and_then(|r| r.colours.first().copied()).unwrap_or(0));
+                // stopped in.  Without a ring screen the port answers a perfect run (RG: `field_ring::instant_result` -- the first area's
+                // colour of a spin ring, every lap / area of the lap rings, e.g. WE_01_U wants 10 laps); `ring_override` for tests / the walker
+                let r = self.st.ring_override.unwrap_or_else(|| self.st.ring.as_ref().map(crate::field_ring::instant_result).unwrap_or(0));
                 self.st.ring_result = r;
                 ctx.set_ret(r as u32);
                 ExResult::Int

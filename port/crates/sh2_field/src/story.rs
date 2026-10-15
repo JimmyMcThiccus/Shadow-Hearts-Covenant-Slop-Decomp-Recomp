@@ -206,6 +206,10 @@ pub struct Game {
     no_ctrl: u32,
     /// buttons pressed on the next tick (`Action::Pad`)
     pad: u16,
+    /// ticks an event job has made no engine call (a script polling `get_pad` for a button other than circle, e.g. MI_02_U's ship
+    /// map waits for cross) and the engine-call count of the last tick
+    quiet: u32,
+    last_calls: u64,
 }
 
 /// Button minigames the walker plays like a player who reads the screen.  TD_14_U (Todo lab shooting range, "destroy the 30 targets"): target
@@ -308,7 +312,7 @@ impl Game {
         let prev = std::mem::replace(&mut session.map, map.to_string());
         let mut rt = crate::plugin::build_runtime_carry(&env.pkb, None, Some(env.tables.clone()), map, entry, &session, carry)?;
         rt.st.prev_map = if prev != map { prev } else { session.chr_pos.as_ref().map(|_| String::new()).unwrap_or_default() };
-        Some(Game { rt, session: GameSessionBox(session), battle: env.battle.clone(), party_log: vec![], idle_root: 0, no_ctrl: 0, pad: 0 })
+        Some(Game { rt, session: GameSessionBox(session), battle: env.battle.clone(), party_log: vec![], idle_root: 0, no_ctrl: 0, pad: 0, quiet: 0, last_calls: 0 })
     }
 
     pub fn map(&self) -> &str {
@@ -369,6 +373,18 @@ impl Game {
         if let Some(b) = minigame_press(rt) {
             press = if t % 12 == 0 { b } else { 0 };
         }
+        // an event that makes no engine call for 5 s while no selection is open waits for another button: like a player, try cross,
+        // triangle and square in turn (one press every 5 s)
+        if rt.vm.top_event().is_some() && rt.st.calls == self.last_calls && !rt.st.ui.select.active {
+            self.quiet += 1;
+            if self.quiet % 300 == 0 {
+                const OTHER: [u16; 3] = [padbit::CROSS, padbit::TRIANGLE, padbit::SQUARE];
+                press = OTHER[((self.quiet / 300 - 1) % 3) as usize];
+            }
+        } else {
+            self.quiet = 0;
+        }
+        self.last_calls = rt.st.calls;
         rt.st.press = press;
         crate::host::tick_state(&mut rt.st, &mut rt.sim);
         rt.sim.update_camera();
@@ -653,6 +669,10 @@ pub struct Walker<'e> {
     pub exits: BTreeMap<String, BTreeSet<String>>,
     pub t_decide: f64,
     pub trial_ticks: u64,
+    /// when the walk stagnates, run a breadth-first puzzle search ([`Walker::search`]) of at most this many states before backtracking
+    /// (0 = off); searches from the same state are not repeated
+    pub search_budget: usize,
+    searched: std::collections::HashSet<u64>,
 }
 
 pub type HashSet2 = std::collections::HashSet<(u16, u8)>;
@@ -704,6 +724,8 @@ impl<'e> Walker<'e> {
             exits: Default::default(),
             t_decide: 0.0,
             trial_ticks: 0,
+            search_budget: 0,
+            searched: Default::default(),
         };
         let r = w.game.regs();
         w.mark_seen(&r);
@@ -1009,7 +1031,7 @@ impl<'e> Walker<'e> {
                         let (o, g) = this.try_action(a, vec![]);
                         let seen = o.policy.seen.clone();
                         // a field ring was played: also try every other colour it could stop on
-                        let ring_cols: Vec<i32> = g.rt.st.ring.as_ref().map(|r| r.colours.clone()).unwrap_or_default();
+                        let ring_cols: Vec<i32> = g.rt.st.ring.as_ref().map(crate::field_ring::possible_results).unwrap_or_default(); // RG: results by ring kind
                         let mut variants = vec![(o, g)];
                         let mut tried_cols = std::collections::BTreeSet::new();
                         for c in ring_cols.iter().skip(1) {
@@ -1066,7 +1088,19 @@ impl<'e> Walker<'e> {
             }
         }
         let progress = outs.first().map(|o| o.0 > 0).unwrap_or(false);
-        let pick = if progress {
+        // debugging: `SH2_WALK_FORCE=MAP:text[;MAP:text..]` takes the first trial on MAP whose action (+ choices) contains `text`
+        let forced = std::env::var("SH2_WALK_FORCE").ok().and_then(|v| {
+            v.split(';').find_map(|p| {
+                let (m, t) = p.split_once(':')?;
+                if m != self.game.map() {
+                    return None;
+                }
+                outs.iter().position(|(_, o, _)| format!("{} {:?}", o.action, o.policy.choices).contains(t))
+            })
+        });
+        let pick = if let Some(i) = forced {
+            i
+        } else if progress {
             0
         } else {
             // nothing new here: head for the frontier -- a map not visited since the story last moved.  Direct exits to such a map first,
@@ -1234,7 +1268,17 @@ impl<'e> Walker<'e> {
                 return;
             }
             d += 1;
-            // stagnation: back to the latest decision that had another way on
+            // stagnation: a breadth-first search for the next story flag from here (state puzzles), then back to the latest decision that
+            // had another way on
+            if self.stagnant > 80 && self.search_budget > 0 && self.searched.insert(state_key(&self.game)) {
+                self.log(format!("search: no progress for {} decisions, breadth-first search (budget {})", self.stagnant, self.search_budget));
+                if self.search(self.search_budget) {
+                    continue;
+                }
+                if self.ended {
+                    return;
+                }
+            }
             if self.stagnant > 80 && self.backtracks < 40 {
                 if let Some((g, map, action)) = self.branches.pop() {
                     self.backtracks += 1;
@@ -1252,5 +1296,187 @@ impl<'e> Walker<'e> {
                 return;
             }
         }
+    }
+}
+
+/// FNV-1a over bytes.
+fn fnv(h: &mut u64, b: &[u8]) {
+    for &x in b {
+        *h ^= x as u64;
+        *h = h.wrapping_mul(0x100000001b3);
+    }
+}
+
+/// What makes two free-control states the same for the puzzle search: map, register file, treasure / world-map chunks and the
+/// battle save (bag: key items).  The position on the map is not part of it (every action puts the player on its spot).
+pub fn state_key(g: &Game) -> u64 {
+    let mut h: u64 = 0xcbf29ce484222325;
+    fnv(&mut h, g.map().as_bytes());
+    fnv(&mut h, &reg_bytes(&g.regs()));
+    let f = &g.session.0.save.field;
+    for t in [sh2_menu::save::FieldSave::TAG_TR, sh2_menu::save::FieldSave::TAG_WM] {
+        if let Some(c) = f.find(t) {
+            fnv(&mut h, &c.payload);
+        }
+    }
+    fnv(&mut h, &g.session.0.save.btl.data);
+    h
+}
+
+/// A node of the puzzle search.
+struct SearchNode {
+    game: Game,
+    /// what led here from the search root
+    path: Vec<String>,
+}
+
+impl<'e> Walker<'e> {
+    /// Follow a scene change of a trial game to the next free control (map jumps, scripted battles; at most 8 hops).  The world map
+    /// ends the search branch (`None`), so does a stop the walk cannot go on from.
+    fn follow(&self, mut g: Game, mut stop: Stop, path: &mut Vec<String>) -> Option<(Game, Stop)> {
+        for _ in 0..8 {
+            match stop {
+                Stop::Free | Stop::Ending => return Some((g, stop)),
+                Stop::Jump(map, entry) => {
+                    if map == crate::worldmap::WORLDMAP_NAME || !self.env.has_map(&map) {
+                        return None;
+                    }
+                    let mut s = clone_session(&g.session.0);
+                    save_regs(&g.rt, &mut s);
+                    let carry = g.rt.st.actors.carry_over();
+                    path.push(format!("-> {map}:{entry}"));
+                    g = Game::enter_carry(self.env, s, &map, entry, Some(carry))?;
+                }
+                Stop::Battle(b) => {
+                    let map = g.map().to_string();
+                    let mut s = clone_session(&g.session.0);
+                    save_regs(&g.rt, &mut s);
+                    s.chr_pos = Some(ChrPos { map: map.clone(), pos: g.rt.sim.player.pos, yaw: g.rt.sim.player.yaw });
+                    let map = g.rt.st.retail.socket_map.clone().unwrap_or(map);
+                    s.battles_won += 1;
+                    s.ssh_sys = [2, 1, 0, s.ssh_sys[3]];
+                    let prev = g.rt.st.prev_map.clone();
+                    path.push(format!("battle: monster set {} -> {map}", b.monster_set));
+                    g = Game::enter(self.env, s, &map, FieldRequest::RESTORE)?;
+                    if g.rt.st.prev_map.is_empty() {
+                        g.rt.st.prev_map = prev;
+                    }
+                }
+                _ => return None,
+            }
+            let mut pol = Policy::default();
+            let (s, _) = g.settle(&mut pol, self.max_settle);
+            stop = s;
+        }
+        None
+    }
+
+    /// Breadth-first search over the free-control states reachable from the current one without the world map, until one sets a story
+    /// flag that is not set now (or ends the game).  For the state puzzles the novelty walk gets lost in (Mikasa's two-party security keys,
+    /// Mt. Fuji's crystal gates, Todo lab 2's power relay): every state is expanded with every action and the other answers of its first
+    /// two prompts.  On success the walk continues from the state found and the path is logged; `max_nodes` bounds the expansions.
+    pub fn search(&mut self, max_nodes: usize) -> bool {
+        let root_regs = self.game.regs();
+        let root_map = self.game.map().to_string();
+        let mut seen: std::collections::HashSet<u64> = std::collections::HashSet::new();
+        seen.insert(state_key(&self.game));
+        let mut queue: std::collections::VecDeque<SearchNode> = std::collections::VecDeque::new();
+        queue.push_back(SearchNode { game: self.game.clone(), path: vec![] });
+        let mut expanded = 0usize;
+        let t0 = std::time::Instant::now();
+        let goal = |g: &Game, st: &Stop| -> bool { *st == Stop::Ending || story_flags(&g.regs()).iter().any(|&f| !flag(&root_regs, f) && story_flag_name(f).is_some()) };
+        while let Some(node) = queue.pop_front() {
+            if expanded >= max_nodes {
+                break;
+            }
+            expanded += 1;
+            let acts = node.game.actions();
+            let w = WalkerView { max_action: self.max_action };
+            let wr = &w;
+            let ng = &node.game;
+            // every action and its prompt variants on a copy, in parallel
+            let results: Vec<Vec<(Outcome, Game)>> = std::thread::scope(|sc| {
+                let hs: Vec<_> = acts
+                    .iter()
+                    .map(|a| {
+                        sc.spawn(move || {
+                            let (o, g) = wr.trial(ng, a, vec![], None);
+                            let seen = o.policy.seen.clone();
+                            let ring_cols: Vec<i32> = g.rt.st.ring.as_ref().map(crate::field_ring::possible_results).unwrap_or_default();
+                            let mut v = vec![(o, g)];
+                            for c in ring_cols.iter().skip(1) {
+                                v.push(wr.trial(ng, a, vec![], Some(*c)));
+                            }
+                            for k in 0..seen.len().min(2) {
+                                for c in 1..seen[k].min(5) {
+                                    let mut ch = vec![0; k];
+                                    ch.push(c);
+                                    v.push(wr.trial(ng, a, ch, None));
+                                }
+                            }
+                            v
+                        })
+                    })
+                    .collect();
+                hs.into_iter().map(|h| h.join().expect("search thread")).collect()
+            });
+            for variants in results {
+                for (o, g) in variants {
+                    self.trial_ticks += o.ticks as u64;
+                    if matches!(o.stop, Stop::Timeout | Stop::GameOver | Stop::WorldMap(..)) {
+                        continue;
+                    }
+                    let mut path = node.path.clone();
+                    let ch = if o.policy.choices.is_empty() { String::new() } else { format!(" choices {:?}", o.policy.choices) };
+                    path.push(format!("[{}] {}{ch}{}", ng.map(), o.action, o.policy.ring.map(|r| format!(" ring {r}")).unwrap_or_default()));
+                    let Some((g2, stop)) = self.follow(g, o.stop.clone(), &mut path) else { continue };
+                    if goal(&g2, &stop) {
+                        self.log(format!("search: found after {expanded} states ({:.0} s) from {root_map}, {} steps:", t0.elapsed().as_secs_f64(), path.len()));
+                        for p in &path {
+                            self.log(format!("  search path: {p}"));
+                        }
+                        let before = self.game.regs();
+                        self.game = g2;
+                        *self.visits.entry(self.game.map().to_string()).or_default() += 1;
+                        let r = self.game.regs();
+                        self.mark_seen(&r);
+                        self.note_flags(&before);
+                        self.stagnant = 0;
+                        self.since_progress.clear();
+                        if stop == Stop::Ending {
+                            return self.apply_stop(Stop::Ending);
+                        }
+                        return true;
+                    }
+                    if !matches!(stop, Stop::Free) {
+                        continue;
+                    }
+                    if seen.insert(state_key(&g2)) {
+                        queue.push_back(SearchNode { game: g2, path });
+                    }
+                }
+            }
+            if self.verbose && expanded % 20 == 0 {
+                eprintln!("  search: {expanded} expanded, {} queued, {} states, {:.0} s", queue.len(), seen.len(), t0.elapsed().as_secs_f64());
+            }
+        }
+        self.log(format!("search: nothing after {expanded} states ({} distinct, {:.0} s) from {root_map}", seen.len(), t0.elapsed().as_secs_f64()));
+        false
+    }
+}
+
+/// The parts of the walker a trial needs (shared by the search threads).
+struct WalkerView {
+    max_action: u32,
+}
+
+impl WalkerView {
+    fn trial(&self, game: &Game, a: &Action, choices: Vec<usize>, ring: Option<i32>) -> (Outcome, Game) {
+        let mut g = game.clone();
+        let mut pol = Policy { choices, seen: vec![], ring };
+        g.rt.st.ring_override = ring;
+        g.start(a);
+        let (stop, ticks) = g.settle(&mut pol, self.max_action);
+        (Outcome { action: a.clone(), stop, ticks, novel: 0, new_flags: vec![], changed_bytes: 0, save_changed: 0, picked_up: false, policy: pol }, g)
     }
 }

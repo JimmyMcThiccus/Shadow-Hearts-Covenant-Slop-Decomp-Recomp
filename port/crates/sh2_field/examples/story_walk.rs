@@ -60,6 +60,15 @@ fn main() {
         c.ctrl_shown = true;
         c
     });
+    // `--regs 0x115f,0x1163`: print those register bytes at the start and at the end of the walk
+    let show: Vec<usize> = get("--regs").map(|v| v.split(',').map(|t| usize::from_str_radix(t.trim_start_matches("0x"), 16).unwrap()).collect()).unwrap_or_default();
+    let dump = |regs: &[u32], when: &str| {
+        if !show.is_empty() {
+            let b: Vec<u8> = regs.iter().flat_map(|w| w.to_le_bytes()).collect();
+            println!("regs {when}: {}", show.iter().map(|&r| format!("{r:#x}={:#x}", b.get(r).copied().unwrap_or(0))).collect::<Vec<_>>().join(" "));
+        }
+    };
+    dump(&s.regs, "at the start");
     let game = Game::enter_carry(&env, s, &map, entry, carry).expect("map");
     let mut w = Walker::new(&env, game);
     w.checkpoint_dir = get("--checkpoints").map(std::path::PathBuf::from);
@@ -67,7 +76,14 @@ fn main() {
         let _ = std::fs::create_dir_all(d);
     }
     w.verbose = a.iter().any(|x| x == "-v") || std::env::var_os("SH2_WALK_STREAM").is_some();
+    // `--search N`: start with a breadth-first puzzle search of at most N states; `--search-on-stall N`: search when the walk stagnates
+    w.search_budget = get("--search-on-stall").and_then(|v| v.parse().ok()).unwrap_or(0);
     let t0 = std::time::Instant::now();
+    if let Some(n) = get("--search").and_then(|v| v.parse().ok()) {
+        if !w.search(n) {
+            println!("search found nothing");
+        }
+    }
     w.run(decisions);
     if !w.verbose {
         for s in &w.steps {
@@ -76,6 +92,7 @@ fn main() {
     }
     println!("\n== {} steps in {:.1} s, {} maps visited, {} battles", w.steps.len(), t0.elapsed().as_secs_f32(), w.visits.len(), w.battles.len());
     let regs = w.game.regs();
+    dump(&regs, "at the end");
     for f in story_flags(&regs) {
         println!("flag {f:#x} {}", story_flag_name(f).unwrap_or(""));
     }

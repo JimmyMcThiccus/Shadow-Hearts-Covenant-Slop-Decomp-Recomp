@@ -1192,6 +1192,10 @@ impl Plugin for FieldPlugin {
             if !app.is_plugin_added::<crate::navimap_plugin::NaviMapPlugin>() {
                 app.add_plugins(crate::navimap_plugin::NaviMapPlugin);
             }
+            // round 6 RG: the field Judgement Ring screen (`RingControl` waits for it; headless runs answer at once)
+            if !app.is_plugin_added::<crate::field_ring::FieldRingPlugin>() {
+                app.add_plugins(crate::field_ring::FieldRingPlugin);
+            }
             app.add_systems(OnEnter(Scene::Field), (spawn_scene.after(enter_field), show_map_root))
                 .add_systems(OnExit(Scene::Field), hide_map_root)
                 .add_systems(Update, (sync_render, sync_actor_meshes, debug_gizmos, debug_cameras).run_if(in_state(Scene::Field)))

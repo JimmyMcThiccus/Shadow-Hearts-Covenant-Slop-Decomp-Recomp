@@ -53,6 +53,7 @@ pub mod cutscene;
 pub mod cutscene_plugin;
 pub mod event;
 pub mod field;
+pub mod field_ring;
 pub mod host;
 pub mod fld_ops;
 pub mod fscreen;
