@@ -1172,7 +1172,17 @@ impl Plugin for BattleModelsPlugin {
             .add_systems(OnExit(Scene::Battle), restore_light)
             .add_systems(Update, drive_sparkles.run_if(in_state(Scene::Battle)))
             .add_systems(Update, motion_sounds.after(drive_battle_models).run_if(in_state(Scene::Battle)))
-            .add_systems(Update, (spawn_battle_models, apply_home_moves, drive_last_boss, drive_battle_models, follow_weapons).chain().run_if(in_state(Scene::Battle)).run_if(resource_exists::<Sh2Disc>))
+            // the drivers set this frame's motions before the poses are evaluated, and the weapons copy the hand frame of *this* frame's pose:
+            // unordered, a weapon sat one frame behind its hand in some builds / runs (round 6 GPA, `SH2_FIXED_DT` battle demo diffs)
+            .add_systems(
+                Update,
+                (spawn_battle_models, apply_home_moves, drive_last_boss, drive_battle_models)
+                    .chain()
+                    .before(sh2_gfx::bevy::model::animate_models)
+                    .run_if(in_state(Scene::Battle))
+                    .run_if(resource_exists::<Sh2Disc>),
+            )
+            .add_systems(Update, follow_weapons.after(sh2_gfx::bevy::model::animate_models).run_if(in_state(Scene::Battle)).run_if(resource_exists::<Sh2Disc>))
             ;
     }
 }
