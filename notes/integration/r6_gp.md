@@ -23,8 +23,18 @@ rebuilt as a new `Mesh` every frame, and every drop shadow was rasterised on the
   the posed one; that changed the order of translucent atomics (the weapon-hit burst lost its rays).  Each frame the posed AABB centre is computed
   (positions only, nothing stored or uploaded), the draw entity is offset by `posed - bind` centre and the palette by the inverse: the sort key is
   the CPU path's again (exact).  Mirror copies share the skin and copy the offset (`mirror.rs` `sync_mirror_skins`).
-* Blend-shape atomics upload their morphed bind geometry only when the weights change; water atomics their U wobble; billboards
-  (`BAtomic`) are still built on the CPU (`billboard_vertices`, tiny) but re-uploaded only when they change.
+* Blend-shape atomics upload their morphed bind geometry only when the weights change; water atomics their U wobble.
+* **Billboards (`BAtomic`, GP follow-up)** ride the same skin buffer: the mesh is static (`billboard_static`: per vertex the element centre,
+  corner UV, corner offset in `UV_1`, file colour, joint 1 for the first element / 0 for the rest) and each frame only a three-matrix palette
+  goes up (`billboard_palette`): joint 0 = bone, joint 1 = bone * T(`trans*` offset), joint 2 = the camera-facing corner basis
+  (`RotZ(roll) * diag(sx, sy)` along the camera's right / down, model space) with the atomic colour factor of the first element in column 2.
+  `sh2_vertex.wgsl` (`SH2_BILLBOARD`, set by `Sh2Material::specialize` for skinned meshes with `UV_1`): `P * centre + B0 * corner.x +
+  B1 * corner.y`.  Sort key: the posed AABB centre via the draw offset, as for the skins.  Before this, every camera move re-uploaded every
+  billboard mesh (save points: 38).  Parity (`SH2_FIXED_DT=60`, `--view-model COMMON.PKB@0x1cc840 / 0x1d0a60 / 0x1d9540` = `SVP.BIN`'s
+  three models, motions 0-3, oblique `--cam`, `SH2_CPU_SKIN=1` vs GPU): 17 of 18 shots identical, one 0.015 mean (0.03 % of pixels: where
+  a sparkle quad crosses the ring plane, a depth tie decided by float rounding).  Battle demo programs 035 / 042: <= 0.025 mean, the only
+  visible differences in Yuri's translucent hair cards (character skin, not billboards; r6_gp's own range).  Unit test
+  `gpu_palette_matches_the_cpu_vertices`.
 * `animate_models` is split: **phase A in parallel** over the models (`par_iter_mut`: clock, skeleton, dynamics, palettes, sort offsets, shadow
   extents; touches only the model), **phase B serial** (asset writes, materials, visibility, shadows).
 * `SH2_CPU_SKIN=1`: the old CPU skin + upload (A/B switch; it shares everything else, incl. the GPU shadows).
@@ -88,7 +98,7 @@ PF's profiler (`SH2_PERF`, same runs) -- render-asset churn per frame:
 | autoplay battle | 63.8 / 6.1 / 111.5 (p95 21.0 ms) | 13.0 / 0.05 / 13.0 (p95 17.4 ms) |
 
 What is still uploaded per frame: shadow receiver meshes whose UVs move with the caster (1-5 tiny meshes), the 2D UI canvas, effect-model
-billboards that animate (`effmdl_*` hit bursts), weapon trails (FX2's `effects_bridge`), and 13-15 materials (alpha fades of effect / character
+billboards that animate (`effmdl_*` hit bursts; now GPU, see 1a), weapon trails (FX2's `effects_bridge`), and 13-15 materials (alpha fades of effect / character
 atomics that really change; FX2's effect code).
 
 ## 3. Visual parity
@@ -117,7 +127,6 @@ shot that flip between two values run to run).  Request to FX2 / BT: order them 
 * Skeleton evaluation (small, script driven) -- now in parallel.
 * Posed positions are still walked once per atomic per frame (positions only, no allocation): they give the exact blended-draw sort key and the
   shadow rectangle.  Could be replaced by per-joint bounds if it ever shows up in a profile.
-* `BAtomic` billboards (save points, effect models): CPU vertices, uploaded only when they change.
 * `cus*` line models, receiver triangles of the shadows (the floor search), blend-shape morphs (uploaded on change only).
 
 ## 5. Switches (all new)

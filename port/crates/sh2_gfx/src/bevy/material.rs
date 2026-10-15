@@ -335,10 +335,14 @@ impl Material for Sh2Material {
     fn specialize(
         _pipeline: &MaterialPipeline,
         descriptor: &mut RenderPipelineDescriptor,
-        _layout: &MeshVertexBufferLayoutRef,
+        layout: &MeshVertexBufferLayoutRef,
         key: MaterialPipelineKey<Self>,
     ) -> Result<(), SpecializedMeshPipelineError> {
         sh2_specialize(descriptor, key.bind_group_data);
+        // GPU billboards (`billboard.rs`): skinned meshes with a corner offset in `UV_1`
+        if layout.0.contains(Mesh::ATTRIBUTE_UV_1) && layout.0.contains(Mesh::ATTRIBUTE_JOINT_INDEX) {
+            descriptor.vertex.shader_defs.push("SH2_BILLBOARD".into());
+        }
         Ok(())
     }
 }

@@ -90,6 +90,45 @@ pub fn billboard_vertices(a: &AtomicDef, p: &BillboardParams, bone: &Matrix, rig
     (pos, uv, col)
 }
 
+/// Static vertex data of the GPU billboard (`sh2_vertex.wgsl`, `SH2_BILLBOARD`): per vertex the element centre (file position, model space
+/// before the bone), the corner UV, the corner offset (`UV_1`, view-space units before scale / roll), the file colour and the palette joint
+/// (1 for the first element, which carries the `trans*` offset and the atomic colour, 0 for the others).
+#[allow(clippy::type_complexity)]
+pub fn billboard_static(a: &AtomicDef) -> (Vec<[f32; 3]>, Vec<[f32; 2]>, Vec<[f32; 2]>, Vec<[f32; 4]>, Vec<[u16; 4]>) {
+    let g = &a.geometry;
+    let n = g.billboard.len() * 4;
+    let (mut pos, mut uv, mut corner, mut col, mut joint) = (Vec::with_capacity(n), Vec::with_capacity(n), Vec::with_capacity(n), Vec::with_capacity(n), Vec::with_capacity(n));
+    for (i, e) in g.billboard.iter().enumerate() {
+        let centre = [e[0][0] as f32 / 16.0, e[0][1] as f32 / 16.0, e[0][2] as f32 / 16.0];
+        let color = g.colors.get(i).map(|c| c.map(|v| v as f32 / 128.0)).unwrap_or([1.0; 4]);
+        for (k, c) in e[1..5].iter().enumerate() {
+            pos.push(centre);
+            uv.push([(k & 1) as f32, (k >> 1) as f32]);
+            corner.push([c[0] as f32 / 16.0, c[1] as f32 / 16.0]);
+            col.push(color);
+            joint.push([u16::from(i == 0), 0, 0, 0]);
+        }
+    }
+    (pos, uv, corner, col, joint)
+}
+
+/// The three palette matrices of a GPU billboard: joint 0 = the bone, joint 1 = the bone after the first element's offset, joint 2 = the
+/// corner basis (columns 0 / 1: the model-space directions of a unit corner x / y after `RotZ(roll) * diag(sx, sy)` along the camera's
+/// `right` / `down`) with the first element's colour factor in column 2 (`rgb`, from the atomic colour).
+pub fn billboard_palette(p: &BillboardParams, bone: Mat4, right: Vec3, down: Vec3, color0: [f32; 3]) -> [Mat4; 3] {
+    let (s, c) = p.roll.sin_cos();
+    let bx = (right * c + down * s) * p.scale.x;
+    let by = (down * c - right * s) * p.scale.y;
+    let basis = Mat4::from_cols(bx.extend(0.0), by.extend(0.0), Vec3::from(color0).extend(0.0), Vec4::W);
+    [bone, bone * Mat4::from_translation(p.offset), basis]
+}
+
+/// Posed position of a static billboard vertex under [`billboard_palette`] (the vertex stage's arithmetic; used for the sort key).
+#[inline]
+pub fn billboard_posed(pal: &[Mat4; 3], centre: Vec3, corner: Vec2, first: bool) -> Vec3 {
+    pal[first as usize].transform_point3(centre) + pal[2].x_axis.truncate() * corner.x + pal[2].y_axis.truncate() * corner.y
+}
+
 /// Triangle list of `n` billboard elements (two triangles of the strip per element).
 pub fn billboard_indices(n: usize) -> Vec<u32> {
     let mut idx = Vec::with_capacity(n * 6);
@@ -153,5 +192,29 @@ mod tests {
         // corner (-1,-1) scaled x2 -> (-2,-1), rotated by +90 degrees -> (1,-2), centre (10, -2, 0)
         assert!((Vec3::from(v[0]) - Vec3::new(11.0, -4.0, 0.0)).length() < 0.05, "{:?}", v[0]);
         assert!(!apply_event(&mut p, "nope", 1.0));
+    }
+
+    #[test]
+    fn gpu_palette_matches_the_cpu_vertices() {
+        let mut a = atom();
+        a.geometry.billboard.push([[0, 32, -48, 0], [-8, -24, 0, 0], [24, -8, 0, 0], [-16, 8, 0, 0], [8, 40, 0, 0]]);
+        a.geometry.colors.push([0x10, 0x20, 0x30, 0x40]);
+        let p = BillboardParams { scale: Vec2::new(1.5, 0.75), roll: 0.7, offset: Vec3::new(2.0, -3.0, 1.0) };
+        let bone = Mat4::from_scale_rotation_translation(Vec3::splat(1.2), Quat::from_rotation_y(0.4), Vec3::new(5.0, -7.0, 3.0));
+        let (right, down) = (Vec3::new(0.8, 0.0, 0.6), Vec3::new(0.0, 1.0, 0.0));
+        let col = [0.5, 0.25, 1.0];
+        let base = a.geometry.colors[0].map(|v| v as f32 / 128.0);
+        let (cpu, cuv, ccol) = billboard_vertices(&a, &p, &Matrix::from_glam(bone), right, down, Some([base[0] * col[0], base[1] * col[1], base[2] * col[2], base[3]]));
+        let pal = billboard_palette(&p, bone, right, down, col);
+        let (pos, uv, corner, scol, joint) = billboard_static(&a);
+        assert_eq!(pos.len(), cpu.len());
+        for i in 0..pos.len() {
+            let q = billboard_posed(&pal, Vec3::from(pos[i]), Vec2::from(corner[i]), joint[i][0] == 1);
+            assert!((q - Vec3::from(cpu[i])).length() < 1e-3, "{i}: {q:?} vs {:?}", cpu[i]);
+            assert_eq!(uv[i], cuv[i]);
+            let f = if joint[i][0] == 1 { Vec3::from(col) } else { Vec3::ONE };
+            let c = Vec3::from_slice(&scol[i]) * f;
+            assert!((c - Vec3::from_slice(&ccol[i])).length() < 1e-6 && scol[i][3] == ccol[i][3], "{i}");
+        }
     }
 }

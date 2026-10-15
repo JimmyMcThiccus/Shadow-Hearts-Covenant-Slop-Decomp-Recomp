@@ -10,7 +10,9 @@
 //! the identity ([`Sh2SkinJoint`]).  Bevy's skin extraction therefore uploads exactly the palette into its joint storage buffer, and
 //! `sh2_vertex.wgsl` (the vertex stage of [`Sh2Material`]) computes `world_from_local * (P * v)` and `normalize(P * n)`: the same arithmetic as the
 //! old CPU path (`skin`), which stays available with `SH2_CPU_SKIN=1` (A/B comparisons).  Blend-shape atomics upload their morphed bind geometry
-//! only when it changes; water atomics their UVs; billboards are still built on the CPU ([`billboard_vertices`]).  The drop shadow's
+//! only when it changes; water atomics their UVs.  Billboards (`BAtomic`) use the same skin buffer: a static mesh of element centres + corner
+//! offsets and a three-matrix palette per frame (bone, bone + offset, camera-facing corner basis; `billboard.rs`), so a moving camera
+//! re-uploads nothing (`SH2_CPU_SKIN=1` keeps the CPU-built quads, [`billboard_vertices`]).  The drop shadow's
 //! silhouette is rendered on the GPU too (`shadow.rs`: the caster's atomics join its shadow camera's render layer); the CPU only walks the
 //! posed positions once per atomic (no normals, nothing uploaded) for the blended-draw sort key and the shadow rectangle.
 //! Rigid (Pack1/Pack2) atomics of a *static* model (field backgrounds) are merged per texture into one mesh and never touched again.
@@ -28,7 +30,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use super::bgmotion::apply_texanim_frame;
-use super::billboard::{billboard_indices, billboard_vertices, is_billboard};
+use super::billboard::{billboard_indices, billboard_palette, billboard_posed, billboard_static, billboard_vertices, is_billboard};
 use super::shadow::{shadow_light_dir, spawn_shadow_quad, tile_clip, Sh2ShadowMaterial, ShadowAtlas, ShadowCamera, ShadowCaster, ShadowExtents, ShadowSettings, ShadowSilhouette, SHADOW_LAYER};
 use ::bevy::camera::visibility::RenderLayers;
 use super::image::{texture_def_image, TexFilter};
@@ -214,8 +216,10 @@ struct Part {
     /// this frame: the CPU skin (`SH2_CPU_SKIN=1`) and whether the atomic casts a shadow (set in phase A of [`animate_models`])
     pending_cpu: Option<(Vec<[f32; 3]>, Option<Vec<[f32; 3]>>)>,
     caster: bool,
-    /// billboard geometry uploaded last
+    /// billboard geometry uploaded last (CPU billboards: `SH2_CPU_SKIN=1`)
     billboard_last: Option<(Vec<[f32; 3]>, Vec<[f32; 2]>, Vec<[f32; 4]>)>,
+    /// GPU billboard state (static mesh + per-frame palette, see `billboard.rs`)
+    bb_gpu: Option<BillboardGpu>,
     /// the atomic's draw on the shadow layer (casters only, see `shadow.rs`)
     silhouette: Option<Entity>,
 }
@@ -238,6 +242,28 @@ struct GpuSkin {
     /// this frame's palette (sort offset applied) and the offset, from phase A of [`animate_models`]; the morph needs uploading
     pending: Option<(Vec<Mat4>, Vec3)>,
     upload_shape: bool,
+}
+
+/// GPU billboard of one `BAtomic`: the mesh holds the static elements ([`billboard_static`]), each frame only the three palette matrices
+/// ([`billboard_palette`]) go to the GPU through the skin buffer, like [`GpuSkin`].
+struct BillboardGpu {
+    /// static vertex data (centre, corner offset, first-element flag): the posed AABB centre for the sort key
+    verts: Vec<(Vec3, Vec2, bool)>,
+    bindposes: Option<Handle<SkinnedMeshInverseBindposes>>,
+    joint_gen: u32,
+    /// AABB centre of the static positions (what Bevy's sort key sees)
+    bind_center: Vec3,
+    /// this frame's palette (sort offset applied) and the offset, from phase A
+    pending: Option<([Mat4; 3], Vec3)>,
+}
+
+impl BillboardGpu {
+    fn new(a: &AtomicDef) -> BillboardGpu {
+        let (pos, _, corner, _, joint) = billboard_static(a);
+        let verts: Vec<(Vec3, Vec2, bool)> = pos.iter().zip(&corner).zip(&joint).map(|((p, c), j)| (Vec3::from(*p), Vec2::from(*c), j[0] == 1)).collect();
+        let bind_center = aabb_center(verts.iter().map(|v| v.0));
+        BillboardGpu { verts, bindposes: None, joint_gen: u32::MAX, bind_center, pending: None }
+    }
 }
 
 /// `Mesh::compute_aabb` centre of a position list (zero when empty).
@@ -533,7 +559,8 @@ pub fn spawn_animated_model_ex(
         }
         let bones = primary_bones(a, inst_total);
         let gpu_skin = (!billboard && gpu_skinning()).then(|| GpuSkin::new(&inst, i, &bones, a.geometry.positions.len()));
-        parts.push(Part { atomic: i, draws, mesh, bones, skinned: true, lit, billboard, gpu: gpu_skin, pending_cpu: None, caster: false, billboard_last: None, silhouette: None });
+        let bb_gpu = (billboard && gpu_skinning()).then(|| BillboardGpu::new(a));
+        parts.push(Part { atomic: i, draws, mesh, bones, skinned: true, lit, billboard, gpu: gpu_skin, pending_cpu: None, caster: false, billboard_last: None, bb_gpu, silhouette: None });
     }
     let shadow = if (in_place || std::env::var_os("SH2_DEBUG_CHAR").is_some()) && ShadowSettings::default().enabled {
         spawn_shadow_quad(commands, holder, gpu.meshes, gpu.images, gpu.materials)
@@ -611,10 +638,24 @@ fn advance_model(am: &mut AnimatedModel, gt: &GlobalTransform, dt: f32, gpu_on: 
         part.pending_cpu = None;
         let alpha = inst.model_alpha * inst.atomic_alpha.get(part.atomic).copied().unwrap_or(1.0);
         part.caster = want_shadow && !part.billboard && alpha > 0.4 && inst.visible.get(part.atomic).copied().unwrap_or(true);
+        let a = &inst.model.atomics[part.atomic];
         if part.billboard {
+            // GPU billboard: the palette of this frame, and the sort offset of the posed vertices (= the CPU mesh's AABB centre)
+            if let (Some(bg), Some((right, down)), true) = (part.bb_gpu.as_mut(), cam_axes, gpu_on) {
+                let bone = palette_matrix(a.chunks.first().and_then(|c| inst.pose.get(c.bones[0] as usize)));
+                let col = inst.atomic_color.get(part.atomic).copied().unwrap_or([1.0; 3]);
+                let mut pal = billboard_palette(&inst.billboard[part.atomic], bone, right, down, col);
+                let centre = aabb_center(bg.verts.iter().map(|&(p, c, f)| billboard_posed(&pal, p, c, f)));
+                let offset = if bg.verts.is_empty() { Vec3::ZERO } else { centre - bg.bind_center };
+                if offset != Vec3::ZERO {
+                    let back = Mat4::from_translation(-offset);
+                    pal[0] = back * pal[0];
+                    pal[1] = back * pal[1];
+                }
+                bg.pending = Some((pal, offset));
+            }
             continue;
         }
-        let a = &inst.model.atomics[part.atomic];
         match part.gpu.as_mut().filter(|_| gpu_on) {
             Some(gs) => {
                 let g = &a.geometry;
@@ -851,6 +892,50 @@ pub fn animate_models(
                 if let Some(Some(uv)) = am.inst.water_uvs.get(part.atomic) {
                     if let Some(mut mesh) = meshes.get_mut(&part.mesh) {
                         mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv.clone());
+                    }
+                }
+                continue;
+            }
+            if let (Some(bg), Some(j), Some(bp)) = (part.bb_gpu.as_mut(), joint, bindposes.as_mut()) {
+                let Some((pal, offset)) = bg.pending.take() else { continue };
+                for pd in &part.draws {
+                    if let Ok(mut t) = tfs.get_mut(pd.entity) {
+                        if t.translation != offset {
+                            t.translation = offset;
+                        }
+                    }
+                }
+                match bg.bindposes.as_ref().filter(|h| bp.contains(*h)) {
+                    Some(h) => {
+                        // unchanged camera / bone / params: no write (a `get_mut` re-uploads the skin)
+                        if bp.get(h).map(|cur| cur[..] != pal[..]).unwrap_or(false) {
+                            if let Some(mut asset) = bp.get_mut(h) {
+                                *asset = SkinnedMeshInverseBindposes::from(pal.to_vec());
+                            }
+                        }
+                    }
+                    None => {
+                        // first frame: the static elements replace the placeholder mesh
+                        if let Some(mut mesh) = meshes.get_mut(&part.mesh) {
+                            let (pos, uv, corner, col, jidx) = billboard_static(a);
+                            let n = pos.len();
+                            mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
+                            mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv);
+                            mesh.insert_attribute(Mesh::ATTRIBUTE_UV_1, corner);
+                            mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, col);
+                            mesh.insert_attribute(Mesh::ATTRIBUTE_JOINT_INDEX, VertexAttributeValues::Uint16x4(jidx));
+                            mesh.insert_attribute(Mesh::ATTRIBUTE_JOINT_WEIGHT, vec![[1.0f32, 0.0, 0.0, 0.0]; n]);
+                        }
+                        bg.bindposes = Some(bp.add(SkinnedMeshInverseBindposes::from(pal.to_vec())));
+                        bg.joint_gen = u32::MAX;
+                    }
+                }
+                if bg.joint_gen != j.generation {
+                    bg.joint_gen = j.generation;
+                    if let Some(h) = bg.bindposes.clone() {
+                        for pd in &part.draws {
+                            commands.entity(pd.entity).try_insert(SkinnedMesh { inverse_bindposes: h.clone(), joints: vec![j.entity; 3] });
+                        }
                     }
                 }
                 continue;
