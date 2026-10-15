@@ -227,9 +227,26 @@ impl GameFont {
 
     /// Pen advance of a string in cell pixels (unknown characters count as a half cell).
     pub fn measure(&self, s: &str, spacing: i32) -> f32 {
+        self.measure_layout(s, spacing, false)
+    }
+
+    /// Pen position of a glyph and its advance: the port's default layout draws a glyph `xo` into its cell and advances by `xo + adv`;
+    /// `proportional` is retail `FontDraw::Order` (US 0x0026b960) for a `FontItem` with flag `+0x58` bit 3 (the `FontItem::Clear` default):
+    /// `Font::GetFont` returns the cropped width (metric byte 1) as the glyph rectangle, the glyph is drawn at the pen and the pen advances
+    /// by that width alone (the lsb byte is not used).
+    pub fn glyph_pen(xo: usize, adv: usize, proportional: bool) -> (i32, i32) {
+        if proportional {
+            (0, adv as i32)
+        } else {
+            (xo as i32, (xo + adv) as i32)
+        }
+    }
+
+    /// [`measure`](Self::measure) with the layout of [`glyph_pen`](Self::glyph_pen).
+    pub fn measure_layout(&self, s: &str, spacing: i32, proportional: bool) -> f32 {
         s.chars()
             .map(|c| match self.glyph(c) {
-                Some((_, _, xo, adv)) => (xo + adv) as i32 + spacing,
+                Some((_, _, xo, adv)) => Self::glyph_pen(xo, adv, proportional).1 + spacing,
                 None => self.cell_w as i32 / 2 + spacing,
             })
             .sum::<i32>()
@@ -238,7 +255,12 @@ impl GameFont {
 
     /// Rasterise a single line with colour row `set`.
     pub fn render(&self, s: &str, set: usize, spacing: i32) -> Option<TextImage> {
-        let w = (self.measure(s, spacing) as usize).max(1) + 1;
+        self.render_layout(s, set, spacing, false)
+    }
+
+    /// [`render`](Self::render) with the layout of [`glyph_pen`](Self::glyph_pen).
+    pub fn render_layout(&self, s: &str, set: usize, spacing: i32, proportional: bool) -> Option<TextImage> {
+        let w = (self.measure_layout(s, spacing, proportional) as usize).max(1) + 1;
         let h = self.cell_h;
         let pal = self.palette(set);
         let mut px = vec![0u8; w * h * 4];
@@ -246,9 +268,10 @@ impl GameFont {
         for ch in s.chars() {
             match self.glyph(ch) {
                 Some((g, bpr, xo, adv)) => {
+                    let (gx, step) = Self::glyph_pen(xo, adv, proportional);
                     for y in 0..h {
                         for sx in 0..adv {
-                            let x = xo + sx;
+                            let x = gx as usize + sx;
                             let b = g.get(y * bpr + sx / 4).copied().unwrap_or(0);
                             let level = ((b >> ((sx & 3) * 2)) & 3) as usize;
                             if level == 0 {
@@ -266,7 +289,7 @@ impl GameFont {
                             px[o + 3] = (e[3] as u32 * 2).min(255) as u8;
                         }
                     }
-                    pen += (xo + adv) as i32 + spacing;
+                    pen += step + spacing;
                 }
                 None => pen += self.cell_w as i32 / 2 + spacing,
             }

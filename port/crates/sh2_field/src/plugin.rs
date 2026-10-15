@@ -884,7 +884,7 @@ fn draw_field_ui(rt: &FieldRuntime, canvas: &mut UiCanvas) {
             if let Some(m) = &w.msg {
                 m.draw(&mut g, x + 12.0, y + 9.0, Rgba::NEUTRAL);
                 if m.state == sh2_menu::message::MsgState::Done && w.key_pending {
-                    bevy_ui::text(&mut g, x + pw - 22.0, y + ph - 20.0, "v", 0, Rgba::new(0x80, 0x80, 0x30, 0x80), false);
+                    bevy_ui::text(&mut g, x + pw - 22.0, y + ph - 20.0, "v", bevy_ui::FIELD_FONT, Rgba::new(0x80, 0x80, 0x30, 0x80), false);
                 }
             }
             if ui.select.active && ui.select.window == wi {
@@ -896,11 +896,12 @@ fn draw_field_ui(rt: &FieldRuntime, canvas: &mut UiCanvas) {
                         bevy_ui::rect(&mut g, x + 8.0, ty - 2.0, pw - 16.0, CELL_H * 0.9, Rgba::new(0x60, 0x60, 0xc0, 0x50));
                     }
                     let mut m = sh2_menu::message::Message::new(64, sh2_menu::message::TextSpeed::Instant);
+                    crate::script_ui::field_text_style(&mut m);
                     m.set_text(it, vec![]);
                     m.finish();
                     m.draw(&mut g, x + 30.0, ty, if sel { Rgba::new(0x80, 0x80, 0x40, 0x80) } else { Rgba::NEUTRAL });
                     if sel {
-                        bevy_ui::text(&mut g, x + 12.0, ty, ">", 0, Rgba::new(0x80, 0x80, 0x30, 0x80), false);
+                        bevy_ui::text(&mut g, x + 12.0, ty, ">", bevy_ui::FIELD_FONT, Rgba::new(0x80, 0x80, 0x30, 0x80), false);
                     }
                 }
             }
@@ -911,7 +912,10 @@ fn draw_field_ui(rt: &FieldRuntime, canvas: &mut UiCanvas) {
             let pw = pw.min(w.msg.as_ref().map(|m| m.glyphs.iter().map(|g| g.width as f32).sum::<f32>() + 28.0).unwrap_or(pw)).max(60.0);
             bevy_ui::panel(&mut g, w.x as f32, w.y as f32, pw, CELL_H + 12.0, 0x78);
             if let Some(m) = &w.msg {
-                m.draw(&mut g, w.x as f32 + 12.0, w.y as f32 + 6.0, Rgba::new(0x80, 0xc0, 0xff, 0x80));
+                // the colour is the plate's CLUT row, not a tint
+                let mut m = m.clone();
+                m.clut_set = crate::script_ui::NAME_CLUT;
+                m.draw(&mut g, w.x as f32 + 12.0, w.y as f32 + 6.0, Rgba::NEUTRAL);
             }
         }
         // faces (portraits are drawn as labelled frames until the face textures are wired)

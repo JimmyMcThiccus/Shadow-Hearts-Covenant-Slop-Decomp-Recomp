@@ -340,7 +340,8 @@ impl DataScreen {
         self.mode == AccessMode::Save
     }
 
-    /// Texture of a text line (rendered once with font `#36`, white with the black outline of CLUT row 0).
+    /// Texture of a text line (rendered once with font `#36`, white with the black outline of CLUT row 0), drawn at the window's resolution
+    /// ([`sh2_menu::hifont::render_scaled`]) and registered at its 1x size.
     fn text_tex(&mut self, env: &mut Env, s: &str) {
         let key = (s.to_string(), false);
         if self.texts.contains_key(&key) || s.is_empty() {
@@ -348,10 +349,13 @@ impl DataScreen {
         }
         let Some(font) = self.art.font.as_ref() else { return };
         // `$` is the message tables' line break: one texture per line is made in `lines`
-        if let Some(img) = font.render(s, 0, 0) {
+        let k = sh2_menu::hifont::factor(sh2_menu::hifont::window_height(), 1.0);
+        if let Some(img) = sh2_menu::hifont::render_scaled(font, s, 0, 0, k) {
+            let f = sh2_menu::hifont::image_factor(font, &img);
+            let (w, h) = (img.width / f, img.height / f);
             let rgba = sh2_gfx::texture::Rgba8Image { width: img.width, height: img.height, pixels: img.pixels };
-            if let Some(id) = env.reg.add(&rgba) {
-                self.texts.insert(key, (id, img.width, img.height));
+            if let Some(id) = env.reg.add_logical(&rgba, (w, h)) {
+                self.texts.insert(key, (id, w, h));
             }
         }
     }

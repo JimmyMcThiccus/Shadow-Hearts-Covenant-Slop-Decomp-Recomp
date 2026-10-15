@@ -879,3 +879,22 @@ Details in `notes/integration/hires_fonts.md`.  Edits in files other agents own:
 * **CS2 / title / data screen**: `cutscene_plugin::render_caption` / `render_staff_line`, `title_retail_plugin`, `data_screen::text_tex`
   rasterise their own textures with `GameFont::render`; `sh2_menu::hifont::render_scaled(font, s, set, spacing, k)` is the drop-in
   hi-res version (same layout, `k` x the pixels; register the texture at the 1x size).
+
+## Hi-res fonts, part 2 (side session of the coordinator, 2026-10-15)
+Details in `notes/integration/hires_fonts.md`.  Small edits in files other agents own (please keep them):
+* **CS2 (`sh2_field/src/cutscene_plugin.rs`)**: `render_caption` / `render_staff_line` take a raster factor and draw with
+  `sh2_menu::hifont::render_scaled` (textures registered at their 1x size with `UiTextures::add_logical`); `Gpu` gained a `windows` query,
+  `Active::text_px_h` redraws them after a window resize.  New helper `blit_over`.
+* **MN2 (`sh2_menu`)**: `title_retail_plugin` `RetailExtras::text` draws hi-res (`sync_text_scale` in `retail_enter` / `retail_draw`);
+  `gamefont.rs` `GameFont::{glyph_pen, measure_layout, render_layout}`; `hifont.rs` `factor`, `image_factor`, `window_height` /
+  `set_window_height` (published by `render_sprite_layers`), `render_scaled_layout`; `gfx.rs` **new `TextRun::proportional` field**
+  (retail `FontDraw::Order` proportional layout; `false` keeps the port's `xo + width` layout); `message.rs` `Message::{hscale, proportional}`.
+  `examples/font_export.rs`: `FONT_EXPORT_CLUT=1` prints the CLUT rows.  `hifont` faces: each bundled face also gets a synthetic oblique
+  variant (`Face::slant`, for the italic cut-scene caption fonts).
+* **FS2 (`sh2_field`)**: `data_screen::text_tex` hi-res (`cmd_ui::TexReg::add_logical`); `script_ui.rs` `field_text_style`, `NAME_CLUT`;
+  `plugin.rs::draw_field_ui` (selection rows / ">" / "v" in `FIELD_FONT`, name plate drawn untinted in CLUT row `NAME_CLUT`: applied
+  at draw time because `host.rs` op 0x39 rebuilds the plate from `FieldWindow::default()`).  Your open hunks in `plugin.rs` are untouched.
+* **BT (`sh2_battle/src/hud.rs`)**: one line, `proportional: false` in the `TextRun` literal.
+* **Retail finding (all menus, FYI MN2 / FS2)**: `FontItem::Clear` sets `+0x58 = 0x18`, i.e. every retail text item is proportional (bit 3:
+  advance = the glyph's width byte, the lsb byte is unused) and narrow (bit 4: x `FontDraw+0x40` = 0.8, `FontDraw::Clear` 0x0026d280).  The
+  port still lays out every run but the field windows with `xo + width`; switching a screen means `proportional: true` on its runs.

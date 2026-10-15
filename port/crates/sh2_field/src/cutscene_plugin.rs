@@ -299,6 +299,8 @@ struct Active {
     /// staff roll (`SRDT`): fonts per track, line / picture textures ((track, index, is_picture) -> texture; `None` = could not be drawn)
     staff_fonts: HashMap<usize, Vec<Option<sh2_menu::gamefont::GameFont>>>,
     staff_tex: HashMap<(usize, usize, bool), Option<(sh2_menu::gfx::TextureId, f32, f32)>>,
+    /// physical window height the caption / staff-line textures were drawn for (hi-res text, [`sh2_menu::hifont`]); a resize redraws them
+    text_px_h: f32,
     /// `DLBY` -> `PCMS` fallback was applied
     skipped_dolby: bool,
     /// the whole file, kept while it has `MOVS` tracks (the decoder threads take their elementary stream from it)
@@ -548,6 +550,7 @@ fn begin(
         caption_tex: HashMap::new(),
         staff_fonts: HashMap::new(),
         staff_tex: HashMap::new(),
+        text_px_h: 0.0,
         skipped_dolby: false,
         file,
         movies: HashMap::new(),
@@ -670,6 +673,8 @@ struct Gpu<'w, 's> {
     fx_set: Option<ResMut<'w, sh2_gfx::effects::render::FxLiveSet>>,
     /// the maps' background effects (`BGEffectAlpha`)
     bg_fx: Query<'w, 's, &'static mut sh2_gfx::effects::bgfx_render::BgFxInstance>,
+    /// window size: captions and staff lines are rasterised at its resolution
+    windows: Query<'w, 's, &'static Window, With<::bevy::window::PrimaryWindow>>,
 }
 
 /// Inputs and clocks.
@@ -883,7 +888,7 @@ fn drive(
     let Some(a) = rt.0.as_mut() else { return };
     let speed = std::env::var("SH2_CUTSCENE_SPEED").ok().and_then(|v| v.parse::<f32>().ok()).unwrap_or(1.0).clamp(0.1, 32.0);
     let gamma = space.map(|s| s.gamma).unwrap_or(true);
-    let Gpu { meshes, images, materials, bg_models, gts, fx_set, bg_fx } = &mut gpu;
+    let Gpu { meshes, images, materials, bg_models, gts, fx_set, bg_fx, windows } = &mut gpu;
     // ---- START pause / TRIANGLE skip (`CLSDPauser`)
     let mut skipped = false;
     if a.pause_rule {
@@ -1318,7 +1323,24 @@ fn drive(
         }
         // `Subtitles` option (`MENU+0x275` bit 0, 0 = on): `LSDCaptionHandler::Event` shows nothing when it is off
         let subtitles_on = inp.session.as_ref().map(|s| s.save.menu.data[sh2_menu::save::MenuSave::OFF_OPT1] & 1 == 0).unwrap_or(true);
-        draw_captions(a, canvas, ui_tex.as_deref_mut(), &mut **images, subtitles_on);
+        // hi-res text: a window resize redraws the caption / staff-line textures at the new resolution
+        let px_h = windows.iter().next().map(|w| w.physical_height() as f32).unwrap_or(448.0);
+        if px_h != a.text_px_h {
+            if let Some(tex) = ui_tex.as_deref_mut() {
+                for (id, _, _) in a.caption_tex.values() {
+                    tex.remove(*id);
+                }
+                for ((_, _, pic), e) in &a.staff_tex {
+                    if let (false, Some((id, _, _))) = (pic, e) {
+                        tex.remove(*id);
+                    }
+                }
+            }
+            a.caption_tex.clear();
+            a.staff_tex.retain(|k, _| k.2);
+            a.text_px_h = px_h;
+        }
+        draw_captions(a, canvas, ui_tex.as_deref_mut(), &mut **images, subtitles_on, px_h);
     }
     // ---- dev aid: `SH2_CUTSCENE_SHOTS=<dir>` [+ `SH2_CUTSCENE_SHOT_TICKS=60,200,...`] writes a screenshot when the scene passes each tick
     if let Ok(dir) = std::env::var("SH2_CUTSCENE_SHOTS") {
@@ -1465,19 +1487,22 @@ fn update_movies(a: &mut Active, commands: &mut Commands, images: &mut Assets<Im
     }
 }
 
-/// Render a caption row with the pack font, honouring the `%m<n>` pen moves of the retail strings.
-fn render_caption(font: &sh2_menu::gamefont::GameFont, text: &str) -> Option<sh2_menu::gamefont::TextImage> {
+/// Render a caption row with the pack font, honouring the `%m<n>` pen moves of the retail strings.  Drawn `k` times finer with the matched
+/// outline face ([`sh2_menu::hifont::render_scaled`]); returns the image and the factor it was drawn at (1 = the bitmap).
+fn render_caption(font: &sh2_menu::gamefont::GameFont, text: &str, k: u32) -> Option<(sh2_menu::gamefont::TextImage, u32)> {
     let segs = crate::cutscene::caption_segments(text);
     let mut parts: Vec<(i32, sh2_menu::gamefont::TextImage)> = Vec::new();
     let mut pen = 0i32;
+    let mut f = 1u32;
     for s in &segs {
         pen += s.dx;
         if s.text.is_empty() {
             continue;
         }
-        let img = font.render(&s.text, 0, 0)?;
+        let img = sh2_menu::hifont::render_scaled(font, &s.text, 0, 0, k)?;
+        f = sh2_menu::hifont::image_factor(font, &img);
         let adv = (font.measure(&s.text, 0) as i32).max(0);
-        parts.push((pen, img));
+        parts.push((pen * f as i32, img));
         pen += adv;
     }
     let min_x = parts.iter().map(|p| p.0).min().unwrap_or(0).min(0);
@@ -1485,21 +1510,31 @@ fn render_caption(font: &sh2_menu::gamefont::GameFont, text: &str) -> Option<sh2
     let h = parts.iter().map(|(_, i)| i.height).max()? as usize;
     let mut px = vec![0u8; w * h * 4];
     for (x, img) in &parts {
-        for yy in 0..img.height as usize {
-            for xx in 0..img.width as usize {
-                let sp = (yy * img.width as usize + xx) * 4;
-                if img.pixels[sp + 3] == 0 {
-                    continue;
-                }
-                let dx = (x - min_x) as usize + xx;
-                if dx < w {
-                    let dp = (yy * w + dx) * 4;
-                    px[dp..dp + 4].copy_from_slice(&img.pixels[sp..sp + 4]);
-                }
+        blit_over(&mut px, w, img, (x - min_x) as i64);
+    }
+    Some((sh2_menu::gamefont::TextImage { width: w as u32, height: h as u32, pixels: px }, f))
+}
+
+/// Straight-alpha "over" of `img` into the `w`-wide RGBA image `px`, `x` pixels in (top rows aligned).
+fn blit_over(px: &mut [u8], w: usize, img: &sh2_menu::gamefont::TextImage, x: i64) {
+    let h = px.len() / 4 / w.max(1);
+    for yy in 0..(img.height as usize).min(h) {
+        for xx in 0..img.width as usize {
+            let sp = (yy * img.width as usize + xx) * 4;
+            let sa = img.pixels[sp + 3] as f32 / 255.0;
+            let dx = x + xx as i64;
+            if sa <= 0.0 || dx < 0 || dx as usize >= w {
+                continue;
             }
+            let dp = (yy * w + dx as usize) * 4;
+            let da = px[dp + 3] as f32 / 255.0;
+            let oa = sa + da * (1.0 - sa);
+            for c in 0..3 {
+                px[dp + c] = ((img.pixels[sp + c] as f32 * sa + px[dp + c] as f32 * da * (1.0 - sa)) / oa).round() as u8;
+            }
+            px[dp + 3] = (oa * 255.0).round() as u8;
         }
     }
-    Some(sh2_menu::gamefont::TextImage { width: w as u32, height: h as u32, pixels: px })
 }
 
 /// Per-glyph pen advance of a staff-roll line (`FUN_00269d00`, the measure of the text objects `FUN_00279d10` / `FUN_00279f00`): with the
@@ -1536,8 +1571,23 @@ pub fn staff_line_width(font: Option<&sh2_menu::gamefont::GameFont>, l: &crate::
 
 /// Rasterise a staff-roll line with the console's glyph placement ([`staff_glyphs`]): a proportional glyph is drawn at the pen (its
 /// stored columns are the cropped glyph), a cell glyph `x_offset` pixels into its cell.
-fn render_staff_line(font: &sh2_menu::gamefont::GameFont, l: &crate::cutscene::StaffLine) -> Option<sh2_menu::gamefont::TextImage> {
+///
+/// With `k > 1` and a matched outline face each glyph is drawn `k` times finer ([`sh2_menu::hifont::render_scaled`]) at the same places;
+/// returns the image and the factor it was drawn at.
+fn render_staff_line(font: &sh2_menu::gamefont::GameFont, l: &crate::cutscene::StaffLine, k: u32) -> Option<(sh2_menu::gamefont::TextImage, u32)> {
     let (glyphs, width) = staff_glyphs(font, l);
+    if k > 1 && sh2_menu::hifont::enabled() && sh2_menu::hifont::fit_for(font).is_some() {
+        let (w, h) = ((width.max(1) as usize + 1) * k as usize, font.cell_h * k as usize);
+        let mut px = vec![0u8; w * h * 4];
+        for (ch, pen, g) in glyphs {
+            let Some((xo, _)) = g else { continue };
+            let Some(img) = sh2_menu::hifont::render_scaled(font, &ch.to_string(), 0, 0, k) else { continue };
+            // a one-glyph render puts the glyph `xo` into its image; a proportional staff glyph is drawn at the pen itself
+            let x0 = pen - if l.style & 0x80 != 0 { xo as i32 } else { 0 };
+            blit_over(&mut px, w, &img, x0 as i64 * k as i64);
+        }
+        return Some((sh2_menu::gamefont::TextImage { width: w as u32, height: h as u32, pixels: px }, k));
+    }
     let w = width.max(1) as usize + 1;
     let h = font.cell_h;
     let pal = font.palette(0);
@@ -1566,7 +1616,7 @@ fn render_staff_line(font: &sh2_menu::gamefont::GameFont, l: &crate::cutscene::S
             }
         }
     }
-    Some(sh2_menu::gamefont::TextImage { width: w as u32, height: h as u32, pixels: px })
+    Some((sh2_menu::gamefont::TextImage { width: w as u32, height: h as u32, pixels: px }, 1))
 }
 
 /// Centre column of the staff roll lines (512 x 448 frame): what the console's measure ([`staff_line_width`]) gives for every line of the data.
@@ -1612,7 +1662,7 @@ pub fn staff_blur(rgba: &mut [u8], w: usize, h: usize, dim: f32) {
 
 /// The staff roll of an `SRDT` track (see [`crate::cutscene::StaffRoll`]): every line / picture inside the frame at the current scroll, drawn
 /// with the pack's own fonts at the record's scale.  The roll is not affected by the Subtitles option (it is not a caption).
-fn draw_staff_roll(a: &mut Active, g: &mut dyn sh2_menu::gfx::MenuGfx, mut ui_tex: Option<&mut sh2_menu::bevy_ui::UiTextures>, images: &mut Assets<Image>, now: f32) {
+fn draw_staff_roll(a: &mut Active, g: &mut dyn sh2_menu::gfx::MenuGfx, mut ui_tex: Option<&mut sh2_menu::bevy_ui::UiTextures>, images: &mut Assets<Image>, now: f32, px_h: f32) {
     for (ti, roll) in &a.data.staff {
         if !a.head.states.get(*ti).map(|s| s.alive).unwrap_or(false) {
             continue;
@@ -1632,9 +1682,10 @@ fn draw_staff_roll(a: &mut Active, g: &mut dyn sh2_menu::gfx::MenuGfx, mut ui_te
             let key = (*ti, li, false);
             let entry = a.staff_tex.entry(key).or_insert_with(|| {
                 let font = fonts.get(l.font as usize).and_then(|f| f.as_ref()).or_else(|| fonts.iter().flatten().next())?;
-                let img = render_staff_line(font, l)?;
-                let id = tex.add(images, img.width, img.height, img.pixels);
-                Some((id, img.width as f32, img.height as f32))
+                let (img, f) = render_staff_line(font, l, sh2_menu::hifont::factor(px_h, l.scale))?;
+                let (lw, lh) = (img.width / f, img.height / f);
+                let id = tex.add_logical(images, img.width, img.height, img.pixels, (lw, lh));
+                Some((id, lw as f32, lh as f32))
             });
             if let Some((id, w, h)) = *entry {
                 // the console's measure (`staff_glyphs`) puts every line of the data on one centre column (x + width * scale / 2 = 128.5 +- 0.5);
@@ -1664,10 +1715,10 @@ fn draw_staff_roll(a: &mut Active, g: &mut dyn sh2_menu::gfx::MenuGfx, mut ui_te
 
 /// Captions of the active `SBTD` lines.  The text is drawn with the pack's own bitmap font ([`sh2_menu::gamefont::GameFont`], the font block of the
 /// `SBTD` payload, `Font::CreateFont(2, ..)`) at the stored positions; without a parsable font the menu font stands in.
-fn draw_captions(a: &mut Active, canvas: &mut sh2_menu::bevy_ui::UiCanvas, mut ui_tex: Option<&mut sh2_menu::bevy_ui::UiTextures>, images: &mut Assets<Image>, enabled: bool) {
+fn draw_captions(a: &mut Active, canvas: &mut sh2_menu::bevy_ui::UiCanvas, mut ui_tex: Option<&mut sh2_menu::bevy_ui::UiTextures>, images: &mut Assets<Image>, enabled: bool, px_h: f32) {
     let mut g = canvas.begin(CAPTION_LAYER);
     let now = a.head.time;
-    draw_staff_roll(a, &mut g, ui_tex.as_deref_mut(), images, now);
+    draw_staff_roll(a, &mut g, ui_tex.as_deref_mut(), images, now, px_h);
     if !enabled {
         return;
     }
@@ -1685,9 +1736,10 @@ fn draw_captions(a: &mut Active, canvas: &mut sh2_menu::bevy_ui::UiCanvas, mut u
             let key = (*ti, li, ri);
             if let (Some(font), Some(tex)) = (font, ui_tex.as_deref_mut()) {
                 if !a.caption_tex.contains_key(&key) {
-                    if let Some(img) = render_caption(font, &txt) {
-                        let id = tex.add(images, img.width, img.height, img.pixels);
-                        a.caption_tex.insert(key, (id, img.width as f32, img.height as f32));
+                    if let Some((img, f)) = render_caption(font, &txt, sh2_menu::hifont::factor(px_h, CAPTION_SCALE_Y)) {
+                        let (lw, lh) = (img.width / f, img.height / f);
+                        let id = tex.add_logical(images, img.width, img.height, img.pixels, (lw, lh));
+                        a.caption_tex.insert(key, (id, lw as f32, lh as f32));
                     }
                 }
                 if let Some(&(id, w, h)) = a.caption_tex.get(&key) {

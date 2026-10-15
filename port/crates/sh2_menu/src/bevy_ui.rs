@@ -199,6 +199,7 @@ pub fn text(gfx: &mut dyn MenuGfx, x: f32, y: f32, s: &str, font_number: u8, c: 
         glyph_alpha: Vec::new(),
         visible: usize::MAX,
         hscale: 1.0,
+        proportional: false,
     }));
 }
 
@@ -699,7 +700,7 @@ fn expand_text(cmds: Vec<DrawCmd>, bank: &FontBank, pools: &mut SpritePools, tex
                 continue;
             }
             let k = (px_per_unit * scale).ceil().clamp(1.0, 8.0) as u32;
-            let key = (line.to_string(), slot, t.clut_set, t.spacing, k as u8);
+            let key = (line.to_string(), slot, t.clut_set, t.spacing, k as u8 | (t.proportional as u8) << 7);
             let frame = pools.frame;
             let entry = match pools.text.get_mut(&key) {
                 Some(e) => {
@@ -707,7 +708,7 @@ fn expand_text(cmds: Vec<DrawCmd>, bank: &FontBank, pools: &mut SpritePools, tex
                     (e.0, e.1, e.2)
                 }
                 None => {
-                    let Some(img) = crate::hifont::render_scaled(font, line, t.clut_set as usize, t.spacing as i32, k) else { continue };
+                    let Some(img) = crate::hifont::render_scaled_layout(font, line, t.clut_set as usize, t.spacing as i32, k, t.proportional) else { continue };
                     // the bitmap fallback comes back at 1x
                     let f = (img.height / font.cell_h.max(1) as u32).max(1);
                     let (lw, lh) = (img.width / f, img.height / f);
@@ -806,6 +807,9 @@ pub fn render_sprite_layers(
     let win_scale = windows.iter().next().map(|w| (w.width() / VIRT_W).max(0.25)).unwrap_or(1.0);
     // physical pixels per virtual unit (height-based like `UiScale`): how much finer the hi-res text is drawn
     let px_per_unit = windows.iter().next().map(|w| w.physical_height() as f32 / VIRT_H).unwrap_or(1.0);
+    if let Some(w) = windows.iter().next() {
+        crate::hifont::set_window_height(w.physical_height());
+    }
     if canvas.fonts.is_none() && !pools.fonts_tried {
         if let Some(d) = assets.as_ref().and_then(|a| a.disc.as_ref()) {
             let bank = FontBank::load(d);

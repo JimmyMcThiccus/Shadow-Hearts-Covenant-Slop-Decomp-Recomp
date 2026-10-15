@@ -85,6 +85,9 @@ pub struct TextRun {
     /// horizontal glyph scale: [`NARROW`] when the `MenuText` record has flag bit 3 (`FontItem+0x58` bit 4: `GetRealWidth` multiplies the
     /// width by 0.8, retail records use flags 9 / 11), 1.0 otherwise.  The height is not scaled (`GetRealHeight`).
     pub hscale: f32,
+    /// retail proportional layout ([`crate::gamefont::GameFont::glyph_pen`], `FontItem+0x58` bit 3): each glyph advances by its width
+    /// byte alone; `false` = the port's default `xo + width` cell layout
+    pub proportional: bool,
 }
 
 /// `FontItem::GetRealWidth`: width factor of the "narrow" text flag.

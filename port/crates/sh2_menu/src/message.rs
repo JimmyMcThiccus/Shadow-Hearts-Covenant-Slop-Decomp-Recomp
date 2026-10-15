@@ -109,6 +109,10 @@ pub struct Message {
     pub clut_set: u8,
     pub spacing: i8,
     pub max_chars: u16,
+    /// horizontal glyph scale of the drawn run ([`TextRun::hscale`])
+    pub hscale: f32,
+    /// retail proportional layout ([`TextRun::proportional`])
+    pub proportional: bool,
 }
 
 impl Message {
@@ -134,6 +138,8 @@ impl Message {
             clut_set: 0,
             spacing: 0,
             max_chars,
+            hscale: 1.0,
+            proportional: false,
         }
     }
 
@@ -306,7 +312,8 @@ impl Message {
             shadow: None,
             glyph_alpha: self.glyphs.iter().map(|g| g.alpha).collect(),
             visible: if self.state == MsgState::Done && self.cur_glyph == 0 && self.speed == TextSpeed::Instant { usize::MAX } else { self.cur_glyph as usize },
-            hscale: 1.0,
+            hscale: self.hscale,
+            proportional: self.proportional,
         }));
     }
 }

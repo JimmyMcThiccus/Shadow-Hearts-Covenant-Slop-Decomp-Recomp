@@ -25,6 +25,20 @@ pub enum WinPhase {
     Closing(u32),
 }
 
+/// CLUT row of the name plates (`MFIELD.MSD` font row 4 = 00 f8 c0: the teal name over US dialogue windows; row 0 = the cream body
+/// text).  Applied when the plate is drawn (`plugin::draw_field_ui`).
+pub const NAME_CLUT: u8 = 4;
+
+/// Text style of the field windows (`FieldMessage::CreateWindow`, US FIELD.BIN 0x004ee180): the retail field serif (font 1, `MFIELD.MSD`),
+/// laid out by `FontDraw::Order` with the `FontItem::Clear` defaults (`+0x58` = 0x18): proportional (each glyph advances by its width byte,
+/// no lsb) and narrow (bit 4: glyph quads and pen steps x `FontDraw+0x40` = 0.8, set by `FontDraw::Clear` 0x0026d280).  The window sets
+/// the item's shadow to (0, 1), so no extra pitch.  A US capture (LP archive Update 76) matches this within 2 % at the 4:3 frame scale.
+pub fn field_text_style(m: &mut Message) {
+    m.font_number = sh2_menu::bevy_ui::FIELD_FONT;
+    m.hscale = sh2_menu::gfx::NARROW;
+    m.proportional = true;
+}
+
 /// A message window or name plate (`FieldMessage`).
 #[derive(Debug, Clone)]
 pub struct FieldWindow {
@@ -105,7 +119,7 @@ impl FieldWindow {
         let prev = self.msg.as_ref().map(|m| m.glyphs.len()).unwrap_or(0);
         self.raw.extend_from_slice(&strip_text_codes(text));
         let mut m = Message::new(self.max_chars.max(0x100), speed);
-        m.font_number = sh2_menu::bevy_ui::FIELD_FONT;
+        field_text_style(&mut m);
         m.set_text(&self.raw, vec![]);
         m.start();
         // the earlier pages are already on screen

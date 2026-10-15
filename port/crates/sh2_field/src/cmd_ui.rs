@@ -39,6 +39,12 @@ impl<'a> TexReg<'a> {
         self.count += 1;
         Some(t.add(i, img.width, img.height, img.pixels.clone()))
     }
+    /// Like [`add`](Self::add) for an image drawn larger than the size its quads address it by (hi-res text, `UiTextures::add_logical`).
+    pub fn add_logical(&mut self, img: &Rgba8Image, logical: (u32, u32)) -> Option<TextureId> {
+        let (t, i) = self.target.as_mut()?;
+        self.count += 1;
+        Some(t.add_logical(i, img.width, img.height, img.pixels.clone(), logical))
+    }
     /// Texture whose UVs may leave 0..1 (tiled sprites): repeat addressing.
     pub fn add_repeat(&mut self, img: &Rgba8Image) -> Option<TextureId> {
         let (t, i) = self.target.as_mut()?;
@@ -280,6 +286,7 @@ pub fn text_run_h(g: &mut dyn MenuGfx, x: f32, y: f32, s: &str, font: u8, c: Rgb
         glyph_alpha: Vec::new(),
         visible: usize::MAX,
         hscale,
+        proportional: false,
     }));
 }
 
@@ -296,6 +303,7 @@ pub fn text_rec(g: &mut dyn MenuGfx, x: f32, y: f32, s: &str, r: &sh2_menu::msd:
         glyph_alpha: Vec::new(),
         visible: usize::MAX,
         hscale: TextRun::hscale_of(r.flags),
+        proportional: false,
     }));
 }
 

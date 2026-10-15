@@ -25,8 +25,13 @@ use std::sync::{Arc, Mutex, OnceLock};
 /// An outline font the fitter may pick.
 pub struct Face {
     pub name: String,
-    font: FontVec,
+    font: Arc<FontVec>,
+    /// synthetic oblique: x += y * slant (the cut-scene caption fonts are a bold italic serif; no italic face is bundled)
+    slant: f32,
 }
+
+/// Slant of the synthetic oblique variant every bundled face gets (~11 degrees, a typical italic angle).
+const OBLIQUE: f32 = 0.2;
 
 /// The chosen face for one [`GameFont`].
 #[derive(Clone, Debug)]
@@ -83,13 +88,15 @@ pub fn faces() -> &'static [Face] {
                 .filter(|p| p.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("ttf") || e.eq_ignore_ascii_case("otf")))
                 .collect();
             paths.sort();
-            let faces: Vec<Face> = paths
+            let mut faces: Vec<Face> = paths
                 .iter()
                 .filter_map(|p| {
-                    let font = FontVec::try_from_vec(std::fs::read(p).ok()?).ok()?;
-                    Some(Face { name: p.file_name()?.to_string_lossy().into_owned(), font })
+                    let font = Arc::new(FontVec::try_from_vec(std::fs::read(p).ok()?).ok()?);
+                    Some(Face { name: p.file_name()?.to_string_lossy().into_owned(), font, slant: 0.0 })
                 })
                 .collect();
+            let obliques: Vec<Face> = faces.iter().map(|f| Face { name: format!("{} (oblique)", f.name), font: f.font.clone(), slant: OBLIQUE }).collect();
+            faces.extend(obliques);
             if !faces.is_empty() {
                 log::info!("hi-res text: {} outline faces from {}", faces.len(), dir.display());
                 return faces;
@@ -165,7 +172,18 @@ fn shape(face: &Face, c: char) -> Option<Shape> {
     if id.0 == 0 {
         return None;
     }
-    let o = face.font.outline(id)?;
+    let mut o = face.font.outline(id)?;
+    if face.slant != 0.0 {
+        let k = face.slant;
+        let sh = |p: Point| point(p.x + p.y * k, p.y);
+        for c in &mut o.curves {
+            *c = match *c {
+                OutlineCurve::Line(a, b) => OutlineCurve::Line(sh(a), sh(b)),
+                OutlineCurve::Quad(a, b, d) => OutlineCurve::Quad(sh(a), sh(b), sh(d)),
+                OutlineCurve::Cubic(a, b, d, e) => OutlineCurve::Cubic(sh(a), sh(b), sh(d), sh(e)),
+            };
+        }
+    }
     let (mut x0, mut y0, mut x1, mut y1) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
     let mut add = |p: Point| {
         x0 = x0.min(p.x);
@@ -299,16 +317,47 @@ fn compute_fit(font: &GameFont, faces: &[Face]) -> Option<Fit> {
     Some(fit)
 }
 
+static WINDOW_H: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+/// Physical height of the primary window as the sprite-layer renderer last saw it ([`crate::bevy_ui`] publishes it every frame), for
+/// screens that rasterise their own text without a window query (the save / load data screen).  448 before the first frame.
+pub fn window_height() -> f32 {
+    match WINDOW_H.load(std::sync::atomic::Ordering::Relaxed) {
+        0 => 448.0,
+        h => h as f32,
+    }
+}
+
+pub fn set_window_height(h: u32) {
+    WINDOW_H.store(h, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Raster factor for text drawn at `scale` virtual units per font pixel on a window `physical_h` pixels high: `ceil(physical_h / 448 * scale)`,
+/// 1..8 (the factor [`crate::bevy_ui`] uses for the sprite layers).
+pub fn factor(physical_h: f32, scale: f32) -> u32 {
+    (physical_h / 448.0 * scale).ceil().clamp(1.0, 8.0) as u32
+}
+
+/// The factor an image of [`render_scaled`] was drawn at (1 when it fell back to the bitmap); its 1x size is `width / f` x `height / f`.
+pub fn image_factor(font: &GameFont, img: &TextImage) -> u32 {
+    (img.height / font.cell_h.max(1) as u32).max(1)
+}
+
 /// [`GameFont::render`] at `scale` times the resolution (same layout, `width * scale` x `cell_h * scale`).  Falls back to the bitmap
 /// render when the path is off, `scale <= 1`, or no outline face matches the font.
 pub fn render_scaled(font: &GameFont, s: &str, set: usize, spacing: i32, scale: u32) -> Option<TextImage> {
+    render_scaled_layout(font, s, set, spacing, scale, false)
+}
+
+/// [`render_scaled`] with the glyph layout of [`GameFont::glyph_pen`] (`proportional` = retail `FontDraw::Order`).
+pub fn render_scaled_layout(font: &GameFont, s: &str, set: usize, spacing: i32, scale: u32, proportional: bool) -> Option<TextImage> {
     if scale <= 1 || !enabled() {
-        return font.render(s, set, spacing);
+        return font.render_layout(s, set, spacing, proportional);
     }
-    let Some(fit) = fit_for(font) else { return font.render(s, set, spacing) };
+    let Some(fit) = fit_for(font) else { return font.render_layout(s, set, spacing, proportional) };
     let face = &faces()[fit.face];
     let sc = scale as usize;
-    let (w1, h1) = ((font.measure(s, spacing) as usize).max(1) + 1, font.cell_h);
+    let (w1, h1) = ((font.measure_layout(s, spacing, proportional) as usize).max(1) + 1, font.cell_h);
     let (w, h) = (w1 * sc, h1 * sc);
     let mut cov = vec![0f32; w * h];
     let mut put = |x: i64, y: i64, a: f32| {
@@ -324,8 +373,9 @@ pub fn render_scaled(font: &GameFont, s: &str, set: usize, spacing: i32, scale: 
             continue;
         };
         let lv = body(&lv, fit.outline);
+        let (gx0, step) = GameFont::glyph_pen(xo, adv, proportional);
         if let Some((x0, y0, x1, y1)) = ink_box(&lv, adv, h1) {
-            let gx = pen + xo as i64;
+            let gx = pen + gx0 as i64;
             let drawn = shape(face, fit.map(ch)).map(|sh| raster(&sh, (x1 - x0) * sc, (y1 - y0) * sc, fit.grow * scale as f32));
             match drawn {
                 Some(r) => {
@@ -351,7 +401,7 @@ pub fn render_scaled(font: &GameFont, s: &str, set: usize, spacing: i32, scale: 
                 }
             }
         }
-        pen += (xo + adv) as i64 + spacing as i64;
+        pen += step as i64 + spacing as i64;
     }
     let pal = font.palette(set);
     let alpha = |e: [u8; 4]| (e[3] as f32 * 2.0).min(255.0);

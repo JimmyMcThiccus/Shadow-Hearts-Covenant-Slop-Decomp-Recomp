@@ -321,6 +321,7 @@ pub(crate) fn text(g: &mut dyn MenuGfx, x: f32, y: f32, s: &str, c: Rgba) {
         glyph_alpha: Vec::new(),
         visible: usize::MAX,
         hscale: 1.0,
+        proportional: false,
     }));
 }
 

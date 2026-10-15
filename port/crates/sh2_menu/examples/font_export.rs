@@ -13,6 +13,11 @@ fn main() {
     let f = GameFont::parse(&data).expect("font");
     let chars: String = a.get(3).cloned().unwrap_or_else(|| (0x21u8..0x7f).map(|b| b as char).collect());
     println!("cell {} {}", f.cell_w, f.cell_h);
+    if std::env::var_os("FONT_EXPORT_CLUT").is_some() {
+        for set in 0..16 {
+            println!("clut {set}: {:02x?}", f.palette(set));
+        }
+    }
     for ch in chars.chars() {
         let Some((_, xo, adv)) = f.debug_glyph(ch) else { continue };
         let Some(img) = f.render(&ch.to_string(), 0, 0) else { continue };

@@ -378,6 +378,7 @@ impl Widget {
                     glyph_alpha: Vec::new(),
                     visible: usize::MAX,
                     hscale: TextRun::hscale_of(t.flags),
+                    proportional: false,
                 }));
             }
             Kind::Message(m) => m.draw(gfx, ox + self.place.x, oy + self.place.y, col),

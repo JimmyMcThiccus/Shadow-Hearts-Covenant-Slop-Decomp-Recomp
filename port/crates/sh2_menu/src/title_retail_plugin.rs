@@ -770,21 +770,35 @@ pub struct RetailExtras {
     pub theater_loaded: bool,
     pub entries: Vec<TheaterEntry>,
     cache: std::collections::HashMap<(u8, String), (Handle<Image>, f32, f32)>,
+    /// hi-res text: raster factor of the cached images ([`crate::hifont::factor`] of the window height)
+    text_k: u32,
 }
 
 impl RetailExtras {
-    /// Render `s` with the game font (`which` 0 = common menu font, 1 = the theater font) into a (cached) image.
+    /// Render `s` with the game font (`which` 0 = common menu font, 1 = the theater font) into a (cached) image.  The image is drawn at the
+    /// window's resolution ([`crate::hifont::render_scaled`]); the returned size is the 1x (title space) one.
     pub fn text(&mut self, images: &mut Assets<Image>, which: u8, s: &str) -> Option<(Handle<Image>, f32, f32)> {
         let key = (which, s.to_owned());
         if let Some(c) = self.cache.get(&key) {
             return Some(c.clone());
         }
         let font = if which == 1 { self.theater.font.as_ref().or(self.font.as_ref()) } else { self.font.as_ref() }?;
-        let img = font.render(s, 0, 0)?;
+        let img = crate::hifont::render_scaled(font, s, 0, 0, self.text_k.max(1))?;
+        let f = crate::hifont::image_factor(font, &img);
+        let (w, hh) = ((img.width / f) as f32, (img.height / f) as f32);
         let h = image_from(images, img.width, img.height, img.pixels);
-        let e = (h, img.width as f32, img.height as f32);
+        let e = (h, w, hh);
         self.cache.insert(key, e.clone());
         Some(e)
+    }
+
+    /// Follow the window height: a new raster factor drops the cached text images (nodes holding the old ones keep them alive).
+    fn sync_text_scale(&mut self, windows: &Query<&Window, With<bevy::window::PrimaryWindow>>) {
+        let k = windows.iter().next().map(|w| crate::hifont::factor(w.physical_height() as f32, 1.0)).unwrap_or(1);
+        if k != self.text_k {
+            self.text_k = k;
+            self.cache.clear();
+        }
     }
 }
 
@@ -1215,7 +1229,9 @@ fn retail_enter(
     mut dev: ResMut<SaveDevice>,
     roots: Query<(Entity, &Part)>,
     ret: Option<ResMut<AttractReturn>>,
+    windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
 ) {
+    extras.sync_text_scale(&windows);
     for (e, p) in &roots {
         if *p == Part::Root {
             commands.entity(e).despawn();
@@ -1453,8 +1469,10 @@ fn retail_draw(
     mut rings: Query<(&RingRot, &mut UiTransform), Without<Part>>,
     mut swirl_frames: Local<f32>,
     mut cursor: Local<CursorState>,
+    windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
 ) {
     let Some(rt) = rt else { return };
+    extras.sync_text_scale(&windows);
     let h = &rt.host;
     let title_like = matches!(h.screen, Screen::Title | Screen::Menu);
     // `calcPos` advances every swirl angle once per drawn frame (60 / s); `mSetupTitleWin` builds them with theta = 0 each time the title is (re)built
