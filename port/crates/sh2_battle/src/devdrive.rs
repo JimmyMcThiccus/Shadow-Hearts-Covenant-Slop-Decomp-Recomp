@@ -12,6 +12,8 @@
 //! level), `SH2_BATTLE_SAVE=<hex off>:<hex bytes>,...` (bytes poked into the retail `BTL0` block at the offsets of
 //! notes/integration/save_retail.md, e.g. `ec4:07` = fusions 0..2 known, `fd7:03` = three wolf bouts, `cff:08` = Karin's first Sword Art in
 //! bag 1 (`0xabc + bag * 0x200 + 0x43`; a new game uses bag 1)) and `SH2_BATTLE_MENU=<hex off>:<hex bytes>` for the `MENU` block (`28c:01` = item sort mode 1).
+//! `SH2_BATTLE_TRACE=<file>` writes one line per frame (drive counters, injected pad, battle phase / HP / positions) to compare runs; with
+//! `SH2_FIXED_DT=60` two runs give identical traces and screenshots (round 6 GPA).
 //! Nothing is registered unless the variable is set.
 
 use bevy::prelude::*;
@@ -95,7 +97,42 @@ impl Plugin for DevDrivePlugin {
         })
         .init_resource::<PadInjection>()
         .add_systems(Update, drive);
+        if let Some(path) = std::env::var_os("SH2_BATTLE_TRACE") {
+            match std::fs::File::create(&path) {
+                Ok(f) => {
+                    app.insert_resource(DriveTrace(std::io::BufWriter::new(f))).add_systems(Update, trace.after(drive));
+                }
+                Err(e) => log::warn!("devdrive: cannot create the trace file: {e}"),
+            }
+        }
     }
+}
+
+/// `SH2_BATTLE_TRACE=<file>`: one line per frame with the drive's counters, the pad it injects and the battle state, to find where two
+/// `SH2_FIXED_DT` runs part ways (`diff` the files).
+#[derive(Resource)]
+struct DriveTrace(std::io::BufWriter<std::fs::File>);
+
+fn trace(mut t: ResMut<DriveTrace>, dd: Res<DevDrive>, scene: Res<State<Scene>>, inj: Res<PadInjection>, rt: Option<Res<BattleRuntime>>, frames: Res<bevy::diagnostic::FrameCount>) {
+    use std::io::Write;
+    let mut line = format!("f{} dd{} {:?} pad{:04x} tap{} age{} bt{}", frames.0, dd.ticks, scene.get(), inj.raw, dd.tap, dd.page_age, dd.battle_ticks);
+    if let Some(rt) = rt {
+        let b = &rt.battle;
+        line += &format!(
+            " rt{} stage{:?} {:?}/{} actor{:?} turn{} busy{} hold{} hp{:?} pos{:?}",
+            rt.ticks,
+            std::mem::discriminant(&rt.stage),
+            b.phase,
+            b.step,
+            b.actor,
+            b.turn_no,
+            rt.anim_busy,
+            rt.anim_hold,
+            b.fighters.iter().map(|f| f.as_ref().map(|f| f.hp).unwrap_or(-1)).collect::<Vec<_>>(),
+            rt.positions.iter().map(|p| [(p.x * 10.0).round() as i32, (p.z * 10.0).round() as i32]).collect::<Vec<_>>(),
+        );
+    }
+    let _ = writeln!(t.0, "{line}");
 }
 
 /// `SH2_BATTLE_PARTY` / `SH2_BATTLE_LEVEL` / `SH2_BATTLE_SAVE` / `SH2_BATTLE_BAG` / `SH2_BATTLE_MENU` (module docs): returns the party

@@ -60,16 +60,18 @@ A live effect white flash was not captured (needs a live battle; see "Open").
   against `animate_models`, so the sword sat on this frame's or last frame's hand depending on the schedule (`weapon_follow_run_to_run.png`:
   the same tick, two runs).  Now `(spawn_battle_models, apply_home_moves, drive_last_boss, drive_battle_models).chain().before(animate_models)` and
   `follow_weapons.after(animate_models)` (the weapon follows the same frame's hand; a weapon with a motion of its own starts it one frame later).
-* Fixed-dt runs are still **not** identical run to run, for reasons outside the renderer:
-  * 3 runs (`SH2_FIXED_DT=60 SH2_BATTLE_DEMO=2 SH2_BATTLE_RECIPE=yuri`): one played a *different battle* -- the devdrive picked another
-    Item target (`battle: command Item { item: 0, target: 3 }` vs `target: 2`, logs otherwise identical before that), so turn order and every
-    later frame differ (`demo_divergence_item_target.png`).  The devdrive counts *rendered frames* (`page_age`, `ticks`) while the battle runs in
-    `FixedUpdate`, and asset loading (async) decides how many frames pass before the battle logic starts.
-  * Two runs with identical logs still caught the weapon hit at different burst phases (`spark_count() > 0` shot; white core vs dark burst).
-  * The battle seed mixes in `session.play_ms` (`plugin.rs` `enter_battle`), accumulated from `Time<Real>` (fixed under `SH2_FIXED_DT`, but
-    the number of frames before the battle is load-dependent).
-  So "weapon-hit frames identical run to run" cannot be shown with the current devdrive; making the dev drive frame-deterministic (count logic
-  ticks, wait for loads before ticking) is a separate task (proposed as a follow-up).
+* **Run-to-run reproducibility (follow-up, fixed):** the earlier suspects (devdrive frame counters, async loads, the `play_ms` battle seed) were
+  not it.  A per-frame trace (`SH2_BATTLE_TRACE=<file>`, devdrive: counters, injected pad, phase / HP / positions) was identical over three
+  runs while the effect frames still differed (hit-burst smoke, heal sphere particles), and one earlier run took a different menu path.  Cause:
+  Bevy's **multithreaded executor** runs systems without an order between them in a different order each run, and the schedules have plenty of
+  those (`SH2_AMBIGUITY=1`: 543 conflicting unordered pairs in `Update`, 43 in `FixedUpdate`, 18 in `PostUpdate`; list in the side-session notes
+  folder).  `SH2_FIXED_DT` now also switches `PreUpdate` / `FixedUpdate` / `Update` / `PostUpdate` / `Last` to the single-threaded executor
+  (`sh2_gfx/src/bevy/perf.rs`), whose order is the fixed topological one.  `ManualDuration` advances `Time<Real>` too, so `play_ms` and the
+  battle seed are already frame-exact.
+  Result: `SH2_FIXED_DT=60 SH2_BATTLE_DEMO=2 SH2_BATTLE_RECIPE=yuri`: 3 runs, identical traces and all 18 shots mean 0.000 (weapon hit
+  included); with `SH2_BATTLE_CMDS=fusion,magic,attack`: 2 runs, 18 shots mean 0.000.  The order is *one* valid order, not necessarily the one a
+  normal (multithreaded) run takes on a given frame; an A/B pair must both use `SH2_FIXED_DT`.  Not covered: `btlin.rs` seeds the battle-intro
+  cracks from `SystemTime` (FX2's file, uncommitted edits there); the demo's intro shot was identical anyway.
 
 ## 3. Save point drop shadow -- retail has none; port fixed
 

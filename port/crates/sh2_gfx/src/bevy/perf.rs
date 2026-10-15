@@ -4,7 +4,8 @@
 //! |---|---|
 //! | `SH2_NO_VSYNC=1` | primary window `PresentMode::AutoNoVsync` (frame time = real work, not the display refresh); `=immediate` / `=mailbox` force that mode |
 //! | `SH2_FRAMETIME=<label>` | log frame-time statistics (`label window scene frames mean p50 p95 p99 max` ms, then `cpu=` process CPU ms per frame over all threads, then `system=ms per frame` of the [`Scope`]-instrumented systems) every 5 s of wall clock, and append them to `SH2_FRAMETIME_OUT` (a TSV file) when set |
-//! | `SH2_FIXED_DT=<fps>` | every frame advances `Time` by exactly `1 / fps` s (`TimeUpdateStrategy::ManualDuration`): runs become frame-deterministic, so two runs (CPU vs GPU path) photograph the same simulation frame |
+//! | `SH2_FIXED_DT=<fps>` | every frame advances `Time` by exactly `1 / fps` s (`TimeUpdateStrategy::ManualDuration`, `Time<Real>` included) and the main schedules run on the single-threaded executor (the multithreaded one orders the hundreds of unordered system pairs differently each run): runs become frame-deterministic, so two runs (CPU vs GPU path) photograph the same simulation frame (round 6 GPA: battle demo shots identical over 5 runs) |
+| `SH2_AMBIGUITY=1` | log the system pairs of the main schedules that touch the same data without an order (schedule build warnings) |
 
 use ::bevy::prelude::*;
 use ::bevy::time::TimeUpdateStrategy;
@@ -162,6 +163,12 @@ fn no_vsync(mut windows: Query<&mut Window, With<PrimaryWindow>>) {
     }
 }
 
+/// The game's main schedules (the ones whose system order decides what a frame shows).
+fn deterministic_schedules() -> [::bevy::ecs::intern::Interned<dyn ::bevy::ecs::schedule::ScheduleLabel>; 5] {
+    use ::bevy::ecs::schedule::ScheduleLabel;
+    [PreUpdate.intern(), FixedUpdate.intern(), Update.intern(), PostUpdate.intern(), Last.intern()]
+}
+
 pub struct Sh2PerfPlugin;
 
 impl Plugin for Sh2PerfPlugin {
@@ -171,6 +178,24 @@ impl Plugin for Sh2PerfPlugin {
         }
         if let Some(fps) = std::env::var("SH2_FIXED_DT").ok().and_then(|v| v.parse::<f64>().ok()).filter(|f| *f > 0.0) {
             app.insert_resource(TimeUpdateStrategy::ManualDuration(std::time::Duration::from_secs_f64(1.0 / fps)));
+            // the multithreaded executor runs systems that have no order between them in a different order each run: single-threaded,
+            // the order is the (fixed) topological one, so two runs evaluate the same frame the same way
+            for label in deterministic_schedules() {
+                app.edit_schedule(label, |s| {
+                    s.set_executor(::bevy::ecs::schedule::SingleThreadedExecutor::default());
+                });
+            }
+        }
+        if std::env::var_os("SH2_AMBIGUITY").is_some() {
+            // `SH2_AMBIGUITY=1`: log every pair of systems that touch the same data without an order (schedule build warnings)
+            for label in deterministic_schedules() {
+                app.edit_schedule(label, |s| {
+                    s.set_build_settings(::bevy::ecs::schedule::ScheduleBuildSettings {
+                        ambiguity_detection: ::bevy::ecs::schedule::LogLevel::Warn,
+                        ..Default::default()
+                    });
+                });
+            }
         }
         if let Ok(label) = std::env::var("SH2_FRAMETIME") {
             app.insert_resource(FrameStats {
