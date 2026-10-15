@@ -10,6 +10,8 @@
 // = bone (without / with the first element's offset), joint 2 = the camera-facing corner basis (columns 0 / 1, model space) and the first
 // element's colour factor (column 2):
 //   local = P * centre + B[0] * corner.x + B[1] * corner.y
+// Drop shadow receivers (`SH2_SHADOW_RECEIVER`, skinned): the mesh is the floor in PS2 world space (placed by the entity transform), the one
+// palette matrix maps it to the light-plane UV of the caster's tile: uv = (P * v).xy, positions and normals are not skinned.
 
 #import bevy_pbr::{
     mesh_functions,
@@ -33,8 +35,10 @@ fn vertex(vertex: Vertex) -> VertexOutput {
 #ifdef VERTEX_NORMALS
     var n = vertex.normal;
 #ifdef SKINNED
+#ifndef SH2_SHADOW_RECEIVER
     let pn = (palette * vec4<f32>(n, 0.0)).xyz;
     n = pn / max(length(pn), 1e-6);
+#endif
 #endif
     out.world_normal = mesh_functions::mesh_normal_local_to_world(n, vertex.instance_index);
 #endif
@@ -42,7 +46,9 @@ fn vertex(vertex: Vertex) -> VertexOutput {
 #ifdef VERTEX_POSITIONS
     var local = vec4<f32>(vertex.position, 1.0);
 #ifdef SKINNED
+#ifndef SH2_SHADOW_RECEIVER
     local = vec4<f32>((palette * local).xyz, 1.0);
+#endif
 #ifdef SH2_BILLBOARD
     local = vec4<f32>(local.xyz + bb[0].xyz * vertex.uv_b.x + bb[1].xyz * vertex.uv_b.y, 1.0);
 #endif
@@ -53,6 +59,11 @@ fn vertex(vertex: Vertex) -> VertexOutput {
 
 #ifdef VERTEX_UVS_A
     out.uv = vertex.uv;
+#ifdef SKINNED
+#ifdef SH2_SHADOW_RECEIVER
+    out.uv = (palette * vec4<f32>(vertex.position, 1.0)).xy;
+#endif
+#endif
 #endif
 #ifdef VERTEX_UVS_B
     out.uv_b = vertex.uv_b;

@@ -313,6 +313,14 @@ pub struct ShadowCaster {
     /// receiver triangles uploaded last (skipped when unchanged)
     last_surface: Vec<[f32; 3]>,
     last_uv: Vec<[f32; 2]>,
+    /// GPU receivers: indices of the floor triangles in the surface mesh (PS2 world space; re-uploaded only when the selection changes)
+    last_sel: Vec<usize>,
+    /// GPU receivers: this frame's light-plane UV matrix (PS2 world -> `(u, v)` of the tile), the surface's skin palette; set by
+    /// [`Self::update`], uploaded by `model.rs` (it owns the skin joint)
+    pub receiver_uv: Option<Mat4>,
+    /// the surface's palette asset and the `Sh2SkinJoint` generation its `SkinnedMesh` points at
+    pub receiver_skin: Option<Handle<::bevy::mesh::skinning::SkinnedMeshInverseBindposes>>,
+    pub receiver_joint_gen: u32,
 }
 
 /// Silhouette extents of a caster's posed vertices (model space), gathered while its palette is evaluated (see `model.rs`).
@@ -392,7 +400,21 @@ pub fn spawn_shadow_quad(commands: &mut Commands, holder: Entity, meshes: &mut A
         .spawn((Name::new("shadow_surface"), Mesh3d(surface_mesh.clone()), MeshMaterial3d(mat.clone()), Transform::default(), Visibility::Hidden, ::bevy::camera::visibility::NoFrustumCulling))
         .id();
     commands.entity(holder).add_child(surface);
-    Some(ShadowCaster { quad: e, surface, surface_mesh, tile, material: None, receiver_material: mat, smoothed: None, last_surface: Vec::new(), last_uv: Vec::new() })
+    Some(ShadowCaster {
+        quad: e,
+        surface,
+        surface_mesh,
+        tile,
+        material: None,
+        receiver_material: mat,
+        smoothed: None,
+        last_surface: Vec::new(),
+        last_uv: Vec::new(),
+        last_sel: Vec::new(),
+        receiver_uv: None,
+        receiver_skin: None,
+        receiver_joint_gen: u32::MAX,
+    })
 }
 
 /// Direction *towards* the shadow light in Bevy world space: the strongest of the three lit slots of the scene light
@@ -440,26 +462,17 @@ pub fn light_basis(l: Vec3) -> (Vec3, Vec3) {
     (u, v)
 }
 
-/// Receiver triangles (model space) that the shadow rectangle meets, with their light-plane UVs and surface normals.
+/// Indices of the receiver triangles of `floor` that the shadow rectangle meets (upward-facing, inside the height window).
 ///
 /// `rect = (centre, side)` in light-plane coordinates; `height = (min_y, max_y)` model-space window (y down) around the caster's feet.
-pub fn shadow_receivers(
-    floor: &ShadowFloor,
-    world_to_model: &Mat4,
-    u: Vec3,
-    v: Vec3,
-    rect: (Vec2, f32),
-    height: (f32, f32),
-) -> (Vec<[f32; 3]>, Vec<[f32; 3]>, Vec<[f32; 2]>) {
+pub fn receiver_tris(floor: &ShadowFloor, world_to_model: &Mat4, u: Vec3, v: Vec3, rect: (Vec2, f32), height: (f32, f32)) -> Vec<usize> {
     let (c, side) = rect;
     let half = side * 0.5;
-    let mut pos = Vec::new();
-    let mut nrm = Vec::new();
-    let mut uv = Vec::new();
+    let mut sel = Vec::new();
     // coarse reject in world space: the model origin sits in the rectangle, so only triangles within `reach` of it can qualify
     let origin = world_to_model.inverse().transform_point3(Vec3::ZERO);
     let reach = side * 1.5 + 40.0;
-    for t in &floor.tris {
+    for (i, t) in floor.tris.iter().enumerate() {
         if t.max.x < origin.x - reach || t.min.x > origin.x + reach || t.max.z < origin.z - reach || t.min.z > origin.z + reach {
             continue;
         }
@@ -488,6 +501,32 @@ pub fn shadow_receivers(
         if mx.x < c.x - half || mn.x > c.x + half || mx.y < c.y - half || mn.y > c.y + half {
             continue;
         }
+        sel.push(i);
+    }
+    sel
+}
+
+/// Receiver triangles (model space) that the shadow rectangle meets, with their light-plane UVs and surface normals (the CPU receivers,
+/// `SH2_CPU_SKIN=1`; selection = [`receiver_tris`]).
+pub fn shadow_receivers(
+    floor: &ShadowFloor,
+    world_to_model: &Mat4,
+    u: Vec3,
+    v: Vec3,
+    rect: (Vec2, f32),
+    height: (f32, f32),
+) -> (Vec<[f32; 3]>, Vec<[f32; 3]>, Vec<[f32; 2]>) {
+    let (c, side) = rect;
+    let mut pos = Vec::new();
+    let mut nrm = Vec::new();
+    let mut uv = Vec::new();
+    for i in receiver_tris(floor, world_to_model, u, v, rect, height) {
+        let m = floor.tris[i].v.map(|p| world_to_model.transform_point3(p));
+        let mut n = (m[1] - m[0]).cross(m[2] - m[0]).normalize();
+        if n.y > 0.0 {
+            n = -n;
+        }
+        let p2 = m.map(|p| Vec2::new(p.dot(u), p.dot(v)));
         for k in 0..3 {
             let lifted = m[k] + Vec3::new(0.0, -SHADOW_LIFT, 0.0);
             pos.push(lifted.to_array());
@@ -496,6 +535,45 @@ pub fn shadow_receivers(
         }
     }
     (pos, nrm, uv)
+}
+
+/// GPU receivers: the light-plane UV matrix in PS2 world space.  The surface mesh holds the floor triangles in world space lifted
+/// [`SHADOW_LIFT`] along world -y; this undoes the lift, maps to model space and applies the CPU receivers' UV
+/// `((p . u - c.x) / side + 0.5, (p . v - c.y) / side + 0.5)`.
+pub fn receiver_uv_matrix(world_to_model: &Mat4, u: Vec3, v: Vec3, rect: (Vec2, f32)) -> Mat4 {
+    let (c, side) = rect;
+    let l = Mat4::from_cols(
+        Vec4::new(u.x / side, v.x / side, 0.0, 0.0),
+        Vec4::new(u.y / side, v.y / side, 0.0, 0.0),
+        Vec4::new(u.z / side, v.z / side, 0.0, 0.0),
+        Vec4::new(0.5 - c.x / side, 0.5 - c.y / side, 0.0, 1.0),
+    );
+    l * *world_to_model * Mat4::from_translation(Vec3::new(0.0, SHADOW_LIFT, 0.0))
+}
+
+/// GPU receivers: the surface mesh of the selected floor triangles (PS2 world space, lifted along world -y; one skin joint whose palette
+/// is the UV matrix: `sh2_vertex.wgsl` computes the UVs, the UV attribute is a placeholder).
+fn receiver_world_mesh(floor: &ShadowFloor, sel: &[usize], m: &mut Mesh) {
+    let mut pos = Vec::with_capacity(sel.len() * 3);
+    let mut nrm = Vec::with_capacity(sel.len() * 3);
+    for &i in sel {
+        let t = floor.tris[i].v;
+        let mut n = (t[1] - t[0]).cross(t[2] - t[0]).normalize_or_zero();
+        if n.y > 0.0 {
+            n = -n;
+        }
+        for p in t {
+            pos.push((p - Vec3::new(0.0, SHADOW_LIFT, 0.0)).to_array());
+            nrm.push(n.to_array());
+        }
+    }
+    let n = pos.len();
+    m.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
+    m.insert_attribute(Mesh::ATTRIBUTE_NORMAL, nrm);
+    m.insert_attribute(Mesh::ATTRIBUTE_UV_0, vec![[0.0f32; 2]; n]);
+    m.insert_attribute(Mesh::ATTRIBUTE_JOINT_INDEX, ::bevy::mesh::VertexAttributeValues::Uint16x4(vec![[0u16; 4]; n]));
+    m.insert_attribute(Mesh::ATTRIBUTE_JOINT_WEIGHT, vec![[1.0f32, 0.0, 0.0, 0.0]; n]);
+    m.insert_indices(Indices::U32((0..n as u32).collect()));
 }
 
 impl ShadowCaster {
@@ -510,7 +588,8 @@ impl ShadowCaster {
     /// tile's `[-1, 1]^2`, see [`tile_clip`]) or `None` when nothing is drawn.
     ///
     /// `l` is the clamped direction towards the light in model space ([`Self::light_frame`]); `world_to_model` maps PS2 world space to the
-    /// model's space (for the receiver triangles of `floor`).
+    /// model's space (for the receiver triangles of `floor`).  `gpu`: the receivers are a world-space mesh whose UVs the vertex stage computes
+    /// from [`Self::receiver_uv`] (re-uploaded only when the triangle selection changes); otherwise model-space triangles + UVs.
     #[allow(clippy::too_many_arguments)]
     pub fn update(
         &mut self,
@@ -518,10 +597,12 @@ impl ShadowCaster {
         l: Vec3,
         floor: Option<&ShadowFloor>,
         world_to_model: &Mat4,
+        gpu: bool,
         meshes: &mut Assets<Mesh>,
         tfs: &mut Query<&mut Transform, Without<super::model::AnimatedModel>>,
         vis: &mut Query<&mut Visibility>,
     ) -> Option<Mat4> {
+        self.receiver_uv = None;
         // (`Model::ShadowProcess` low-pass filters the light *position* when the shadow light changes; the light is constant here and the
         // direction is in model space, so smoothing would only make the shadow lag behind a turning actor)
         self.smoothed = Some(l);
@@ -546,6 +627,32 @@ impl ShadowCaster {
             let c = (ext.lo + ext.hi) * 0.5;
             let top = ext.top;
             let height = (top * 0.6 - 4.0, -top * 0.5 + 4.0);
+            if gpu {
+                let floor = floor.unwrap();
+                let sel = receiver_tris(floor, world_to_model, u, v, (c, side), height);
+                if sel.is_empty() {
+                    set_vis(vis, self.quad, false);
+                    set_vis(vis, self.surface, false);
+                    return None;
+                }
+                if sel != self.last_sel {
+                    if let Some(mut m) = meshes.get_mut(&self.surface_mesh) {
+                        receiver_world_mesh(floor, &sel, &mut m);
+                    }
+                    self.last_sel = sel;
+                }
+                // the surface entity maps PS2 world -> model space (a child of the holder, like the CPU receivers)
+                if let Ok(mut t) = tfs.get_mut(self.surface) {
+                    let want = Transform::from_matrix(*world_to_model);
+                    if *t != want {
+                        *t = want;
+                    }
+                }
+                self.receiver_uv = Some(receiver_uv_matrix(world_to_model, u, v, (c, side)));
+                set_vis(vis, self.quad, false);
+                set_vis(vis, self.surface, true);
+                return Some(shadow_clip(u / side, -c.x / side, v / side, -c.y / side));
+            }
             let (pos, nrm, uv) = shadow_receivers(floor.unwrap(), world_to_model, u, v, (c, side), height);
             if std::env::var_os("SH2_SHADOW_DEBUG").is_some() {
                 eprintln!("shadow: floor tris {} receivers {} side {side:.1} top {top:.1} light {l:?}", floor.unwrap().tris.len(), pos.len() / 3);
@@ -701,5 +808,35 @@ mod tests {
         assert_eq!(uv.len(), 6);
         // the ramp tile keeps its height (lifted by SHADOW_LIFT above the surface)
         assert!(pos.iter().any(|p| (p[1] - (-3.0 - SHADOW_LIFT)).abs() < 1e-4));
+    }
+
+    #[test]
+    fn gpu_receiver_uvs_match_the_cpu_receivers() {
+        let mut floor = ShadowFloor::default();
+        floor.set([
+            [Vec3::new(90.0, 0.0, 40.0), Vec3::new(130.0, 0.0, 40.0), Vec3::new(110.0, 0.0, 80.0)],
+            [Vec3::new(90.0, -3.0, 80.0), Vec3::new(130.0, -3.0, 80.0), Vec3::new(110.0, 0.0, 100.0)],
+        ]);
+        // an upright actor at (110, 0, 60) turned 0.7 rad about y, light from the side
+        let model_to_world = Mat4::from_rotation_translation(Quat::from_rotation_y(0.7), Vec3::new(110.0, 0.0, 60.0));
+        let w2m = model_to_world.inverse();
+        let l = clamp_light_elevation(Vec3::new(0.4, -0.8, 0.3).normalize());
+        let (u, v) = light_basis(l);
+        let rect = (Vec2::new(1.5, -2.0), 70.0);
+        let (pos, _, uv) = shadow_receivers(&floor, &w2m, u, v, rect, (-10.0, 10.0));
+        let sel = receiver_tris(&floor, &w2m, u, v, rect, (-10.0, 10.0));
+        let mut m = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
+        receiver_world_mesh(&floor, &sel, &mut m);
+        let Some(::bevy::mesh::VertexAttributeValues::Float32x3(wp)) = m.attribute(Mesh::ATTRIBUTE_POSITION) else { panic!() };
+        assert_eq!(wp.len(), pos.len());
+        assert!(!wp.is_empty());
+        let uvm = receiver_uv_matrix(&w2m, u, v, rect);
+        for i in 0..wp.len() {
+            // the vertex stage: the entity maps world -> model (positions), the palette maps world -> uv
+            let q = w2m.transform_point3(Vec3::from(wp[i]));
+            assert!((q - Vec3::from(pos[i])).length() < 1e-3, "{i}: {q:?} vs {:?}", pos[i]);
+            let g = uvm * Vec3::from(wp[i]).extend(1.0);
+            assert!((g.truncate().truncate() - Vec2::from(uv[i])).length() < 1e-5, "{i}: {g:?} vs {:?}", uv[i]);
+        }
     }
 }

@@ -976,7 +976,29 @@ pub fn animate_models(
             } else {
                 let world_to_model = fw.w.inverse();
                 let _shadow_scope = super::perf::Scope::new("shadow");
-                let clip = sh.update(&fw.ext, fw.sl, shadow_floor.as_deref(), &world_to_model, &mut meshes, &mut tfs, &mut vis);
+                let clip = sh.update(&fw.ext, fw.sl, shadow_floor.as_deref(), &world_to_model, joint.is_some(), &mut meshes, &mut tfs, &mut vis);
+                // GPU receivers: the UV matrix is the surface's one-joint skin palette
+                if let (Some(uvm), Some(j), Some(bp)) = (sh.receiver_uv.take(), joint, bindposes.as_mut()) {
+                    match sh.receiver_skin.as_ref().filter(|h| bp.contains(*h)) {
+                        Some(h) => {
+                            if bp.get(h).map(|cur| cur[..] != [uvm]).unwrap_or(false) {
+                                if let Some(mut asset) = bp.get_mut(h) {
+                                    *asset = SkinnedMeshInverseBindposes::from(vec![uvm]);
+                                }
+                            }
+                        }
+                        None => {
+                            sh.receiver_skin = Some(bp.add(SkinnedMeshInverseBindposes::from(vec![uvm])));
+                            sh.receiver_joint_gen = u32::MAX;
+                        }
+                    }
+                    if sh.receiver_joint_gen != j.generation {
+                        sh.receiver_joint_gen = j.generation;
+                        if let Some(h) = sh.receiver_skin.clone() {
+                            commands.entity(sh.surface).try_insert(SkinnedMesh { inverse_bindposes: h, joints: vec![j.entity] });
+                        }
+                    }
+                }
                 // Bevy world -> this caster's tile: tile * (model -> tile clip) * (world -> model)
                 let m = clip.map(|c| tile_clip(sh.tile) * c * gt.to_matrix().inverse()).unwrap_or(Mat4::ZERO);
                 if atlas_clips.len() <= sh.tile {

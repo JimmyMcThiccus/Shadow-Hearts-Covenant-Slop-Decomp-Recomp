@@ -65,6 +65,15 @@ rebuilt as a new `Mesh` every frame, and every drop shadow was rasterised on the
   texel inside the tile like the original's `CLAMP_2`); no blur (the GS samples the silhouette bilinearly, nothing more).  The receiver mesh is
   re-uploaded only when its triangles / UVs change.
 * The CPU still computes the rectangle (extents of the posed vertices, folded into the phase-A pass) and the receiver triangles.
+* **Receiver UVs on the GPU (GP follow-up)**: the surface mesh now holds the selected floor triangles in **PS2 world space** (lifted along
+  world -y; `receiver_world_mesh`) and is re-uploaded only when the *selection* changes (`receiver_tris`, indices compared), not every time
+  the actor moves.  The surface entity's transform is `world_to_model` (it stays a child of the holder, so it lags exactly like the old
+  model-space receivers), and its light-plane UVs come from a one-joint skin palette = `receiver_uv_matrix` (undo the lift, world -> model,
+  `((p . u - c.x) / side + 0.5, (p . v - c.y) / side + 0.5)`): `sh2_vertex.wgsl` `SH2_SHADOW_RECEIVER` (`Sh2MaterialKey::variant` 2, set
+  when `extra.z` names an atlas tile) computes `uv = (P * v).xy` and leaves positions / normals unskinned.  The flat quad (no skin) keeps its
+  UVs.  `SH2_CPU_SKIN=1` keeps the model-space CPU receivers.  Parity (`SH2_FIXED_DT=60`, `SH2_DEBUG_CHAR=1`, `--view-map` MS_27_U / AP_00_U /
+  AP_02_U, CPU vs GPU): identical (0.000); battle demo flat-quad shadows identical to the previous build.  Unit test
+  `gpu_receiver_uvs_match_the_cpu_receivers`.
 
 ### 1d. CPU churn removed on the way (PF requests 1 / 2)
 * `own_material` tint / blend / `params.w`, `apply_model_light_overrides` and the effect overlays compare before writing (`get_mut` marks an
@@ -97,7 +106,8 @@ PF's profiler (`SH2_PERF`, same runs) -- render-asset churn per frame:
 | AP_02_U in-game menu | 88.9 / 8.0 / 0 | 8.9 (2D UI) / 0.02 / 0 |
 | autoplay battle | 63.8 / 6.1 / 111.5 (p95 21.0 ms) | 13.0 / 0.05 / 13.0 (p95 17.4 ms) |
 
-What is still uploaded per frame: shadow receiver meshes whose UVs move with the caster (1-5 tiny meshes), the 2D UI canvas, effect-model
+What is still uploaded per frame: shadow receiver meshes whose UVs move with the caster (1-5 tiny meshes; now only when the floor
+selection changes, see 1c), the 2D UI canvas, effect-model
 billboards that animate (`effmdl_*` hit bursts; now GPU, see 1a), weapon trails (FX2's `effects_bridge`), and 13-15 materials (alpha fades of effect / character
 atomics that really change; FX2's effect code).
 
@@ -127,7 +137,8 @@ shot that flip between two values run to run).  Request to FX2 / BT: order them 
 * Skeleton evaluation (small, script driven) -- now in parallel.
 * Posed positions are still walked once per atomic per frame (positions only, no allocation): they give the exact blended-draw sort key and the
   shadow rectangle.  Could be replaced by per-joint bounds if it ever shows up in a profile.
-* `cus*` line models, receiver triangles of the shadows (the floor search), blend-shape morphs (uploaded on change only).
+* `cus*` line models, the receiver triangle search of the shadows (uploaded only when the selection changes), blend-shape morphs (uploaded on
+  change only).
 
 ## 5. Switches (all new)
 `SH2_CPU_SKIN=1`, `SH2_CPU_FX=1` (A/B), `SH2_NO_VSYNC=1|immediate|mailbox`, `SH2_FRAMETIME=<label>` (+ `SH2_FRAMETIME_OUT=<tsv>`: frame time

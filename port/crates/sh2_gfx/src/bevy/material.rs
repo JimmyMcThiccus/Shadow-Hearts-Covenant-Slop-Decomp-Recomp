@@ -272,13 +272,13 @@ impl Sh2Material {
 pub struct Sh2MaterialKey {
     pub blend: Sh2Blend,
     pub ztest_off: bool,
-    /// material-type specific variant (0 for [`Sh2Material`]; `Sh2FxMaterial`: 1 = ribbon)
+    /// material-type specific variant (`Sh2Material`: 0, 2 = shadow receiver (`extra.z` = atlas tile); `Sh2FxMaterial`: 1 = ribbon)
     pub variant: u8,
 }
 
 impl From<&Sh2Material> for Sh2MaterialKey {
     fn from(m: &Sh2Material) -> Self {
-        Sh2MaterialKey { blend: m.blend, ztest_off: m.ztest_off, variant: 0 }
+        Sh2MaterialKey { blend: m.blend, ztest_off: m.ztest_off, variant: if m.extra.z > 0.5 { 2 } else { 0 } }
     }
 }
 
@@ -342,6 +342,10 @@ impl Material for Sh2Material {
         // GPU billboards (`billboard.rs`): skinned meshes with a corner offset in `UV_1`
         if layout.0.contains(Mesh::ATTRIBUTE_UV_1) && layout.0.contains(Mesh::ATTRIBUTE_JOINT_INDEX) {
             descriptor.vertex.shader_defs.push("SH2_BILLBOARD".into());
+        }
+        // GPU shadow receivers (`shadow.rs`): the skin palette is the light-plane UV matrix, the positions are not skinned
+        if key.bind_group_data.variant == 2 {
+            descriptor.vertex.shader_defs.push("SH2_SHADOW_RECEIVER".into());
         }
         Ok(())
     }
