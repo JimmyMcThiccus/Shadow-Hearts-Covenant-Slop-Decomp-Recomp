@@ -223,13 +223,15 @@ pub fn batch_blend(batch: &RenderBatch) -> crate::bevy::Sh2Blend {
 /// Run-time renderer settings (see `notes/integration/renderer.md`).
 #[derive(Resource, Clone, Debug)]
 pub struct Sh2RenderSettings {
-    /// Texture sampling for newly created images (the game's TEX1 is bilinear; the port default is nearest).
+    /// Texture sampling for newly created images: bilinear like the game's `TEX1` (MMAG = MMIN = LINEAR for model / map textures);
+    /// `SH2_TEX_FILTER=nearest` gives the old pixel look.
     pub filter: crate::bevy::TexFilter,
 }
 
 impl Default for Sh2RenderSettings {
     fn default() -> Self {
-        Self { filter: crate::bevy::TexFilter::Nearest }
+        let nearest = std::env::var("SH2_TEX_FILTER").map(|v| v.eq_ignore_ascii_case("nearest")).unwrap_or(false);
+        Self { filter: if nearest { crate::bevy::TexFilter::Nearest } else { crate::bevy::TexFilter::Linear } }
     }
 }
 

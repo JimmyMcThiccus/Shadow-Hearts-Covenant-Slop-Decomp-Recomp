@@ -5,8 +5,8 @@
 //! * The format is `Rgba8Unorm` (NOT sRGB): the GS works directly on display-referred values, so the
 //!   material shader does the modulation in that space and converts to linear only at the very end.
 //! * Addressing is `REPEAT` (`CLAMP_1 = 0` is what `Texture::createRegsterPacket` leaves in place).
-//! * Filtering: [`TexFilter::Nearest`] by default.  The game's `TEX1_1` register is MMAG = MMIN = LINEAR for model
-//!   textures, so [`TexFilter::Linear`] is the hardware-faithful choice for 3D; it is selectable at run time.
+//! * Filtering: the game's `TEX1_1` register is MMAG = MMIN = LINEAR for model textures, so the renderer default
+//!   (`Sh2RenderSettings`) is [`TexFilter::Linear`]; `SH2_TEX_FILTER=nearest` selects [`TexFilter::Nearest`].
 
 use ::bevy::asset::RenderAssetUsages;
 use ::bevy::image::{ImageAddressMode, ImageFilterMode, ImageSampler, ImageSamplerDescriptor};
