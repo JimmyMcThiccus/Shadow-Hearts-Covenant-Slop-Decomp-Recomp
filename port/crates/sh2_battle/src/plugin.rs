@@ -141,6 +141,8 @@ pub struct RingRun {
     pub time: f32,
     /// `HitMes` sprites requested by the ring (`Good!!` / `Strike!!` / `Miss!!` ...), drained by `hud_hits`
     pub mes: Vec<(Option<jring::JrArea>, i16)>,
+    /// round 6 BT: the result of an event ring (callback 0x80, `JrResult::event_value` = the tag of the stopped area), see [`Self::start_event`]
+    pub event_result: Option<JrResult>,
 }
 
 impl RingRun {
@@ -200,7 +202,7 @@ impl RingRun {
         r.ring_active(&mut rng);
         r.period = 1.6;
         r.events.clear();
-        RingRun { ring: r, rng, result: None, time: 0.0, mes: vec![] }
+        RingRun { ring: r, rng, result: None, time: 0.0, mes: vec![], event_result: None }
     }
 
     fn start_areas_colored(areas: &[(i16, i16, i16)], period: f32, seed: u64, custom: Option<[u8; 20]>, special: bool) -> Self {
@@ -226,7 +228,28 @@ impl RingRun {
         r.ring_active(&mut rng);
         r.period = period;
         r.events.clear();
-        RingRun { ring: r, rng, result: None, time: 0.0, mes: vec![] }
+        RingRun { ring: r, rng, result: None, time: 0.0, mes: vec![], event_result: None }
+    }
+
+    /// Round 6 BT (field ring, RG): an *event* ring -- one step area per `(start, width, tag)` (`AddStepArea(start, width, col, tag)`), one lap,
+    /// `period` seconds per revolution; the stopped area's tag comes back in [`Self::event_result`] (`event_value`).
+    pub fn start_event(areas: &[(i16, i16, i16)], period: f32, seed: u64) -> Self {
+        let mut rng = XorShift(seed | 1);
+        let mut r = JRing::new(0);
+        r.data_loaded = true;
+        r.set_mode(5, jring::ring_type::SINGLE, 1, 4, 3);
+        r.center = (1024.0 / 3.0, 224.0);
+        for &(start, width, tag) in areas {
+            r.add_step_area(start, width, None, tag);
+        }
+        r.laps_allowed = 1;
+        r.set_callback_mask(0x3ff);
+        r.update(1.0 / 60.0, 0, &mut rng);
+        r.events.clear();
+        r.ring_active(&mut rng);
+        r.period = period;
+        r.events.clear();
+        RingRun { ring: r, rng, result: None, time: 0.0, mes: vec![], event_result: None }
     }
 
     /// One 60 Hz tick with the face buttons pressed this tick; returns true when the ring has finished.
@@ -236,11 +259,12 @@ impl RingRun {
         for e in self.ring.events.drain(..) {
             match e {
                 JrEvent::Callback { code: 0x40, result: Some(r) } => self.result = Some(r),
+                JrEvent::Callback { code: 0x80, result: Some(r) } => self.event_result = Some(r),
                 JrEvent::HitMes { area, variant } => self.mes.push((area, variant)),
                 _ => {}
             }
         }
-        (self.result.is_some() && self.ring.state == jring::state::SLEEP) || self.time > 25.0
+        ((self.result.is_some() || self.event_result.is_some()) && self.ring.state == jring::state::SLEEP) || self.time > 25.0
     }
 
     pub fn view(&self) -> RingView {
@@ -409,6 +433,12 @@ pub struct BattleRuntime {
     pub flash: f32,
     /// presentation of the `Tarot Card` command while `Phase::Tarot` runs ([`crate::tarot`])
     pub tarot_ui: Option<TarotUi>,
+    /// round 6 BT: new homes the models jump to at once (`GetWarpPos` of *Gathering*, the last boss's released parts): `(fighter, Bevy feet)`,
+    /// drained by `models::apply_home_moves`
+    pub home_moves: Vec<(usize, Vec3)>,
+    /// round 6 BT: the last boss's joined form `(core, parts)` while the parts are the core's weapons (`LastBossSpecial`), drawn by
+    /// `models::drive_last_boss`
+    pub boss_joined: Option<(usize, Vec<usize>)>,
     /// *The Tower* was drawn: scale the party's cash by this variant once the session is at hand
     tarot_cash: Option<u8>,
     /// battle cursor memory per fighter (`BtlChr+0x598..0x59e`, [`BtlMenu::path`]); -1 = nothing remembered
@@ -698,6 +728,8 @@ fn enter_battle(
         fx_actor_events: vec![],
         flash: 0.0,
         tarot_ui: None,
+        home_moves: vec![],
+        boss_joined: None,
         tarot_cash: None,
         cursor_mem: vec![[-1; 4]; 12],
     });
@@ -1236,19 +1268,25 @@ fn consume_events(rt: &mut BattleRuntime, text: &BtlText) -> Option<(Option<rule
             // round 5 BP hook: floating MP / SP / status texts, "Miss", the berserk / paralysed messages
             BattleEvent::Party(p) => {
                 // round 5 BP hook: *Gathering* moves the gathered units' home places next to the target (the flow already moved its positions)
-                if let crate::flow::PartyEvent::Gather { centre, units } = &p {
-                    if let Some(&c) = rt.homes.get(*centre) {
-                        for (n, &k) in units.iter().enumerate() {
-                            let a = n as f32 * std::f32::consts::TAU / units.len().max(1) as f32;
-                            let at = c + Vec3::new(a.cos(), 0.0, a.sin()) * crate::flow::GATHER_SPACING;
-                            if let Some(h) = rt.homes.get_mut(k) {
-                                *h = at;
-                            }
-                            if let Some(q) = rt.positions.get_mut(k) {
-                                *q = at;
-                            }
-                        }
+                // round 6 BT: `GetWarpPos` (*Gathering*) / `LastBossSpecial` write the new box centres (`BtlChr+0x160`) = the units' homes; the
+                // models are put there at once (`models::apply_home_moves`)
+                let moves: Vec<(usize, [f32; 3])> = match &p {
+                    crate::flow::PartyEvent::Gather { units, to, .. } => units.iter().copied().zip(to.iter().copied()).collect(),
+                    crate::flow::PartyEvent::BossForm { joined: false, parts, to, .. } => parts.iter().copied().zip(to.iter().copied()).collect(),
+                    _ => vec![],
+                };
+                for (k, at) in moves {
+                    let at = Vec3::new(at[0], at[1], at[2]);
+                    if let Some(h) = rt.homes.get_mut(k) {
+                        *h = at;
                     }
+                    if let Some(q) = rt.positions.get_mut(k) {
+                        *q = at;
+                    }
+                    rt.home_moves.push((k, at));
+                }
+                if let crate::flow::PartyEvent::BossForm { joined, core, parts, .. } = &p {
+                    rt.boss_joined = if *joined { Some((*core, parts.clone())) } else { None };
                 }
                 let fighters = &rt.setup.fighters;
                 let names = &rt.setup.names;
@@ -1409,6 +1447,15 @@ pub fn battle_tick(
         }
         if a.down > 0.0 && a.down < 1.0 {
             a.down = (a.down + dt * 2.0).min(1.0);
+        }
+    }
+    // Snap Shot: retail `StatusRecovery` case 7 sets the album bit `BTL0+0xfc3` at the photo (live r5_lv check 6: 0x1010f3 = 1 right after the
+    // shot, `Album` on Anastasia's next turn of the same battle), so the command menu built from the save sees it at once
+    if session.save.btl.is_retail() {
+        for &k in &rt.battle.stats.albums {
+            if let Some(v) = session.save.btl.retail.get_mut(0xfc3 + (k as usize >> 3)) {
+                *v |= 1 << (k & 7);
+            }
         }
     }
     // the AI sees the fighters' positions
@@ -2176,7 +2223,7 @@ fn build_hud_view(rt: &BattleRuntime, cx: &Cx, session: &GameSession) -> crate::
                     // the Combo partner page is a titled list (live `04i`)
                     hm.list = Some(HudList { title: cx.text.item(crate::ui::label::LINK).to_string(), subtitle: String::new(), rows: targets.iter().map(|&t| HudListRow { label: ename(t), right: String::new(), enabled: true }).collect(), cursor: c });
                 } else {
-                    hm.targets = Some((targets.iter().map(|&t| ename(t)).collect(), c));
+                    hm.targets = Some((targets.iter().map(|&t| if t == crate::ui::ALL_TARGET { m.all_label().to_string() } else { ename(t) }).collect(), c));
                 }
                 // live captures `04g` / `04e` / `04i`
                 hm.help = match then {
@@ -2512,6 +2559,8 @@ fn spawn_battle_scene(
                 log::info!("battle: background {:03} (requested {}): {} atomics, {} textures, bounds {:?}, bg colour {:?}, fog {:?}", id, rt.bg_id, info.atomics, info.textures, info.bounds, info.bg_color, info.fog);
                 // `BtlBGInit`: the arena size of the BBG `DAT` (`CBattle+0x3f14 / 0x3f1c` = x - 10 / z - 10; the camera clamps use (size + 10) / 2)
                 rt.cam.arena = Vec2::new(info.dims[0] * 0.5, info.dims[2] * 0.5);
+                // round 6 BT: `GetWarpPos` / `LastBossSpecial` keep units inside `CBattle+0x3f14 / 0x3f1c`
+                rt.battle.arena = [info.dims[0] - 10.0, info.dims[2] - 10.0];
                 log::info!("battle: arena {:?}", info.dims);
                 rt.homes = crate::formation::homes_for(&rt.setup, &rt.boxes, [info.dims[0], info.dims[2]]);
                 rt.positions = rt.homes.clone();
@@ -2796,8 +2845,11 @@ impl Plugin for BattlePlugin {
                 cfg.render_layers = RenderLayers::layer(1);
                 cfg.line.width = 3.0;
             }
+            // FX2 round 6 hook: the field's `FxRunnerPlugin` may have added the effect renderer already (added twice = panic)
+            if app.get_added_plugins::<sh2_gfx::effects::render::EffectRenderPlugin>().is_empty() {
+                app.add_plugins(sh2_gfx::effects::render::EffectRenderPlugin);
+            }
             app.add_plugins(crate::models::BattleModelsPlugin) // real models over the placeholders (models.rs)
-                .add_plugins(sh2_gfx::effects::render::EffectRenderPlugin)
                 .add_plugins(crate::stage::StagePlugin) // E1 hook: stage lights + background effects
                 .init_resource::<crate::effects_bridge::FxActorState>()
                 .init_resource::<crate::effects_bridge::FusionVis>()

@@ -87,6 +87,8 @@ pub mod motion {
 pub enum WeaponSlot {
     Right,
     Left,
+    /// `CreateCenterWeapon` (`EX03`): fusion forms, the last boss's Yasakani Gem (CHR 500)
+    Center,
 }
 
 impl WeaponSlot {
@@ -95,6 +97,7 @@ impl WeaponSlot {
         match self {
             WeaponSlot::Right => "EX01",
             WeaponSlot::Left => "EX02",
+            WeaponSlot::Center => "EX03",
         }
     }
     /// Entry tag of the model inside the `.WPN` package (`rw` / `lw`; the shadow models `rws` / `lws` are not drawn by the port).
@@ -102,6 +105,7 @@ impl WeaponSlot {
         match self {
             WeaponSlot::Right => "rw",
             WeaponSlot::Left => "lw",
+            WeaponSlot::Center => "cw",
         }
     }
 }
@@ -423,6 +427,7 @@ pub fn spawn_battle_models(
     rt.positions = homes;
     rt.formed = true;
     log::info!("battle: formation {} -> slots {:?} (radii {:?})", rt.setup.formation, rt.homes, rt.boxes.iter().map(|b| b.map(|b| b.radius())).collect::<Vec<_>>());
+    let mut spawned: Vec<(usize, u32, Arc<CharacterAsset>, Entity, Entity)> = vec![];
     for i in 0..nf {
         let f = &rt.setup.fighters[i];
         let Some(chr_no) = chr_nos[i] else { continue };
@@ -464,7 +469,7 @@ pub fn spawn_battle_models(
                                 let a = Arc::new(CharacterAsset { key: format!("{}#{}", wf[0], slot.tag()), model, motions: motions.clone(), materials, bounds });
                                 match slot {
                                     WeaponSlot::Right => set.right = Some(a),
-                                    WeaponSlot::Left => set.left = Some(a),
+                                    WeaponSlot::Left | WeaponSlot::Center => set.left = Some(a),
                                 }
                             }
                             Arc::new(set)
@@ -486,6 +491,7 @@ pub fn spawn_battle_models(
                 }
             }
         }
+        spawned.push((i, chr_no, asset.clone(), root, flip));
         let radius = rt.boxes[i].map(|b| b.radius()).unwrap_or(4.0);
         // `DeathInit`: monsters die by `MONSTERParam+0x15 >> 3 & 3`
         let death_type = if f.is_enemy { db.as_deref().and_then(|d| d.0.dat.record(crate::data::SEC_MONSTER, f.char_id.max(0) as usize, 0x38)).map(|r| crate::choreo::death_type(r[0x15])).unwrap_or(0) } else { 0 };
@@ -511,6 +517,137 @@ pub fn spawn_battle_models(
             }
         }
         log::info!("battle: fighter {i} model CHR {chr_no:03} ({})", if f.is_enemy { "monster" } else { "party" });
+    }
+    spawn_last_boss_weapons(&mut commands, &disc, &mut gpu, &spawned);
+}
+
+/// Motion entries of a package by tag (`anm`, `a2`, `a3`).
+pub fn package_motions(bytes: &[u8], tag: &str) -> Vec<Arc<sh2_formats::motion::Motion>> {
+    package_entries(bytes)
+        .into_iter()
+        .filter(|(t, _)| t == tag)
+        .filter_map(|(_, off)| sh2_formats::motion::Motion::parse(&bytes[off..]).ok())
+        .map(Arc::new)
+        .collect()
+}
+
+/// The last boss's core (CHR 499): its two motion sets (`LastBossSpecial`: separated = the `anm` + `a3` entries of `CHRANM/499.ANM`,
+/// joined = the `a2` entries; `deleteMotion` / `createMotion` swap them).
+#[derive(Component)]
+pub struct LastBossCore {
+    pub chr: usize,
+    pub separated: Vec<Arc<sh2_formats::motion::Motion>>,
+    pub joined: Vec<Arc<sh2_formats::motion::Motion>>,
+    /// the form the motions were last set up for
+    pub is_joined: bool,
+}
+
+/// A part of the last boss drawn as the core's weapon while joined (`CreateRight/Left/CenterWeapon` with the part's own `mdl`, motions =
+/// the part's `a2` entries): Kusanagi Sword (CHR 502) right `EX01`, Yata Mirror (501) left `EX02`, Yasakani Gem (500) centre `EX03`.
+#[derive(Component)]
+pub struct LastBossWeapon {
+    pub part: usize,
+}
+
+fn spawn_last_boss_weapons(commands: &mut Commands, disc: &Sh2Disc, gpu: &mut CharacterGpu, spawned: &[(usize, u32, Arc<CharacterAsset>, Entity, Entity)]) {
+    let Some((core, _, core_asset, core_root, core_flip)) = spawned.iter().find(|s| s.1 == 499).cloned() else { return };
+    let anm = |n: u32| disc.read(&chr_files(n)[1]).ok().unwrap_or_default();
+    let core_anm = anm(499);
+    let mut separated = package_motions(&core_anm, "anm");
+    separated.extend(package_motions(&core_anm, "a3"));
+    let joined = package_motions(&core_anm, "a2");
+    log::info!("battle: last boss core {core}: {} separated / {} joined motions", separated.len(), joined.len());
+    commands.entity(core_root).insert(LastBossCore { chr: core, separated, joined, is_joined: false });
+    for (part, chr_no, asset, _, _) in spawned.iter().filter(|s| (500..=502).contains(&s.1)) {
+        let slot = match chr_no {
+            502 => WeaponSlot::Right,
+            501 => WeaponSlot::Left,
+            _ => WeaponSlot::Center,
+        };
+        let Some(frame_idx) = core_asset.model.frames.iter().position(|fr| fr.name == slot.frame()) else {
+            log::warn!("battle: last boss core has no frame {}", slot.frame());
+            continue;
+        };
+        let motions = package_motions(&anm(*chr_no), "a2");
+        let CharacterGpu { meshes, images, materials, settings, .. } = gpu;
+        let mut g = GpuCtx { meshes, images, materials, filter: settings.filter };
+        let e = spawn_animated_model_ex(commands, core_flip, asset.model.clone(), motions, &asset.materials, &mut g, Transform::default(), &format!("boss_weapon_{part}"), false);
+        commands.entity(e).insert((WeaponMount { chr: core, slot, frame_idx, flip: core_flip }, LastBossWeapon { part: *part }, Visibility::Hidden));
+    }
+}
+
+/// Round 6 BT: new homes from `GetWarpPos` / `LastBossSpecial` (`BattleRuntime::home_moves`): the model is put there at once, facing the
+/// nearest opponent.
+pub fn apply_home_moves(rt: Option<ResMut<BattleRuntime>>, mut models: Query<&mut BattleModel>) {
+    let Some(mut rt) = rt else { return };
+    if rt.home_moves.is_empty() {
+        return;
+    }
+    let moves = std::mem::take(&mut rt.home_moves);
+    for (k, at) in moves {
+        let facing = side_facing(&rt.setup, &rt.homes, k);
+        for mut m in models.iter_mut().filter(|m| m.chr == k) {
+            m.home = at;
+            m.pos = at;
+            m.ch.home = at;
+            m.ch.pos = at;
+            m.facing = facing;
+            m.ch.facing = facing;
+            m.ch.yaw = yaw_towards(facing);
+        }
+    }
+}
+
+/// Round 6 BT: the last boss's joined form (`BattleRuntime::boss_joined`): the parts' own models hide and appear as the core's weapons, and
+/// the core swaps its motion set; separated, the reverse.
+pub fn drive_last_boss(
+    rt: Option<Res<BattleRuntime>>,
+    mut cores: Query<&mut LastBossCore>,
+    mut models: Query<&mut BattleModel>,
+    mut anims: Query<&mut AnimatedModel, Without<LastBossWeapon>>,
+    mut weapons: Query<(&LastBossWeapon, &mut Visibility)>,
+) {
+    let Some(rt) = rt else { return };
+    let joined_parts: Vec<usize> = rt.boss_joined.as_ref().map(|(_, p)| p.clone()).unwrap_or_default();
+    let joined = !joined_parts.is_empty();
+    for mut m in models.iter_mut() {
+        if joined_parts.contains(&m.chr) {
+            m.ch.hidden = true;
+        }
+    }
+    for (w, mut v) in weapons.iter_mut() {
+        let alive = rt.battle.fighters.get(w.part).and_then(|f| f.as_ref()).is_some_and(|f| f.hp > 0);
+        let want = if joined && joined_parts.contains(&w.part) && alive { Visibility::Inherited } else { Visibility::Hidden };
+        if *v != want {
+            *v = want;
+        }
+    }
+    for mut c in cores.iter_mut() {
+        if c.is_joined == joined {
+            continue;
+        }
+        c.is_joined = joined;
+        let core = c.chr;
+        // separating: the parts' models come back (their `ShadowOn` / `OTEntry`)
+        if !joined {
+            for mut m in models.iter_mut() {
+                let part = rt.battle.fighters.get(m.chr).and_then(|f| f.as_ref()).is_some_and(|f| f.is_enemy && f.hp > 0) && rt.battle.host.models.get(m.chr).is_some_and(|&n| (500..=502).contains(&n));
+                if part && m.ch.hidden && m.ch.act != Act::Dissolve {
+                    m.ch.hidden = false;
+                }
+            }
+        }
+        let Some(holder) = models.iter().find(|m| m.chr == core).map(|m| m.holder) else { continue };
+        let Ok(mut am) = anims.get_mut(holder) else { continue };
+        let set = if joined { c.joined.clone() } else { c.separated.clone() };
+        for mo in set {
+            am.inst.add_motion(mo);
+        }
+        // `SetBtlMotion(1, 1.0)`: back to the stand motion of the new set
+        let cur = am.current.clone();
+        if let Some(name) = cur {
+            am.play(&name);
+        }
     }
 }
 
@@ -1014,7 +1151,7 @@ impl Plugin for BattleModelsPlugin {
             .add_systems(OnExit(Scene::Battle), restore_light)
             .add_systems(Update, drive_sparkles.run_if(in_state(Scene::Battle)))
             .add_systems(Update, motion_sounds.after(drive_battle_models).run_if(in_state(Scene::Battle)))
-            .add_systems(Update, (spawn_battle_models, drive_battle_models, follow_weapons).chain().run_if(in_state(Scene::Battle)).run_if(resource_exists::<Sh2Disc>))
+            .add_systems(Update, (spawn_battle_models, apply_home_moves, drive_last_boss, drive_battle_models, follow_weapons).chain().run_if(in_state(Scene::Battle)).run_if(resource_exists::<Sh2Disc>))
             ;
     }
 }

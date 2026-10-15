@@ -33,7 +33,11 @@ fn main() {
         };
         files += 1;
         let t: Vec<i16> = b.chunks_exact(2).map(|c| i16::from_le_bytes([c[0], c[1]])).collect();
-        let dump = args.iter().any(|a| path.contains(a.as_str()) && a != &args[0]);
+        let mon = args.iter().position(|a| a == "--mon").and_then(|i| args.get(i + 1)).and_then(|v| v.parse::<usize>().ok());
+        let dump = args.iter().any(|a| path.contains(a.as_str()) && a != &args[0] && !a.starts_with("--")) || mon.is_some_and(|m| who.contains(&m));
+        if dump {
+            println!("{path} (monsters {who:?})");
+        }
         let mut p = 2usize;
         let op = |p: &mut usize| -> (i16, i16) {
             let k = t.get(*p).copied().unwrap_or(0);

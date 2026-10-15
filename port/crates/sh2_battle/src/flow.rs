@@ -501,6 +501,15 @@ pub trait Host {
     /// Called right after [`Host::choose_ai_command`] with write access to the fighters (round 5b LV hook, BE: the last boss's
     /// `LastBossSpecial` attaches / releases its parts here).
     fn after_ai_command(&mut self, _actor: usize, _fighters: &mut [Option<Fighter>]) {}
+    /// round 6 BT: the CHR model number of unit `k` (`BtlChr+0x18c`; 0 = unknown) -- `GetWarpPos` keeps the last boss's core (499) in place
+    fn chr_model(&self, _k: usize) -> u32 {
+        0
+    }
+    /// round 6 BT: `LastBossSpecial` changed the last boss's form this turn: `(joined, core, parts)` (taken once).  The flow places released
+    /// parts on their arcs ([`crate::warp::last_boss_arc`]) and reports [`PartyEvent::BossForm`].
+    fn take_boss_form(&mut self) -> Option<(bool, usize, Vec<usize>)> {
+        None
+    }
     /// Evaluate an item/magic/skill effect (`EffectCodeFunc`).  Returns damage (+) / heal (-) per target.
     ///
     /// The hook may also change the fighters (MP / SP costs, status, revive); HP changes should be returned so that they produce
@@ -633,8 +642,12 @@ pub enum PartyEvent {
     RingItem { target: usize, added: u32 },
     /// `TurnBeforeFunc` step 0x37 / `SetBtlMessage(0x79)`: the aroma `id` is gone
     AromaGone { id: i32 },
-    /// *Gathering*: `units` were moved next to unit `centre` (ring of radius [`GATHER_SPACING`]; the battle positions are already updated)
-    Gather { centre: usize, units: Vec<usize> },
+    /// *Gathering*: `units` were moved to `to` (Bevy world, box centres; `centre` = the first one, placed in the largest free rectangle --
+    /// [`crate::warp::gather`]; the battle positions are already updated)
+    Gather { centre: usize, units: Vec<usize>, to: Vec<[f32; 3]> },
+    /// round 6 BT -- `LastBossSpecial`: the parts (CHR 500..502) joined the core (`joined`: they become its weapons and leave the turn order /
+    /// target lists) or were released and placed at `to` (Bevy world; 60..120 deg for CHR 500, 30..60 for 501, 120..150 for 502)
+    BossForm { joined: bool, core: usize, parts: Vec<usize>, to: Vec<[f32; 3]> },
     /// Snap Shot: `SetBtlMessage(0x7a)` "You got the "%s" Album!" (album `index` = Anastasia's `SKIL` group 4 record)
     Album { index: u8, name: String },
 }
@@ -695,6 +708,8 @@ pub struct Battle<H: Host> {
     /// the hit powers of the pending action's effect program (`actions::program_hits`, set by the presentation before the action
     /// resolves; cleared after it)
     pub hit_powers: Vec<i32>,
+    /// `CBattle+0x3f14 / 0x3f1c`: the arena (BBG `DAT` x / z - 10) for [`crate::warp`]
+    pub arena: [f32; 2],
     pending: Option<MenuEvent>,
 }
 
@@ -739,8 +754,6 @@ pub struct BattleStats {
     pub albums: Vec<u8>,
 }
 
-/// Distance of the gathered units from the target of *Gathering* (world units; the retail placement is the effect program's -- not measured).
-pub const GATHER_SPACING: f32 = 12.0;
 
 /// `StatusRecovery` case 7 (Snap Shot, retail SH2US_BATTLE.BIN 0x626bf8): photographing these `MONSTERParam` ids gives album `k` (bit `k` of
 /// `BTL0+0xfc3..0xfc4`, = Anastasia's `SKIL` group 4 record `k`: Aqua Raise, Direct Press, Cash Steal, Remove, Pillage Storm, Falling Leaves,
@@ -785,8 +798,48 @@ impl<H: Host> Battle<H> {
             escape_now: false,
             albums_owned: vec![],
             hit_powers: vec![],
+            arena: [190.0, 190.0],
             pending: None,
         }
+    }
+
+    /// `LastBossSpecial` (JP 0x00640840) -- the positions half: released parts go to a random free point of their arc in front of the core
+    /// (`R_core + R_part + 12`, live r5_lv check 1: Gem 32.66 + 5.82 + 12 = 50.48 from the core's slot).
+    fn boss_form(&mut self, joined: bool, core: usize, parts: Vec<usize>) {
+        let mut to = vec![];
+        if !joined && core < self.positions.len() {
+            let n = self.fighters.len().min(self.positions.len());
+            let mut units: Vec<crate::warp::WarpUnit> = (0..n)
+                .map(|k| {
+                    let f = self.fighters[k].as_ref();
+                    let p = self.positions[k];
+                    crate::warp::WarpUnit {
+                        pos: [p[0], -p[2]],
+                        radius: self.ext.get(k).map(|e| e.radius).unwrap_or(3.0),
+                        enemy: f.map(|f| f.is_enemy).unwrap_or(false),
+                        present: f.map(|f| f.hp > 0 && !f.removed).unwrap_or(false),
+                        chr: self.host.chr_model(k),
+                    }
+                })
+                .collect();
+            // retail order: CHR 500, 501, 502
+            let mut order = parts.clone();
+            order.sort_by_key(|&k| self.host.chr_model(k));
+            for k in order {
+                if k >= n {
+                    continue;
+                }
+                let arena = self.arena;
+                let rng = &mut self.rng;
+                if let Some(p) = crate::warp::last_boss_arc(&units, core, k, arena, &mut || rng.rand() as u32 & 0x7fff_ffff) {
+                    units[k].pos = p;
+                    let y = self.positions[k][1];
+                    self.positions[k] = [p[0], y, -p[1]];
+                }
+            }
+            to = parts.iter().map(|&k| self.positions.get(k).copied().unwrap_or_default()).collect();
+        }
+        self.events.push(BattleEvent::Party(PartyEvent::BossForm { joined, core, parts, to }));
     }
 
     /// Transform fighter `i` into fusion `id` (`CBattle` phase 9 end: the fused name replaces the character's), or revert it (`id < 0`).
@@ -1007,6 +1060,9 @@ impl<H: Host> Battle<H> {
                 let ev = if enemy {
                     let ev = self.host.choose_ai_command(i, &self.fighters);
                     self.host.after_ai_command(i, &mut self.fighters);
+                    if let Some((joined, core, parts)) = self.host.take_boss_form() {
+                        self.boss_form(joined, core, parts);
+                    }
                     Some(ev)
                 } else if berserk {
                     // `BerserkFunc` (retail 0x690270): no command menu; the port keeps its "attack somebody" branch (a random living enemy).  The
@@ -1172,6 +1228,19 @@ impl<H: Host> Battle<H> {
             }
             Phase::ActionDone => self.goto(Phase::Death, 0),
             Phase::Death => {
+                // round 6 BT: the last boss's core (CHR 499) takes its parts with it, joined or separated (live r5_lv check 1: killing
+                // Susano-o ended the battle and started the ending; the parts' own deaths were not observed separately)
+                let core_down = (0..self.fighters.len()).any(|k| self.host.chr_model(k) == 499 && self.fighters[k].as_ref().is_some_and(|f| f.is_enemy && f.hp <= 0 && !f.removed));
+                if core_down {
+                    for k in 0..self.fighters.len() {
+                        if (500..=502).contains(&self.host.chr_model(k)) {
+                            if let Some(f) = self.fighters[k].as_mut().filter(|f| f.hp > 0) {
+                                f.hp = 0;
+                                f.removed = false;
+                            }
+                        }
+                    }
+                }
                 let newly: Vec<usize> = (0..self.fighters.len())
                     .filter(|&k| self.fighters[k].as_ref().map(|f| f.hp <= 0 && !f.removed && f.is_enemy).unwrap_or(false))
                     .collect();
@@ -1714,22 +1783,43 @@ impl<H: Host> Battle<H> {
                 }
             }
         }
-        // 0x50 *Gathering* ("Gathers enemies into one place."): the effect program pulls the living units of the target's side to the target;
-        // `EffectFunc` (0x484650) also lets it continue a combo like a damage action.  The area shapes measure on the new places at once.
+        // 0x50 *Gathering* ("Gathers enemies into one place."): target page "All Enemies" (live r5_lv check 5); effect program 080 asks
+        // `btlGetWarpPos(1, k, first)` for every target: the first goes to the centre of the largest free rectangle of the arena, the others
+        // next to the units already placed ([`crate::warp`], retail `GetWarpPos`).  The area shapes measure on the new places at once.
         if special == 0x50 {
-            let t = self.cmd.p48.max(0) as usize;
-            let side = self.fighters.get(t).and_then(|f| f.as_ref()).map(|f| f.is_enemy);
-            if let (Some(side), Some(&c)) = (side, self.positions.get(t)) {
-                let units: Vec<usize> =
-                    (0..self.fighters.len()).filter(|&k| k != t && self.fighters[k].as_ref().map(|f| f.is_enemy == side && f.hp > 0 && !f.removed).unwrap_or(false)).collect();
-                for (n, &k) in units.iter().enumerate() {
-                    let a = n as f32 * std::f32::consts::TAU / units.len().max(1) as f32;
-                    if let Some(p) = self.positions.get_mut(k) {
-                        *p = [c[0] + GATHER_SPACING * a.cos(), c[1], c[2] + GATHER_SPACING * a.sin()];
+            let actor_enemy = self.fighters.get(i).and_then(|f| f.as_ref()).map(|f| f.is_enemy).unwrap_or(false);
+            let t = self.cmd.p48;
+            let side = if t >= 0 { self.fighters.get(t as usize).and_then(|f| f.as_ref()).map(|f| f.is_enemy) } else { Some(!actor_enemy) };
+            if let Some(side) = side.filter(|_| !self.positions.is_empty()) {
+                let n = self.fighters.len().min(self.positions.len());
+                let mut units: Vec<crate::warp::WarpUnit> = (0..n)
+                    .map(|k| {
+                        let f = self.fighters[k].as_ref();
+                        let p = self.positions[k];
+                        crate::warp::WarpUnit {
+                            pos: [p[0], -p[2]],
+                            radius: self.ext.get(k).map(|e| e.radius).unwrap_or(3.0),
+                            enemy: f.map(|f| f.is_enemy).unwrap_or(false),
+                            present: f.map(|f| f.hp > 0 && !f.removed).unwrap_or(false),
+                            chr: self.host.chr_model(k),
+                        }
+                    })
+                    .collect();
+                // the target list in slot order: the first target is the first unit of the side
+                if let Some(first) = (0..n).find(|&k| units[k].present && units[k].enemy == side) {
+                    let arena = self.arena;
+                    let rng = &mut self.rng;
+                    let moved = crate::warp::gather(&mut units, first, actor_enemy, arena, &mut || rng.rand() as u32 & 0x7fff_ffff);
+                    let mut to = vec![];
+                    for &(k, p) in &moved {
+                        let y = self.positions[k][1];
+                        self.positions[k] = [p[0], y, -p[1]];
+                        to.push(self.positions[k]);
                     }
-                }
-                if !units.is_empty() {
-                    self.events.push(BattleEvent::Party(PartyEvent::Gather { centre: t, units }));
+                    let units: Vec<usize> = moved.iter().map(|m| m.0).collect();
+                    if !units.is_empty() {
+                        self.events.push(BattleEvent::Party(PartyEvent::Gather { centre: first, units, to }));
+                    }
                 }
             }
         }

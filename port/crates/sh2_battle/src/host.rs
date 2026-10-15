@@ -87,6 +87,13 @@ pub struct BtlHost {
     pub boss_parts: Vec<usize>,
     /// a `LastBoss` decision is waiting for [`Host::after_ai_command`]
     pub boss_toggle: bool,
+    /// round 6 BT: the form change of this turn for [`Host::take_boss_form`] `(joined, core, parts)`
+    pub boss_form: Option<(bool, usize, Vec<usize>)>,
+    /// round 6 BT: core turns since the parts joined.  Live (r5_lv check 1, three joined periods): the core acts 4 times joined -- the
+    /// script's union block M095_000 0xfda: skills 8 / 0xa / 9 / 0xb, one per part -- and its 5th turn is the separating `LastBossFunc`
+    /// (phase 0xe, steps 10..13).  The script itself jumps back to its main block there (`9 4`), so the port starts the separation on
+    /// that turn (where retail decides it is not traced: `AIIfFunc` 0x3f skips units with `+0xb2` bit 3, which the join sets).
+    pub boss_joined_turns: u32,
 }
 
 /// Status bits a monster cannot receive: retail `AIIfFunc` case 0x3a / `GetTarget` criterion 130 decode `MONSTERParam+0x32..0x34` into the
@@ -189,6 +196,8 @@ impl BtlHost {
             engine_fx: vec![],
             boss_parts: vec![],
             boss_toggle: false,
+            boss_form: None,
+            boss_joined_turns: 0,
         }
     }
 
@@ -250,6 +259,8 @@ impl BtlHost {
                 Some(x) => {
                     let (s0, s1) = self.skills.get(i).copied().unwrap_or((-1, -1));
                     AiChr {
+                        // attached last-boss parts stay visible to the core's script: its union block (M095_000 0xfda) plays one follow-up
+                        // skill per living part on the next 4 turns from the bits it took before the join (see `boss_joined_turns`)
                         present: !x.removed || self.boss_parts.contains(&i),
                         enemy: x.is_enemy,
                         hp: x.hp,
@@ -508,6 +519,17 @@ impl Host for BtlHost {
     }
 
     fn choose_ai_command(&mut self, actor: usize, f: &[Option<Fighter>]) -> MenuEvent {
+        if !self.boss_parts.is_empty() && self.models.get(actor) == Some(&499) {
+            self.boss_joined_turns += 1;
+            if self.boss_joined_turns > 4 {
+                self.boss_joined_turns = 0;
+                self.boss_toggle = true;
+                if self.ai_log.len() < 64 {
+                    self.ai_log.push(format!("ai {actor}: LastBoss (separate after 4 joined turns)"));
+                }
+                return MenuEvent::Wait { actor: actor as i32 };
+            }
+        }
         let chrs = self.snapshot(f);
         let tables = self.tables.ai_tables();
         let (combo_pend, combo_cnt) = (self.combo_pend, self.combo_cnt);
@@ -590,10 +612,12 @@ impl Host for BtlHost {
     /// `LastBossSpecial` (live MONSET 302, round 5b LV): the first special of the core combines -- the living parts (CHR 500..502) leave the
     /// turn order and the target lists (retail `bState` 3, flagsA |= 0x180000, flagsB |= 0x100, `CBattle+0x26` |= 8) -- the next one
     /// separates them again (they act and can be targeted; retail places them on an arc in front of the core at R_core + R_part + 12).
-    fn after_ai_command(&mut self, _actor: usize, fighters: &mut [Option<Fighter>]) {
+    fn after_ai_command(&mut self, actor: usize, fighters: &mut [Option<Fighter>]) {
         if !std::mem::take(&mut self.boss_toggle) {
             return;
         }
+        // `LastBossSpecial` finds the core and the parts among the living units in the battle; without the core it only clears the flag
+        let core = (0..fighters.len()).find(|&i| self.models.get(i) == Some(&499) && fighters[i].as_ref().is_some_and(|f| f.hp > 0)).unwrap_or(actor);
         if self.boss_parts.is_empty() {
             for (i, f) in fighters.iter_mut().enumerate() {
                 let part = matches!(self.models.get(i), Some(500..=502));
@@ -602,15 +626,30 @@ impl Host for BtlHost {
                     self.boss_parts.push(i);
                 }
             }
+            if !self.boss_parts.is_empty() {
+                self.boss_joined_turns = 0;
+                self.boss_form = Some((true, core, self.boss_parts.clone()));
+            }
         } else {
+            let mut freed = vec![];
             for i in std::mem::take(&mut self.boss_parts) {
                 if let Some(Some(f)) = fighters.get_mut(i) {
                     if f.hp > 0 {
                         f.removed = false;
+                        freed.push(i);
                     }
                 }
             }
+            self.boss_form = Some((false, core, freed));
         }
+    }
+
+    fn chr_model(&self, k: usize) -> u32 {
+        self.models.get(k).copied().unwrap_or(0).max(0) as u32
+    }
+
+    fn take_boss_form(&mut self) -> Option<(bool, usize, Vec<usize>)> {
+        self.boss_form.take()
     }
 
     fn resolve_effect(&mut self, actor: usize, cmd: &Command, fighters: &mut [Option<Fighter>]) -> Vec<(usize, i32)> {

@@ -59,6 +59,8 @@ pub struct Run {
     pub boss_combines: u32,
     pub boss_core_turns: u32,
     pub boss_part_turns: u32,
+    /// round 6 BT: core turns of every joined period (the last one may be cut by the battle's end)
+    pub boss_periods: Vec<u32>,
 }
 
 /// The retail `MONSETTbl` flags word (`+0x10`, u32) of row `set` (`None` on the demo data).
@@ -162,6 +164,7 @@ pub fn run_set(data: &BattleData, tables: &Arc<ActionTables>, disc: &PkbDisc, se
         boss_combines: 0,
         boss_core_turns: 0,
         boss_part_turns: 0,
+        boss_periods: vec![],
     };
     let Some(mut setup): Option<BattleSetup> = bridge::build_setup(data, session, &party, set, &mut rnd) else { return run };
     if !setup.fighters.iter().any(|f| f.is_enemy) {
@@ -236,6 +239,7 @@ pub fn run_set(data: &BattleData, tables: &Arc<ActionTables>, disc: &PkbDisc, se
     while b.poll() {
         if !b.host.boss_parts.is_empty() && !attached {
             run.boss_combines += 1;
+            run.boss_periods.push(0);
         }
         attached = !b.host.boss_parts.is_empty();
         while boss_ev < b.events.len() {
@@ -244,6 +248,9 @@ pub fn run_set(data: &BattleData, tables: &Arc<ActionTables>, disc: &PkbDisc, se
                     run.boss_part_turns += 1;
                 } else if attached && b.host.models.get(chr) == Some(&499) {
                     run.boss_core_turns += 1;
+                    if let Some(n) = run.boss_periods.last_mut() {
+                        *n += 1;
+                    }
                 }
             }
             boss_ev += 1;
@@ -349,8 +356,11 @@ mod tests {
         let tables = Arc::new(ActionTables::load(&data));
         let s = sturdy_session(&data);
         let r = (1..6).map(|seed| run_set(&data, &tables, &d, &s, 302, seed, 400)).find(|r| r.boss_combines > 0).expect("no LastBoss turn in 5 seeds");
-        eprintln!("302: combines {} core turns while attached {} part turns {} outcome {:?} turns {}", r.boss_combines, r.boss_core_turns, r.boss_part_turns, r.outcome, r.turns);
+        eprintln!("302: combines {} core turns while attached {} part turns {} outcome {:?} turns {} periods {:?}", r.boss_combines, r.boss_core_turns, r.boss_part_turns, r.outcome, r.turns, r.boss_periods);
         assert_eq!(r.boss_part_turns, 0, "{r:?}");
+        // live: 4 core turns joined, the 5th separates (its turn start is counted while still joined)
+        let done = &r.boss_periods[..r.boss_periods.len().saturating_sub(1)];
+        assert!(done.iter().all(|&n| n == 5), "joined periods {:?}", r.boss_periods);
         assert!(r.boss_core_turns > 0 || r.outcome == Outcome::Win, "{r:?}");
     }
 

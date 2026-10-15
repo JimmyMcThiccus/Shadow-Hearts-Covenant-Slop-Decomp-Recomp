@@ -210,6 +210,19 @@ impl BtlText {
 }
 
 /// Indices into [`BtlText::items`] (`BtlMenuItem_J`).
+/// Round 6 BT: the single row of a whole-side target page (`SetTargetMenu`: an area of shape 5 lists one entry, id 100, labelled
+/// "All Allies" / "All Enemies" / "Everyone" by the record's side class -- live r5_lv check 5, *Gathering*).
+pub const ALL_TARGET: usize = 100;
+
+/// Label of the [`ALL_TARGET`] row for a target class (retail text table +0xb0 / +0xb4 / +0xac).
+pub fn all_target_label(c: TargetClass) -> &'static str {
+    match c {
+        TargetClass::Ally { .. } | TargetClass::SelfOnly => "All Allies",
+        TargetClass::Opponent | TargetClass::OpponentsAlive => "All Enemies",
+        TargetClass::Everyone => "Everyone",
+    }
+}
+
 pub mod label {
     pub const ATTACK: usize = 0;
     pub const SHAPES: [usize; 4] = [1, 2, 3, 4];
@@ -477,7 +490,36 @@ impl BtlMenu {
     }
 
     fn name(&self, i: usize) -> String {
+        if i == ALL_TARGET {
+            return self.all_label().to_string();
+        }
         self.b.names.get(i).cloned().unwrap_or_default()
+    }
+
+    /// The pending command's target class and area (magic / skill / item target pages).
+    fn pending_class(&self) -> Option<(TargetClass, Area)> {
+        let Page::Target { then, .. } = self.page() else { return None };
+        match *then {
+            Pending::Magic(id) => self.b.magic.iter().find(|m| m.id == id).map(|m| (m.class, m.area)),
+            Pending::Skill(i) => self.b.skills.iter().find(|s| s.index == i).map(|s| (s.class, s.area)),
+            Pending::Item(id) => self.b.items.iter().find(|it| it.id == id).map(|it| (it.class, it.area)),
+            _ => None,
+        }
+    }
+
+    /// Label of the whole-side row of the open target page ([`ALL_TARGET`]).
+    pub fn all_label(&self) -> &'static str {
+        all_target_label(self.pending_class().map(|c| c.0).unwrap_or(TargetClass::Opponent))
+    }
+
+    /// `SetTargetMenu`: shape 5 (everybody of the class) lists the one [`ALL_TARGET`] row when anybody can be hit.
+    fn targets_or_all(&self, c: TargetClass, area: Area) -> Vec<usize> {
+        let t = self.targets_for(c);
+        if area.shape == 5 && !t.is_empty() {
+            vec![ALL_TARGET]
+        } else {
+            t
+        }
     }
 
     /// the cursor is on the `Attack` root entry (its row carries the shape selector)
@@ -823,7 +865,7 @@ impl BtlMenu {
                         if m.mp > self.b.mp {
                             return None;
                         }
-                        let t = self.targets_for(m.class);
+                        let t = self.targets_or_all(m.class, m.area);
                         self.push(Page::Target { then: Pending::Magic(m.id), targets: t });
                         None
                     }
@@ -841,13 +883,13 @@ impl BtlMenu {
                         if m.mp > self.b.mp {
                             return None;
                         }
-                        let t = self.targets_for(m.class);
+                        let t = self.targets_or_all(m.class, m.area);
                         self.push(Page::Target { then: Pending::Skill(m.index), targets: t });
                         None
                     }
                     Page::Item => {
                         let m = self.b.items.get(cur)?.clone();
-                        let t = self.targets_for(m.class);
+                        let t = self.targets_or_all(m.class, m.area);
                         if t.is_empty() {
                             return None;
                         }
@@ -861,7 +903,12 @@ impl BtlMenu {
                     // `SetGuardMenu`: row 0 *Block*, row 1 *Resist* (`BtlMenuFunc` step 0x32 sets `BtlChr+0xb5` bit 3 for Resist)
                     Page::Guard => Some(if cur == 1 { MenuEvent::Defend { actor, resist: true } } else { MenuEvent::Guard { actor } }),
                     Page::Target { then, targets } => {
-                        let t = *targets.get(cur)? as i32;
+                        let mut t = *targets.get(cur)? as i32;
+                        // the whole-side row confirms on the first unit of the class (the area shape takes in the rest)
+                        if t as usize == ALL_TARGET {
+                            let c = self.pending_class().map(|c| c.0).unwrap_or(TargetClass::Opponent);
+                            t = self.targets_for(c).first().copied().unwrap_or(0) as i32;
+                        }
                         Some(match then {
                             Pending::Attack(shape) => MenuEvent::Attack { actor, target: t, kind: shape, skill: -1 },
                             Pending::Item(item) => MenuEvent::Item { item, target: t },
@@ -1330,6 +1377,32 @@ mod tests {
         assert_eq!(t.item(label::SHAPES[0]), "スタンダード");
         assert_eq!(t.mes(6), "Guard");
         assert!(t.note(0).starts_with("装備している武器で攻撃"));
+    }
+
+    /// Round 6 BT, live r5_lv check 5: *Gathering* (crest spell 33) opens a one-row "All Enemies" target page.
+    #[test]
+    fn gathering_targets_all_enemies() {
+        let Some(dir) = std::env::var_os("SH2_US_DISC_DIR") else { return };
+        let Ok(d) = PkbDisc::open(dir) else { return };
+        let data = crate::data::BattleData::load_us(&d).unwrap();
+        let tables = crate::actions::ActionTables::load(&data);
+        let m = &tables.magic[33];
+        let area = Area::from_flags(m.flags);
+        eprintln!("magic 33 {:?} flags {:#x} class {:?} area {:?} effect {}", tables.magic_name(33), m.flags, m.target_class(), area, m.effect_id);
+        assert_eq!(m.effect_id % 1000, 0x50);
+        assert_eq!(area.shape, 5);
+        let mut b = MenuBuild { actor: 0, enemies: vec![3, 4], allies: vec![0], names: vec!["A".into(); 6], mp: 99, ..Default::default() };
+        b.magic = vec![MagicEntry { id: 33, name: "Gathering".into(), mp: 1, class: m.target_class(), area }];
+        let mut menu = BtlMenu::new(b);
+        menu.press(Button::Down); // Magic
+        menu.press(Button::Confirm);
+        assert_eq!(*menu.page(), Page::Magic);
+        menu.press(Button::Confirm);
+        let Page::Target { targets, .. } = menu.page().clone() else { panic!("no target page") };
+        assert_eq!(targets, vec![ALL_TARGET]);
+        assert_eq!(menu.all_label(), "All Enemies");
+        // confirming the row casts on the first enemy (the shape takes in the rest)
+        assert_eq!(menu.press(Button::Confirm), Some(MenuEvent::Magic { id: 33, target: 3 }));
     }
 
     #[test]
