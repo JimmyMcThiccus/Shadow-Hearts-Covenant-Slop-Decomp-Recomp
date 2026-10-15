@@ -98,7 +98,7 @@ disc-2 ending, which retail cannot load from disc 1 (needs a state reload).
 
 ## Build load (round 6, 2026-10-14)
 
-Seven agents share 40 threads.  Every cargo call: `CARGO_BUILD_JOBS=6` (cargo's jobserver also caps rustc's codegen threads).
+Every cargo call: `CARGO_BUILD_JOBS=10` while at most 2 agents run (the default now), `CARGO_BUILD_JOBS=6` if more do (cargo's jobserver also caps rustc's codegen threads).
 Use the **dev** profile (workspace crates opt-level 1, dependencies opt-level 3: already fast) for tests, dev drives and screenshots;
 `--release` only for long headless sweeps where runtime dominates (coverage `run_all`, `story_walk`), and don't alternate
 profiles on the same crate (each switch is a full non-incremental rebuild of sh2_field / sh2_battle).
