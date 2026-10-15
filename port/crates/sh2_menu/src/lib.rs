@@ -10,6 +10,7 @@ pub mod disc;
 pub mod gamefont;
 pub mod gameover;
 pub mod gfx;
+pub mod hifont;
 pub mod memcard;
 pub mod message;
 pub mod movie;

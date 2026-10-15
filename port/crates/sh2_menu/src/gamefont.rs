@@ -50,6 +50,8 @@ pub struct GameFont {
     n9b: usize,
     limit1: usize,
     limit2: usize,
+    /// FNV-1a hash of the blob: identifies the font for the hi-res fit cache ([`crate::hifont`])
+    pub key: u64,
 }
 
 /// A rendered line of text.
@@ -66,6 +68,10 @@ fn u16at(d: &[u8], o: usize) -> usize {
 }
 fn u32at(d: &[u8], o: usize) -> usize {
     d.get(o..o + 4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize).unwrap_or(0)
+}
+
+fn fnv(d: &[u8]) -> u64 {
+    d.iter().fold(0xcbf2_9ce4_8422_2325u64, |h, &b| (h ^ b as u64).wrapping_mul(0x100_0000_01b3))
 }
 
 /// `Font::GetFontCode`: Shift-JIS double byte -> glyph code space.
@@ -106,7 +112,7 @@ impl GameFont {
             range_first.push(acc);
             acc += c;
         }
-        Some(GameFont { data: blob.to_vec(), cell_w, cell_h, full_bytes, half_bytes, n8, n9, ranges, range_first, off_clut, off_glyphs, off_metrics, n9b: 0, limit1: 0x20 + n9, limit2: 0x20 + n9 })
+        Some(GameFont { data: blob.to_vec(), cell_w, cell_h, full_bytes, half_bytes, n8, n9, ranges, range_first, off_clut, off_glyphs, off_metrics, n9b: 0, limit1: 0x20 + n9, limit2: 0x20 + n9, key: fnv(blob) })
     }
 
     /// Retail header (see the module docs).
@@ -128,7 +134,7 @@ impl GameFont {
             range_first.push(acc);
             acc += c;
         }
-        Some(GameFont { data: blob.to_vec(), cell_w, cell_h, full_bytes, half_bytes, n8, n9, ranges, range_first, off_clut, off_glyphs, off_metrics, n9b, limit1, limit2 })
+        Some(GameFont { data: blob.to_vec(), cell_w, cell_h, full_bytes, half_bytes, n8, n9, ranges, range_first, off_clut, off_glyphs, off_metrics, n9b, limit1, limit2, key: fnv(blob) })
     }
 
     /// CLUT row `set`: 4 RGBA entries.
@@ -189,6 +195,19 @@ impl GameFont {
         // `SetFont`: the stored bitmap is cropped to the advance width (rows are `ceil(adv / 4)` bytes) and drawn `xo` pixels in
         let _ = bytes_per_row;
         Some((glyph, adv.div_ceil(4), xo, adv))
+    }
+
+    /// Glyph `ch` as `(x_offset, advance, levels)`: `levels` is `cell_h` rows of `advance` 2-bit levels (0 = transparent .. 3 = full).
+    pub fn glyph_levels(&self, ch: char) -> Option<(usize, usize, Vec<u8>)> {
+        let (g, bpr, xo, adv) = self.glyph(ch)?;
+        let mut lv = vec![0u8; self.cell_h * adv];
+        for y in 0..self.cell_h {
+            for x in 0..adv {
+                let b = g.get(y * bpr + x / 4).copied().unwrap_or(0);
+                lv[y * adv + x] = (b >> ((x & 3) * 2)) & 3;
+            }
+        }
+        Some((xo, adv, lv))
     }
 
     pub fn debug_ranges(&self) -> (&[(usize, usize)], &[usize]) {
@@ -267,7 +286,9 @@ impl FontBank {
         self.fonts.get(n as usize).and_then(|f| f.as_ref()).or(self.fonts[0].as_ref())
     }
 
-    /// Build from an unpacked disc folder (`COMMON/CMNMENU.DAT`, `MENU/DAT/CMDMENU.MSD`).
+    /// Build from an unpacked disc folder (`COMMON/CMNMENU.DAT`, `MENU/DAT/MFIELD.MSD`, `MENU/DAT/CMDMENU.MSD`).  Font 1 is the field
+    /// font (`MenuFieldStationed::GetReady`: `CreateFont(1, ..)` from the resident `MFIELD.MSD`): the condensed serif of the message
+    /// windows and name plates (live: US dialogue boxes).
     pub fn load(files: &dyn crate::disc::FileSource) -> FontBank {
         use crate::msd::Msd;
         let mut bank = FontBank::default();
@@ -276,6 +297,7 @@ impl FontBank {
             m.attach_data(i).map(|b| b.to_vec())
         };
         bank.fonts[0] = attach("COMMON/CMNMENU.DAT", 0).and_then(|b| GameFont::parse(&b));
+        bank.fonts[1] = attach("MENU/DAT/MFIELD.MSD", 0).and_then(|b| GameFont::parse(&b));
         if let Some(m) = files.read("MENU/DAT/CMDMENU.MSD").and_then(|d| Msd::parse(d).ok()) {
             bank.fonts[3] = m.attach_data(0).and_then(GameFont::parse);
             bank.fonts[2] = m.attach_data(1).and_then(GameFont::parse);

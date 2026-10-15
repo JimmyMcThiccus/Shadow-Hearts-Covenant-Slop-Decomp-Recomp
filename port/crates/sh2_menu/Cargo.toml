@@ -16,3 +16,5 @@ sh2_core = { workspace = true, features = ["bevy"] }
 sh2_gfx.workspace = true
 sh2_audio = { workspace = true, features = ["bevy"] }
 sh2_script.workspace = true
+ab_glyph = "0.2"
+ab_glyph_rasterizer = "0.1"

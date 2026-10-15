@@ -19,10 +19,15 @@ use crate::sjis;
 pub const VIRT_W: f32 = 512.0;
 pub const VIRT_H: f32 = 448.0;
 
+/// `TextRun::font_number` of the field font (bitmap slot 1, `MENU/DAT/MFIELD.MSD`): message windows and name plates.  Number 1 itself
+/// is taken by the port's 12 px convention of [`font_px`].
+pub const FIELD_FONT: u8 = 0x81;
+
 /// Pixel size for `TextRun::font_number`.  0 is the normal 16 px menu font; the others are port conventions for titles.
 pub fn font_px(font_number: u8) -> f32 {
     match font_number {
         0 => 16.0,
+        FIELD_FONT => 16.0,
         1 => 12.0,
         2 => 24.0,
         3 => 40.0,
@@ -36,6 +41,8 @@ pub fn font_px(font_number: u8) -> f32 {
 pub fn font_slot(bank: &FontBank, font_number: u8) -> (u8, f32) {
     match font_number {
         0 | 2 | 3 => (font_number, 1.0),
+        FIELD_FONT if bank.fonts[1].is_some() => (1, 1.0),
+        FIELD_FONT => (0, 1.0),
         n => (0, font_px(n) / bank.cell_h(0)),
     }
 }
@@ -214,6 +221,15 @@ impl UiTextures {
         self.map.insert(self.next, (images.add(img), (w, h)));
         self.next
     }
+    /// Like [`add`](Self::add) for an image drawn `k` times larger than the size quads address it by (hi-res text: UVs stay in
+    /// logical texels, [`fill_quads_mesh`] divides by the registered size).
+    pub fn add_logical(&mut self, images: &mut Assets<Image>, w: u32, h: u32, rgba: Vec<u8>, logical: (u32, u32)) -> TextureId {
+        let id = self.add(images, w, h, rgba);
+        if let Some(e) = self.map.get_mut(&id) {
+            e.1 = logical;
+        }
+        id
+    }
     /// Like [`add`](Self::add) with repeat addressing, for sprites whose UVs run past the texture (tiled patterns).
     pub fn add_repeat(&mut self, images: &mut Assets<Image>, w: u32, h: u32, rgba: Vec<u8>) -> TextureId {
         use bevy::image::{ImageAddressMode, ImageSampler, ImageSamplerDescriptor};
@@ -354,7 +370,10 @@ pub fn render_canvas(
     mut canvas: ResMut<UiCanvas>,
     mut pool: ResMut<CanvasPool>,
     font: Res<UiFont>,
-    textures: Res<UiTextures>,
+    mut textures: ResMut<UiTextures>,
+    mut sprite_pools: ResMut<SpritePools>,
+    mut images: ResMut<Assets<Image>>,
+    windows: Query<&Window>,
     mut rects: Query<(&mut Node, &mut BackgroundColor, &mut ZIndex, Option<&mut ImageNode>), (With<CanvasRect>, Without<CanvasText>)>,
     mut texts: Query<(&mut Node, &mut Text, &mut TextColor, &mut TextFont, &mut ZIndex, &mut TextShadow), (With<CanvasText>, Without<CanvasRect>)>,
 ) {
@@ -386,6 +405,17 @@ pub fn render_canvas(
         });
         let empty = Vec::new();
         let cmds = if alive { &canvas.layers[&id].cmds } else { &empty };
+        // field-font text (message windows, name plates) is drawn with the game's bitmap / hi-res font as textured quads; other text on
+        // these layers keeps the system font
+        let expanded;
+        let cmds = match canvas.fonts.clone() {
+            Some(b) if cmds.iter().any(|c| matches!(c, DrawCmd::Text(t) if t.font_number == FIELD_FONT)) => {
+                let ppu = windows.iter().next().map(|w| w.physical_height() as f32 / VIRT_H).unwrap_or(1.0);
+                expanded = expand_text(cmds.clone(), &b, &mut sprite_pools, &mut textures, &mut images, false, ppu, Some(FIELD_FONT));
+                &expanded
+            }
+            _ => cmds,
+        };
         let (mut ri, mut ti) = (0usize, 0usize);
         for (idx, cmd) in cmds.iter().enumerate() {
             match cmd {
@@ -633,14 +663,17 @@ struct SpritePool {
 pub struct SpritePools {
     layers: HashMap<u8, SpritePool>,
     mats: HashMap<Option<TextureId>, Handle<ColorMaterial>>,
-    /// rasterised text lines: `(line, font slot, colour set, spacing)` -> (texture, width, height, last frame used)
-    text: HashMap<(String, u8, u8, i8), (TextureId, u32, u32, u64)>,
+    /// rasterised text lines: `(line, font slot, colour set, spacing, hi-res factor)` -> (texture, logical width, height, last frame used)
+    text: HashMap<(String, u8, u8, i8, u8), (TextureId, u32, u32, u64)>,
     frame: u64,
     fonts_tried: bool,
 }
 
 /// Replace every [`DrawCmd::Text`] by textured quads of the game's bitmap font (a shadow copy first, one quad per line).
-fn expand_text(cmds: Vec<DrawCmd>, bank: &FontBank, pools: &mut SpritePools, textures: &mut UiTextures, images: &mut Assets<Image>, gamma: bool) -> Vec<DrawCmd> {
+/// `px_per_unit`: physical window pixels per virtual unit; text is rasterised that much finer ([`crate::hifont`]).
+/// `only`: expand just the runs of that font number, keep the others as text.
+#[allow(clippy::too_many_arguments)]
+fn expand_text(cmds: Vec<DrawCmd>, bank: &FontBank, pools: &mut SpritePools, textures: &mut UiTextures, images: &mut Assets<Image>, gamma: bool, px_per_unit: f32, only: Option<u8>) -> Vec<DrawCmd> {
     use crate::gfx::Vertex;
     let mut out = Vec::with_capacity(cmds.len());
     for cmd in cmds {
@@ -648,6 +681,10 @@ fn expand_text(cmds: Vec<DrawCmd>, bank: &FontBank, pools: &mut SpritePools, tex
             out.push(cmd);
             continue;
         };
+        if only.is_some_and(|n| n != t.font_number) {
+            out.push(DrawCmd::Text(t));
+            continue;
+        }
         let s = sjis::decode(&t.text);
         let s = if t.visible == usize::MAX { s } else { s.chars().take(t.visible).collect() };
         let s = sjis::strip_codes(&s);
@@ -661,7 +698,8 @@ fn expand_text(cmds: Vec<DrawCmd>, bank: &FontBank, pools: &mut SpritePools, tex
             if line.trim().is_empty() {
                 continue;
             }
-            let key = (line.to_string(), slot, t.clut_set, t.spacing);
+            let k = (px_per_unit * scale).ceil().clamp(1.0, 8.0) as u32;
+            let key = (line.to_string(), slot, t.clut_set, t.spacing, k as u8);
             let frame = pools.frame;
             let entry = match pools.text.get_mut(&key) {
                 Some(e) => {
@@ -669,10 +707,13 @@ fn expand_text(cmds: Vec<DrawCmd>, bank: &FontBank, pools: &mut SpritePools, tex
                     (e.0, e.1, e.2)
                 }
                 None => {
-                    let Some(img) = font.render(line, t.clut_set as usize, t.spacing as i32) else { continue };
-                    let id = textures.add(images, img.width, img.height, img.pixels);
-                    pools.text.insert(key, (id, img.width, img.height, frame));
-                    (id, img.width, img.height)
+                    let Some(img) = crate::hifont::render_scaled(font, line, t.clut_set as usize, t.spacing as i32, k) else { continue };
+                    // the bitmap fallback comes back at 1x
+                    let f = (img.height / font.cell_h.max(1) as u32).max(1);
+                    let (lw, lh) = (img.width / f, img.height / f);
+                    let id = textures.add_logical(images, img.width, img.height, img.pixels, (lw, lh));
+                    pools.text.insert(key, (id, lw, lh, frame));
+                    (id, lw, lh)
                 }
             };
             let (id, w, h) = entry;
@@ -763,6 +804,8 @@ pub fn render_sprite_layers(
     mut texts: Query<(&mut Transform, &mut Visibility, &mut Text2d, &mut TextColor, &mut TextFont, &mut bevy::sprite::Text2dShadow), (With<SpriteText>, Without<SpriteQuad>)>,
 ) {
     let win_scale = windows.iter().next().map(|w| (w.width() / VIRT_W).max(0.25)).unwrap_or(1.0);
+    // physical pixels per virtual unit (height-based like `UiScale`): how much finer the hi-res text is drawn
+    let px_per_unit = windows.iter().next().map(|w| w.physical_height() as f32 / VIRT_H).unwrap_or(1.0);
     if canvas.fonts.is_none() && !pools.fonts_tried {
         if let Some(d) = assets.as_ref().and_then(|a| a.disc.as_ref()) {
             let bank = FontBank::load(d);
@@ -794,7 +837,7 @@ pub fn render_sprite_layers(
             // the gamma-space text alpha is only applied to the command menu layer (verified there); other layers keep their tuned alphas.
             // Not needed (and wrong) once the UI camera composites in gamma space itself (`Sh2GammaCompositing`, round 6 GPA).
             let gamma_composited = compositing.as_ref().is_some_and(|c| c.0);
-            cmds = expand_text(cmds, b, &mut pools, &mut textures, &mut images, id == layer::MENU2D && !gamma_composited);
+            cmds = expand_text(cmds, b, &mut pools, &mut textures, &mut images, id == layer::MENU2D && !gamma_composited, px_per_unit, None);
         }
         let z0 = id as f32;
         let (mut qi, mut ti) = (0usize, 0usize);

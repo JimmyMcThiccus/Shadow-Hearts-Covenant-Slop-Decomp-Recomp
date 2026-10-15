@@ -105,6 +105,7 @@ impl FieldWindow {
         let prev = self.msg.as_ref().map(|m| m.glyphs.len()).unwrap_or(0);
         self.raw.extend_from_slice(&strip_text_codes(text));
         let mut m = Message::new(self.max_chars.max(0x100), speed);
+        m.font_number = sh2_menu::bevy_ui::FIELD_FONT;
         m.set_text(&self.raw, vec![]);
         m.start();
         // the earlier pages are already on screen
