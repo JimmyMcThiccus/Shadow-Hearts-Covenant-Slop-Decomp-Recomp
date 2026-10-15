@@ -113,7 +113,7 @@ impl Plugin for DevDrivePlugin {
 #[derive(Resource)]
 struct DriveTrace(std::io::BufWriter<std::fs::File>);
 
-fn trace(mut t: ResMut<DriveTrace>, dd: Res<DevDrive>, scene: Res<State<Scene>>, inj: Res<PadInjection>, rt: Option<Res<BattleRuntime>>, frames: Res<bevy::diagnostic::FrameCount>) {
+fn trace(mut t: ResMut<DriveTrace>, dd: Res<DevDrive>, scene: Res<State<Scene>>, inj: Res<PadInjection>, rt: Option<Res<BattleRuntime>>, frames: Res<bevy::diagnostic::FrameCount>, models: Query<&crate::models::BattleModel>) {
     use std::io::Write;
     let mut line = format!("f{} dd{} {:?} pad{:04x} tap{} age{} bt{}", frames.0, dd.ticks, scene.get(), inj.raw, dd.tap, dd.page_age, dd.battle_ticks);
     if let Some(rt) = rt {
@@ -131,6 +131,12 @@ fn trace(mut t: ResMut<DriveTrace>, dd: Res<DevDrive>, scene: Res<State<Scene>>,
             b.fighters.iter().map(|f| f.as_ref().map(|f| f.hp).unwrap_or(-1)).collect::<Vec<_>>(),
             rt.positions.iter().map(|p| [(p.x * 10.0).round() as i32, (p.z * 10.0).round() as i32]).collect::<Vec<_>>(),
         );
+    }
+    // the models: choreography state and drawn position (x, z) of every fighter, by fighter index
+    let mut ms: Vec<_> = models.iter().map(|m| (m.chr, m.ch.act_name(), (m.pos.x * 10.0).round() as i32, (m.pos.z * 10.0).round() as i32)).collect();
+    ms.sort();
+    if !ms.is_empty() {
+        line += &format!(" models{ms:?}");
     }
     let _ = writeln!(t.0, "{line}");
 }
