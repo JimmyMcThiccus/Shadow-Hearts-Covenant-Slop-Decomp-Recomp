@@ -16,7 +16,8 @@
 //! ([`BTLIN_ORDER`], render layer [`BTLIN_LAYER`]) that lives across the field -> battle scene switch; [`BtlInFx::stop`] is `StopBtlIn`.
 //! The shard pattern (`DAT_0042f620` polygons / `DAT_0042f340` vertices / `DAT_004305b0` pattern origins) is read from the boot ELF and the crack
 //! images (US FIELD.BIN 0x5778a8 / 0x560fb0 with their 16 grey CLUT entries in front) from FIELD.BIN, both found by content so either disc works.
-//! `BtlInBoss` (light belts + zoom blur) is not reproduced: [`BtlInFx::capture`] with `boss = true` plays the normal shatter.
+//! `boss = true` plays the retail `BtlInBoss` instead ([`super::btlin_boss`]: the frame stays, two `boss_in` models play over it, the screen washes out
+//! to white), when its models are found in FIELD.BIN.
 
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -480,13 +481,28 @@ pub struct BtlInFx {
     idle: u32,
     seed: u64,
     shot: u32,
+    /// `BtlInBoss` models (loaded once; `None` inside = not on this disc)
+    boss_data: Option<Option<Arc<super::btlin_boss::BossInData>>>,
+    /// the pending capture is for `BtlInBoss`
+    boss_req: bool,
+    boss: Option<super::btlin_boss::BossInRun>,
 }
 
 impl BtlInFx {
     /// `CaptureBtlIn` + `StartBtlIn`: grab the current frame and start the shatter.  Returns `false` when the disc data is missing (the caller
     /// keeps its own transition).
     pub fn capture(&mut self, root: &Path, boss: bool) -> bool {
-        let _ = boss;
+        // development: `SH2_BTLIN_BOSS=1` plays the boss variant on every encounter
+        let boss = boss || std::env::var_os("SH2_BTLIN_BOSS").is_some();
+        if boss && self.boss_data.is_none() {
+            let d = super::btlin_boss::BossInData::load(root).map(Arc::new);
+            if d.is_none() {
+                log::warn!("btlin: boss_in models not found in {}/FIELD.BIN (normal shatter)", root.display());
+            }
+            self.boss_data = Some(d);
+        }
+        self.boss_req = boss && self.boss_data.as_ref().and_then(|d| d.as_ref()).is_some() && std::env::var_os("SH2_BTLIN_NO_BOSS").is_none();
+        self.boss = None;
         if self.data.is_none() {
             let d = BtlInData::load(root).map(Arc::new);
             if d.is_none() {
@@ -511,21 +527,29 @@ impl BtlInFx {
         if let Some(s) = &mut self.sim {
             s.stop();
         }
+        if let Some(b) = &mut self.boss {
+            b.sim.stop();
+        }
     }
 
     /// The overlay is up (the frame is covered): the field may be torn down.
     pub fn covering(&self) -> bool {
-        self.sim.is_some()
+        self.sim.is_some() || self.boss.is_some()
     }
 
     /// Capture pending or overlay running.
     pub fn active(&self) -> bool {
-        self.waiting.is_some() || self.sim.is_some()
+        self.waiting.is_some() || self.sim.is_some() || self.boss.is_some()
     }
 
     /// Waiting for [`Self::stop`] (shards falling over black).
     pub fn wants_stop(&self) -> bool {
-        self.sim.as_ref().map(|s| !s.stopped()).unwrap_or(false) && !self.stop_req
+        (self.sim.as_ref().map(|s| !s.stopped()).unwrap_or(false) || self.boss.as_ref().map(|b| !b.sim.stopped()).unwrap_or(false)) && !self.stop_req
+    }
+
+    /// The running `BtlInBoss` phase machine, if the boss variant plays.
+    pub fn boss_sim(&self) -> Option<&super::btlin_boss::BossInSim> {
+        self.boss.as_ref().map(|b| &b.sim)
     }
 
     pub fn sim(&self) -> Option<&BtlInSim> {
@@ -592,6 +616,35 @@ fn drive_btlin(
             log::warn!("btlin: unusable screenshot");
             return;
         };
+        if fx.boss_req {
+            if let Some(bd) = fx.boss_data.clone().flatten() {
+                let gamma = color.as_ref().map(|c| c.gamma).unwrap_or(true);
+                let mut image = Image::new(
+                    Extent3d { width: w as u32, height: h as u32, depth_or_array_layers: 1 },
+                    TextureDimension::D2,
+                    rgba,
+                    if gamma { TextureFormat::Rgba8Unorm } else { TextureFormat::Rgba8UnormSrgb },
+                    RenderAssetUsages::default(),
+                );
+                image.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
+                    mag_filter: ImageFilterMode::Linear,
+                    min_filter: ImageFilterMode::Linear,
+                    address_mode_u: ImageAddressMode::ClampToEdge,
+                    address_mode_v: ImageAddressMode::ClampToEdge,
+                    ..default()
+                });
+                let tex = images.add(image);
+                let mut run = super::btlin_boss::BossInRun::spawn(&mut commands, &bd, tex, BTLIN_LAYER, BTLIN_ORDER, &mut meshes, &mut images, &mut materials);
+                if fx.stop_req {
+                    run.sim.stop();
+                }
+                fx.acc = 0.0;
+                fx.idle = 0;
+                log::info!("btlin: boss transition started (capture {w}x{h})");
+                fx.boss = Some(run);
+                return;
+            }
+        }
         let mut sim = BtlInSim::new(&data, fx.seed);
         if let Some(c) = &data.cracks {
             apply_cracks(&mut rgba, w, h, c, sim.base);
@@ -661,6 +714,41 @@ fn drive_btlin(
         log::info!("btlin: shatter started ({} shards, capture {w}x{h}, origin {:?})", sim.shards.len(), sim.base);
         fx.sim = Some(sim);
         update_mesh(fx, (w, h), &mut meshes, &mut materials);
+        return;
+    }
+    if let Some(run) = fx.boss.as_mut() {
+        fx.acc += time.delta_secs();
+        let mut stepped = false;
+        while fx.acc >= 1.0 / 30.0 {
+            fx.acc -= 1.0 / 30.0;
+            run.sim.tick();
+            stepped = true;
+            if run.sim.phase == super::btlin_boss::PHASE_WAIT && !run.sim.stopped() {
+                fx.idle += 1;
+                if fx.idle > 300 {
+                    run.sim.stop();
+                }
+            }
+        }
+        if !stepped {
+            return;
+        }
+        if run.sim.finished() {
+            if let Some(run) = fx.boss.take() {
+                run.despawn(&mut commands, &mut images);
+            }
+            log::info!("btlin: boss transition done");
+            return;
+        }
+        run.sync(&mut commands, &mut meshes, &mut materials);
+        if let Some(dir) = std::env::var_os("SH2_BTLIN_SHOTS").map(std::path::PathBuf::from) {
+            fx.shot += 1;
+            if fx.shot % 4 == 1 {
+                let _ = std::fs::create_dir_all(&dir);
+                let name = format!("btlinboss_{:03}_p{:x}.png", fx.shot, run.sim.phase);
+                commands.spawn(Screenshot::primary_window()).observe(::bevy::render::view::screenshot::save_to_disk(dir.join(name)));
+            }
+        }
         return;
     }
     let Some(sim) = fx.sim.as_mut() else { return };
@@ -742,6 +830,9 @@ pub struct BtlInPlugin;
 
 impl Plugin for BtlInPlugin {
     fn build(&self, app: &mut App) {
+        if !app.is_plugin_added::<::bevy::app::HierarchyPropagatePlugin<RenderLayers>>() {
+            app.add_plugins(::bevy::app::HierarchyPropagatePlugin::<RenderLayers>::new(PostUpdate));
+        }
         app.init_resource::<BtlInFx>().add_systems(PostUpdate, drive_btlin);
     }
 }

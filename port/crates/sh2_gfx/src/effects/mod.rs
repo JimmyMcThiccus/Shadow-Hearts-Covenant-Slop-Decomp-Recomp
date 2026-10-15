@@ -19,9 +19,12 @@
 
 pub mod bbp;
 pub mod btlin;
+pub mod btlin_boss;
+pub mod hitmark;
 pub mod bgfx;
 pub mod bng;
 pub mod bgfx_misc;
+pub mod bgfx_taki;
 pub mod bgfx_more;
 pub mod bgfx_render;
 pub mod compat;

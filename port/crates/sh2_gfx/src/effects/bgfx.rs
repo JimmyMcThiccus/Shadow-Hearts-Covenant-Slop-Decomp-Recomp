@@ -413,6 +413,7 @@ enum Item {
     Lenz(super::lenz::LenzFlare),
     Mote(super::mote207::Mote207),
     Rain(super::rain206::Rain206),
+    Taki(super::bgfx_taki::Taki),
 }
 
 /// All background effects of one stage / map (`BgEffectMan` set).
@@ -523,6 +524,10 @@ impl BgFx {
                     None => unsupported.push((r.slot, r.kind)),
                 },
                 201 => items.push((r.slot, Item::Funsui(super::bgfx_misc::Funsui::new(&mut rng)))),
+                204 => match super::bgfx_taki::Taki::new(rd_f32(&r.param, 0) as i32, &mut rng) {
+                    Some(t) => items.push((r.slot, Item::Taki(t))),
+                    None => unsupported.push((r.slot, r.kind)),
+                },
                 6 => items.push((r.slot, Item::Lenz6(super::bgfx_more::Lenz6::new(&r.param)))),
                 206 => match super::rain206::Rain206::new(rd_f32(&r.param, 0) as i32, &mut rng) {
                     Some(m) => items.push((r.slot, Item::Rain(m))),
@@ -595,6 +600,7 @@ impl BgFx {
                 Item::Lenz(l) => l.step(frames, cam, rng),
                 Item::Mote(m) => m.step(frames, cam, rng),
                 Item::Rain(r) => r.step(frames, rng),
+                Item::Taki(t) => t.step(frames, rng),
             }
         }
     }
@@ -659,6 +665,7 @@ impl BgFx {
                 Item::Lenz(l) => l.quads(alpha, &mut out),
                 Item::Mote(m) => m.quads(alpha, &mut out),
                 Item::Rain(r) => r.quads(alpha, &mut out),
+                Item::Taki(t) => t.quads(alpha, &mut out),
                 Item::Smoke(s) => {
                     for p in s.em.p.iter().filter(|p| p.t > 0.0 && p.t <= p.period) {
                         let h = Vec2::new(p.size[0] * 0.5 * p.scale, p.size[1] * 0.5 * p.scale);

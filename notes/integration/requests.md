@@ -619,3 +619,51 @@ Still open for others:
   Also: `btlGetWarpPos` (1118) needs the battle's `GetWarpPos` answer (program 080 builds garbage root matrices now).
 * **MN:** monster names are `MES` section 8 row = MON record +2 (not the monster id; they differ from monster 57 on: 58 = Pendulum,
   142 = Susano-o).  `sh2_field/src/cmd_view.rs` ~708 (library) uses `env.name(8, id)` -- please check it against the record's +2.
+
+## Round 6 FX2 (effects + renderer, 2026-10-14)
+* **BT (BE request 12, last boss motion sets)**: `sh2_formats::pkb::parse_package` keeps the `a2` / `a3` entries (it has since round 5; the tag is
+  `a2\0?` with a garbage 4th byte).  What was missing is a way to *ask* for them: every consumer filters `kind_str() == "anm"`, which drops them.  New:
+  `Entry::motion_set() -> Option<u8>` (`anm` = 0, `a2` = 2, `a3` = 3), `Entry::is_motion()`, `Package::motions(set)`.  US disc
+  (test `sh2_gfx/tests/last_boss_motion_sets.rs`): 499.ANM set 2 = `idla idlb def defa defb esc crvd blwd`, set 3 = `idla idlb`; 500.ANM set 2 = `idla`, set 3 =
+  `idla idlb`; 501 / 502.ANM set 3 = `idla idlb` (no set 2).  The sets reuse the base motion names, so load set 2 / 3 into the model only while the form is active
+  (or key them as e.g. `"a2:idla"`); `Motion::parse` reads them like any `anm` entry.
+
+## Round 6 GP (from FX2)
+* FX2 has **no edits** in GP's files (`sh2_gfx/src/bevy/{model,mesh,material,mirror,shadow,billboard}.rs`, `*.wgsl`, `effects/{render,bgfx_render}.rs`).
+* **Renderer-wide gamma-space blending (MN request 4) -- handed to GP.**  State today: every `Sh2Material` draw already blends raw display values
+  (`Sh2ColorSpace::gamma`: HDR target + one `Sh2GammaDecode` pass on the 3D camera; `gfx2d` replays use `Sh2Material` too).  What still blends in linear light is
+  everything drawn by the 2D / UI cameras *after* the decode: `sh2_menu::bevy_ui::render_sprite_layers` (canvas sprite layers incl. the effect programs' 2D layers
+  `EXTRA_FX_LAYER` / `layer::BATTLE`, fades `layer::FADER`, the title swirl `SWIRL_ALPHA` fudge) uses `Mesh2d` + `ColorMaterial` with `gs_to_linear` vertex colours
+  and sRGB textures; MN limited a per-draw alpha fix (`gamma_alpha`, a^2.2) to text on layer 8.  Two ways: (a) draw the canvas layers with `Sh2Material` under a
+  `Camera3d` ortho camera that renders before the decode (like `gfx2d`), raw vertex colours (`rgba / 128`), `Rgba8Unorm` textures; or (b) move the decode to the
+  last camera and make the 2D materials output raw values.  (a) needs MN2's `bevy_ui.rs`; either way please coordinate with MN2.  Check: title swirl vs
+  `notes/integration/menu_m1.md` capture, a grey menu row (live 113 / 226 of white), an effect white flash.
+* New background effect 204 (`FpTaki`, `effects/bgfx_taki.rs`) needs **no** new draw code: it yields ordinary `BgQuad`s (billboards, CMNEFF smoke texture,
+  alpha blended) through the existing `BgFx::quads` -> `bgfx_render` path.  If GP changes `BgQuad` / the draw path, `bgfx_taki.rs` follows `bgfx_misc.rs`.
+
+## Round 6 RG (field Judgement Ring, 2026-10-14)
+Hooks in files I do not own (all small, additive; notes in `notes/integration/r6_rg.md`):
+* **FS2 `sh2_field/src/host.rs`**: `FieldRing` gained `arg` / `x` / `y` (`SetRing` args 2..4; `arg` = laps of a kind-1 ring, else the
+  `SetEventRingAbnormal` kind).  The no-screen answer of `RingControl` is now `field_ring::instant_result` (a perfect run **by ring kind**:
+  spin ring kind 2 = first area's colour as before; kind 1 = `arg` laps, kinds 0 / 3 = every area) -- WE_01_U's ring (kind 1, 10 laps,
+  the script tests `== 10`) used to get colour 1 = fail.  Your `ring_screen` / `ring_wait` / `ring_answer` hook is used as you wrote it
+  (thanks); `field_ring::FieldRingPlugin` sets `ring_screen` every tick in rendering runs.
+* **FS2 `sh2_field/src/story.rs`** (one line ~1012): the walker's ring variants come from `field_ring::possible_results(r)` (distinct
+  colours for a spin ring, `[all, 0]` for the lap rings) instead of `r.colours`.
+* **FS2 `sh2_field/src/plugin.rs`** `FieldPlugin::build` (rendering branch, 4 lines): adds `field_ring::FieldRingPlugin`.
+* `sh2_field/src/lib.rs`: `pub mod field_ring;`.  New: `sh2_field/examples/ring_census.rs`, `tools/live/fring.py` (starts a field ring
+  in the running retail game by writing the `CField+0x8a8` block; no other writes).
+
+Requests:
+1. **BT (battle ring renderer, used as an API -- please keep these stable or tell me)**: the field ring draws through
+   `sh2_battle::hud_hits::{HitArt, load_hit_art, draw_ring, HitFx::{ring_mes, tick_ring_mes, draw_ring_mes, ring_mes_clear}}`.
+   Evidence for you from live field rings (`r6_rg.md`, same `JRing` / `HitMes` code as battle): the `Good!!` words fly out **along the
+   pointer direction** from the ring centre (pointer stopped at 226 deg -> word lower-left of the ring; presses at ~45 / ~200 / ~280 deg ->
+   top-right far out, lower-left, left) and drift far (up to the screen edge) -- i.e. the JP reading (`HitMes::Initialize` at the pointer's
+   rim point) looks right, not the empirical "miss left / others right" rule.  Could `draw_ring_mes` take the pointer direction (or offer a
+   variant that does)?  Also not drawn yet and clearly visible live: the `HitArea` flash (`JrEvent::HitArea`: a translucent wedge of the
+   hit area that grows **beyond** the rim and fades, ~0.3 s) and the `HitBar` flash.  An API like `HitFx::ring_area_flash(&JrEvent)` +
+   drawing in `draw_ring_mes` would let the field ring use them too.
+2. **Audio owner (CS2)**: ring sound effects are not played anywhere in the port (battle or field): `JrEvent::Se(id)` / `SeEnd(id)`
+   (`jring::se::*`: 0x2001 loop, 0x2002 show, 0x2004 / 0x2005 hit, 0x2007 miss, 0x300_0000 event loop ...).  If you add a consumer I will
+   forward the field ring's events to it.

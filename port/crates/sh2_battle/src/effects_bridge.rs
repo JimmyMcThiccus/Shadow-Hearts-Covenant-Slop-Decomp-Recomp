@@ -1058,6 +1058,8 @@ impl EffMdlReq {
 pub struct EffMdlQueue {
     pub reqs: Vec<EffMdlReq>,
     pub releases: Vec<usize>,
+    /// `HitMark` flash rings to start (`HitMarkEffectCall` kind 3): PS2 world position, speed
+    pub rings: Vec<(Vec3, f32)>,
 }
 
 impl EffMdlQueue {
@@ -1070,8 +1072,11 @@ impl EffMdlQueue {
     }
 
     /// `HitMarkEffectCall(kind, pos, dir, scale)` (JP BATTLE.BIN 0x005e30c0, VEC `btlHitMarkEffectCall` 1115): `scale` is the speed (x 1.25);
-    /// kinds 0..5 (kind 3 also draws the `HitMark` flash ring, not ported).
+    /// kinds 0..5; kind 3 also starts the `HitMark` flash ring ([`sh2_gfx::effects::hitmark`]).
     pub fn hit_mark_effect_call(&mut self, kind: i32, pos: Vec3, dir: Vec3, speed: f32) {
+        if kind == 3 {
+            self.rings.push((pos, speed));
+        }
         let sp = speed * 1.25;
         let yaw = -dir.x.atan2(dir.z);
         let mut r = match kind {
@@ -1146,6 +1151,10 @@ impl EffMdlQueue {
 /// `BTL_001.BIN` entries and the models built from them.
 #[derive(Resource, Default)]
 pub struct BtlEffArt {
+    /// running `HitMark` rings: logic, mesh entity, mesh
+    rings: Vec<(sh2_gfx::effects::hitmark::HitRing, Entity, Handle<Mesh>)>,
+    /// `BTL_000` hit flash texture material (US entry 14, JP 11), loaded with the first ring
+    ring_mat: Option<Option<Handle<Sh2Material>>>,
     tried: bool,
     entries: Vec<(String, Vec<u8>)>,
     models: HashMap<u8, Option<(Arc<SshModel>, sh2_gfx::bevy::model::ModelMaterials)>>,
@@ -1273,6 +1282,87 @@ pub struct EffMdlLive {
 
 /// Spawn the queued `EffMdl`s, advance them (`EffMdl::Polling` / `MotionEndCallBack`) and remove the finished / released ones.
 #[allow(clippy::too_many_arguments)]
+/// The `HitMark` flash rings (`HitMarkEffectCall` kind 3): one 10-vertex fan per ring, billboarded to the battle camera, additive, depth tested.
+fn drive_hit_rings(commands: &mut Commands, disc: &Sh2Disc, art: &mut BtlEffArt, queue: &mut EffMdlQueue, gpu: &mut CharacterGpu, cam: Option<&GlobalTransform>, dt: f32) {
+    use sh2_gfx::effects::hitmark::HitRing;
+    let new = std::mem::take(&mut queue.rings);
+    if new.is_empty() && art.rings.is_empty() {
+        return;
+    }
+    if art.ring_mat.is_none() {
+        let k = if sh2_core::boot::is_retail() { 14 } else { 11 };
+        let img = disc.read("BTLDATA/BTL_000.BIN").ok().and_then(|b| {
+            let secs = crate::stage::sections(&b);
+            let (tag, sec) = secs.get(k)?;
+            if tag != "tex" {
+                return None;
+            }
+            let i = sh2_gfx::texture::decode_jrc(sec, 0, 0).ok()?;
+            Some(sh2_gfx::bevy::image::rgba_image(i.width, i.height, i.pixels, sh2_gfx::bevy::TexFilter::Linear))
+        });
+        art.ring_mat = Some(img.map(|img| {
+            let h = gpu.images.add(img);
+            gpu.materials.add(Sh2Material::textured(Some(h)).with_lit(false).with_fog(false).with_blend(sh2_gfx::bevy::Sh2Blend::Add, None))
+        }));
+        log::info!("battle: HitMark ring texture {}", if art.ring_mat.as_ref().map(|m| m.is_some()).unwrap_or(false) { "loaded" } else { "missing" });
+    }
+    let Some(Some(mat)) = art.ring_mat.clone() else {
+        art.rings.clear();
+        return;
+    };
+    let root = match art.root {
+        Some(r) if commands.get_entity(r).is_ok() => r,
+        _ => {
+            let r = commands.spawn((Name::new("btl_effmdl_root"), Transform::from_rotation(Quat::from_rotation_x(std::f32::consts::PI)), Visibility::default(), DespawnOnExit(sh2_core::game::Scene::Battle))).id();
+            art.root = Some(r);
+            r
+        }
+    };
+    for (pos, speed) in new {
+        let mesh = gpu.meshes.add(Mesh::new(bevy::mesh::PrimitiveTopology::TriangleList, bevy::asset::RenderAssetUsages::default()));
+        let e = commands.spawn((Name::new("hitmark_ring"), Mesh3d(mesh.clone()), MeshMaterial3d(mat.clone()), Transform::default(), Visibility::default(), bevy::camera::visibility::NoFrustumCulling)).id();
+        commands.entity(root).add_child(e);
+        art.rings.push((HitRing::new(pos, speed.max(0.01)), e, mesh));
+    }
+    // camera axes in PS2 world space (x right, y down)
+    let (right, down) = match cam {
+        Some(gt) => {
+            let r = gt.right().as_vec3();
+            let u = gt.up().as_vec3();
+            (Vec3::new(r.x, -r.y, -r.z), -Vec3::new(u.x, -u.y, -u.z))
+        }
+        None => (Vec3::X, Vec3::Y),
+    };
+    art.rings.retain_mut(|(ring, e, mesh)| {
+        if !ring.step(dt) {
+            if let Ok(mut ec) = commands.get_entity(*e) {
+                ec.despawn();
+            }
+            return false;
+        }
+        let fan = ring.fan();
+        let a = ring.alpha() / 128.0;
+        let mut pos = Vec::with_capacity(24);
+        let mut uv = Vec::with_capacity(24);
+        for k in 1..9 {
+            for i in [0, k, k + 1] {
+                let (o, t) = fan[i];
+                pos.push((ring.pos + right * o.x + down * o.y).to_array());
+                uv.push(t.to_array());
+            }
+        }
+        let n = pos.len();
+        if let Some(mut m) = gpu.meshes.get_mut(&*mesh) {
+            m.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
+            m.insert_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0f32, 0.0, 1.0]; n]);
+            m.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv);
+            m.insert_attribute(Mesh::ATTRIBUTE_COLOR, vec![[1.0f32, 1.0, 1.0, a]; n]);
+            m.insert_indices(bevy::mesh::Indices::U32((0..n as u32).collect()));
+        }
+        true
+    });
+}
+
 pub fn drive_effmdls(
     mut commands: Commands,
     disc: Option<Res<Sh2Disc>>,
@@ -1281,8 +1371,10 @@ pub fn drive_effmdls(
     mut gpu: CharacterGpu,
     mut live: Query<(Entity, &mut EffMdlLive, &mut AnimatedModel)>,
     time: Res<Time>,
+    cams: Query<&GlobalTransform, With<crate::plugin::BattleCamera>>,
 ) {
     let Some(disc) = disc else { return };
+    drive_hit_rings(&mut commands, &disc, &mut art, &mut queue, &mut gpu, cams.iter().next(), time.delta_secs().min(0.1));
     if !queue.reqs.is_empty() {
         art.load(&disc);
     }

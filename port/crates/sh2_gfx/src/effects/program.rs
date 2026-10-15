@@ -51,6 +51,9 @@ pub struct FxHost {
     pub unknown: std::collections::BTreeMap<&'static str, u32>,
     /// development: when `Some`, every system call is logged as `"t<tick> <id> <name>(int/float args)"` (capped at 4000 lines)
     pub trace: Option<Vec<String>>,
+    /// `btlGetWarpPos(side, idx, first, out)` (VEC 1118, JP 0x00312330 -> `GetWarpPos(BtlChr, first)`): the battle's answer (the unit's new box centre, PS2
+    /// world).  `None` / no answer: the unit's current position.
+    pub warp: Option<Box<dyn FnMut(i32, i32, bool) -> Option<Vec3> + Send + Sync>>,
 }
 
 impl FxHost {
@@ -69,6 +72,7 @@ impl FxHost {
             log: vec![],
             unknown: Default::default(),
             trace: std::env::var_os("SH2_FX_TRACE").map(|_| Vec::new()),
+            warp: None,
         }
     }
     fn handle(&mut self) -> u32 {
@@ -141,8 +145,17 @@ impl SysCalls for FxHost {
                         vm.write_u32(arg(6), 1);
                     }
                 }
-                if id == 1120 || id == 1121 || id == 1118 {
-                    // btlGetWeponWorldPos/Rot / btlGetWarpPos(kind, idx, .., out vec): the character's hand ~ the root
+                if id == 1118 && a.len() > 3 {
+                    // btlGetWarpPos(side, idx, first, out FVector): the out vector was left unwritten before (program 080 *Gathering* built its root
+                    // matrices from garbage); the battle may answer through `warp`, else the unit stays where it is
+                    let (k, i, first) = (ri(vm, 0), ri(vm, 1), ri(vm, 2) != 0);
+                    let p = self.warp.as_mut().and_then(|f| f(k, i, first)).or_else(|| self.env.actor(k, i).map(|x| x.pos)).unwrap_or(Vec3::ZERO);
+                    for (n, x) in [p.x, p.y, p.z, 1.0].iter().enumerate() {
+                        vm.write_f32(arg(3) + 4 * n as u32, *x);
+                    }
+                }
+                if id == 1120 || id == 1121 {
+                    // btlGetWeponWorldPos/Rot(kind, idx, .., out vec): the character's hand ~ the root
                     let (k, i) = (ri(vm, 0), ri(vm, 1));
                     let p = self.env.actor(k, i).map(|x| x.pos).unwrap_or(Vec3::ZERO);
                     if id == 1120 && a.len() > 3 {
