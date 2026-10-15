@@ -7,7 +7,8 @@
 //! cargo run -p sh2_app -- --view-map AP_00_U --screenshot notes/integration/screens/ap_00_u.png
 //! ```
 //!
-//! Options: `--us` (use `SH2_US_DISC_DIR`), `--motion <n|name>`, `--linear` (bilinear textures like the GS),
+//! Options: `--us` (use `SH2_US_DISC_DIR`), `--motion <n|name>`, `--nearest` (pixel textures; bilinear like the
+//! GS is the default, `--linear` is accepted),
 //! `--cam x,y,z,tx,ty,tz` (PS2 game coordinates, y down), `--cam-index n` (map CAMERA table entry),
 //! `--screenshot <png>` (capture and exit), `--shot-frames <n>` (frames before capturing, default 30), `--keep-open`,
 //! `--size WxH`.
@@ -42,7 +43,8 @@ pub struct ViewerOptions {
     pub target: ViewTarget,
     pub us: bool,
     pub motion: Option<String>,
-    pub linear: bool,
+    /// `--nearest`: nearest texture sampling instead of the GS's bilinear (the renderer default)
+    pub nearest: bool,
     pub cam: Option<[f32; 6]>,
     pub cam_index: Option<usize>,
     pub screenshot: Option<PathBuf>,
@@ -90,7 +92,7 @@ impl ViewerOptions {
             target: ViewTarget::Model { file: DEFAULT_MODEL.0.into(), offset: DEFAULT_MODEL.1 },
             us: false,
             motion: None,
-            linear: false,
+            nearest: false,
             cam: None,
             cam_index: None,
             screenshot: None,
@@ -132,7 +134,8 @@ impl ViewerOptions {
                     i += 1;
                 }
                 "--us" => o.us = true,
-                "--linear" => o.linear = true,
+                "--linear" => o.nearest = false,
+                "--nearest" => o.nearest = true,
                 "--keep-open" => o.keep_open = true,
                 "--cam" => {
                     if let Some(v) = val(i) {
@@ -201,7 +204,7 @@ pub fn run(opts: ViewerOptions) {
     .add_plugins((Sh2GfxPlugin, FieldMapPlugin, FlyCameraPlugin))
     .insert_resource(ClearColor(if std::env::var_os("SH2_CLEAR_MAGENTA").is_some() { Color::srgb(1.0, 0.0, 1.0) } else { Color::BLACK }))
     .insert_resource(disc)
-    .insert_resource(Sh2RenderSettings { filter: if opts.linear { TexFilter::Linear } else { TexFilter::Nearest } })
+    .insert_resource(if opts.nearest { Sh2RenderSettings { filter: TexFilter::Nearest } } else { Sh2RenderSettings::default() })
     .insert_resource(ViewerRes { opts: opts.clone(), camera_placed: false })
     .add_systems(Startup, setup)
     .add_systems(Update, (place_map_camera, viewer_keys, update_hud));

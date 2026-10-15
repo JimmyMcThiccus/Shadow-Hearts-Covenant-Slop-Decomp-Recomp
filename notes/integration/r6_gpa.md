@@ -120,6 +120,9 @@ Result (AP_02_U, autoplay, brightest 15 % of the ring area): before (113, 153, 1
 The port still shows a taller flame skirt (`Clo01/02`, bones 5 / 6 `ScaleY` 2..3.5 in the data) than the retail capture, whose camera is
 farther and lower; not changed.
 
+Follow-ups: the stand-alone viewer follows the bilinear default (`--nearest` for pixels; `--linear` still accepted), and billboards with an
+animated texture (TXA copies) get the same ABE alpha-blend materials.
+
 ## Open
 * Save point flame skirt height vs retail (same camera needed).
 * Ring gizmo fallback (`sh2_battle::plugin::RingGizmos`, only without `JRING.BIN`) is drawn by Bevy's gizmo pipeline, which has no sRGB

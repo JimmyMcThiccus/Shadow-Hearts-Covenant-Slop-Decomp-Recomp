@@ -790,3 +790,18 @@ Requests:
    The battle's shortcut handling should follow the same rules (`sh2_menu::save::BtlSave::shortcut_default` gives b1).
 2. **QA2**: a new `CmdPage::SelectChar = 19` (retail SECHAR, the shop Equip's member pick, `menu_dev` goto `sechar`).  New retail pages: Library
    (3D), Ring Custom, Graveyard, Combo Magic, Button Customization.  The coverage `msd` category should now see SECHAR loaded.
+
+## Round 6 GPA (rendering accuracy, 2026-10-15)
+Details in `notes/integration/r6_gpa.md`.  Changes other owners should know about:
+* **All UI owners (MN2, BT, FS2)**: the default pipeline now composites the 2D / UI layers in gamma space like the GS (`Sh2GammaCompositing`; Bevy UI
+  shaders patched, `CompositingSpace::Srgb` on the window cameras).  Do not add linear-blend fudges (MN's `gamma_alpha` is off while it is on);
+  A/B with `SH2_UI_LINEAR_BLEND=1`.  Battles were double-decoded before (`btlin_camera` stayed active) and are now brighter, at retail level.
+* **Everyone**: model / map textures are **bilinear** by default (retail `TEX1`); `SH2_TEX_FILTER=nearest` for the old look (viewer: `--nearest`).
+* **MN2 (menu_model, answer)**: `sh2_gfx::bevy::model::NoDropShadow` is the public "no shadow" switch you asked for; `in_place = false` also keeps
+  motion auto-restart, so no change was made in `menu_model.rs`.
+* **FS2 (review of your working copy, nothing changed)**: `retail_story::gt_10_u_pit_fight_table_answers` fails at its last assertion (the
+  engine-call log at `host.rs:3112` has no `=> result` part); `SH2_WALK_QUEUE` default 2000 x ~5 MB games is ~10 GB; `minigame_press` returns
+  `Some(0)` (hold still) everywhere on TD_14_U outside the lanes; `party.rs` case 10 clears 0x40 item slots but `merge_bag` adds 0x30 (and
+  its doc mentions key items it does not merge); `cmd.rs` is CRLF in the working copy, LF in git (whole-file diff for 3 lines);
+  fixtures `mi_02_u_keys.walk` / `td_22_u_power.walk` are unused.
+* **FX2**: `effects/btlin.rs` seeds the intro cracks from `SystemTime` (the only run-to-run randomness left under `SH2_FIXED_DT`).

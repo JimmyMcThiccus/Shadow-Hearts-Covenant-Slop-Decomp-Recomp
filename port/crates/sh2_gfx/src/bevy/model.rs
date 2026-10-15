@@ -530,7 +530,8 @@ pub fn spawn_animated_model_ex(
     let mut parts = Vec::new();
     // private copies of the textures a `TXAH` entry animates (several actors share the cached character assets)
     let texanims = super::texanim::texanim_entries(&model);
-    let mut own_tex: std::collections::HashMap<u8, (Handle<Image>, Handle<Sh2Material>, Handle<Sh2Material>)> = Default::default();
+    // per animated texture: the image copy and its billboard materials `[unlit, lit, unlit with ABE, lit with ABE]` (see `material_for`)
+    let mut own_tex: std::collections::HashMap<u8, (Handle<Image>, [Handle<Sh2Material>; 4])> = Default::default();
     let mut tex_images = Vec::new();
     for e in &texanims {
         let ti = e.texture as u8;
@@ -549,16 +550,15 @@ pub fn spawn_animated_model_ex(
         );
         src_img.sampler = super::image::sampler(gpu.filter);
         let img = gpu.images.add(src_img);
-        let mk = |lit: bool, gpu: &mut GpuCtx| {
-            let base = mats.material(ti, lit);
+        let mk = |lit: bool, abe: bool, gpu: &mut GpuCtx| {
+            let base = mats.material_for(ti, lit, if abe { 0x40 } else { 0 });
             let mut m = gpu.materials.get(&base).cloned().unwrap_or_default();
             m.texture = Some(img.clone());
             gpu.materials.add(m)
         };
-        let unlit = mk(false, gpu);
-        let lit = mk(true, gpu);
+        let mats4 = [mk(false, false, gpu), mk(true, false, gpu), mk(false, true, gpu), mk(true, true, gpu)];
         tex_images.push((e.texture, img.clone(), w, h));
-        own_tex.insert(ti, (img, unlit, lit));
+        own_tex.insert(ti, (img, mats4));
     }
     for (i, a) in model.atomics.iter().enumerate().filter(|(_, a)| drawable(a) || is_billboard(a)) {
         let billboard = is_billboard(a);
@@ -566,9 +566,9 @@ pub fn spawn_animated_model_ex(
         let lit = atomic_is_lit(a);
         let mut draws = Vec::new();
         if billboard {
-            // billboards keep the texture-header state (additive glows)
+            // billboards keep the texture-header state (additive glows); with PRIM.ABE a header without its own ALPHA_1 alpha-blends (0x44)
             let mat = match own_tex.get(&a.texture) {
-                Some((_, u, l)) => if lit { l.clone() } else { u.clone() },
+                Some((_, m)) => m[lit as usize + if a.flags & 0x40 != 0 { 2 } else { 0 }].clone(),
                 None => mats.material_for(a.texture, lit, a.flags),
             };
             let child = commands.spawn((Mesh3d(mesh.clone()), MeshMaterial3d(mat), Transform::default(), Visibility::default(), NoFrustumCulling)).id();
@@ -577,7 +577,7 @@ pub fn spawn_animated_model_ex(
         } else {
             // GS state of the atomic: PRIM bits (ABE ...) x texture ALPHA_1 / TEST_1 (see `ModelMaterials::plan`)
             let plan = mats.plan(a.texture, a.flags);
-            let img = own_tex.get(&a.texture).map(|(img, _, _)| img.clone());
+            let img = own_tex.get(&a.texture).map(|(img, _)| img.clone());
             for d in &plan.draws {
                 let m = mats.draw_material(d, a.texture, lit, img.clone(), i as f32 * 0.002);
                 let base_blend = m.blend;
