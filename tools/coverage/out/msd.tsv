@@ -1,6 +1,6 @@
 MENU/DAT/CMDMENU.MSD	ok			records=189;attached_scenes=10;unknown_chunks=1
 MENU/DAT/CMDMENUS.MSD	ok			records=33;attached_scenes=3
-MENU/DAT/MFIELD.MSD	untested	parses; the file name appears nowhere in the port sources (no screen loads it by name)	MN	records=2;attached_scenes=0
+MENU/DAT/MFIELD.MSD	untested	parses; the file name appears nowhere in the port sources (no screen loads it by name)	MN2	records=2;attached_scenes=0
 MENU/MSD/BACK.MSD	ok			records=2;attached_scenes=0
 MENU/MSD/BUTTON.MSD	ok			records=26;attached_scenes=0
 MENU/MSD/CBKEY.MSD	ok			records=103;attached_scenes=4
@@ -23,6 +23,6 @@ MENU/MSD/PLIST.MSD	ok			records=175;attached_scenes=10
 MENU/MSD/RINGCTM.MSD	ok			records=200;attached_scenes=9
 MENU/MSD/SCHARGE.MSD	ok			records=85;attached_scenes=5;unknown_chunks=1
 MENU/MSD/SCORE.MSD	ok			records=84;attached_scenes=1;unknown_chunks=1
-MENU/MSD/SECHAR.MSD	untested	parses; the file name appears nowhere in the port sources (no screen loads it by name)	MN	records=26;attached_scenes=0
+MENU/MSD/SECHAR.MSD	ok			records=26;attached_scenes=0
 MENU/MSD/SKILL.MSD	ok			records=93;attached_scenes=4
 MENU/MSD/WSTAMP.MSD	ok			records=21;attached_scenes=1;unknown_chunks=1

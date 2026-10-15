@@ -1,50 +1,34 @@
 # Round 6 MN2: menus and meta screens (running notes, 2026-10-14)
 
-## Paused (2026-10-14 ~20:15, coordinator: max 2 running agents)
+## Status (2026-10-15, resumed after the pause)
 
-**State of the tree:** no source file of mine is half-edited.  The only new file is the dev example
-`port/crates/sh2_menu/examples/mn2_library_dump.rs` (it builds and runs).  No locks held (ghidra.lock and pcsx2-3.lock deleted, Ghidra
-switched back to SLUS_210.41).  No processes left running.
+The "menu draws nothing" problem was PF's load bug in `bevy_ui` (b814c17, kept).  Done this session, each one checked side by side with the
+live captures (`tools/live/cmp.py`; the port shots are in the session scratchpad):
 
-**Done so far:** research only.  Live captures of instance 3 and the retail Library RE are below.
+| screen | state | notes |
+|---|---|---|
+| **Menu 3D model** (`sh2_field/src/menu_model.rs`, new) | done | `CmdCache.model` / `model_ctl` per page -> `MenuModelView` -> one off-screen `Camera3d` (1024 x 768 sRGB image, layer 27, `ScreenExempt`, order -20, transparent clear) + the model under a flip root (+ weapons on EX01 / EX02), `ModelLightOverride` with the `CreateLight` rig; the image is `UiTextures` id `MODEL_TEX` and the page blits it in its draw order.  Camera = `MenuDataModel` (i16 pos / 10, f32 rot_x, f32 yaw), fov `2 atan(224 / (512 * 0.9333))`.  Motions: idle + square action list + `MenuMotionConnect` chains; L1 / R1 (held) turn.  Needs the decode-pass alpha (requests.md). |
+| **Library** (`cmd_library_retail.rs`, new) | done | Monsters / Characters, the 3D model with the record's camera, banner `Monsters  No. n`, `< name >`, rule, typed description, element stone, people's portrait medallion, report `Start: List / square: Action / R: Rotate L/R` (+ triangle Details with Snap Shot data); the list (start / confirm) and the data view are not compared live.  Monster names from MON +2 (`cmd_view::monster_name_row`), also in the demo-shaped page. |
+| **Personal** (`cmd_status.rs`) | 3D model + entries | `member_model`: table 63 camera, battle model + weapon when armed (field model + `P.SET` otherwise), motion tables 57 / 58.  The entry list is the member's record of demo key 7 (raw 9): Karin Status / Sword Arts / Affinity / Profile as live.  New sub lists: Tarot Card and Aromatherapy (Lucia; owned bits `BTL0+0xf3f..0xf42`, help text in the Notes), Wolf Bout, Change Dress, Snapshot / Album, the other members' skill lists.  These are generic lists, not their own retail scenes. |
+| **Ring Custom** (`cmd_ring_retail.rs`, new) | done | card, menu column, banner, the member's attack ring (`attack_ring` + `PC_J` areas + `JRCUSTOM`, scale 0.91 at (311, 294)), Area / Equip fence with points (left / right), Ring Items fence (Hit Area Expand / Strike Expand / Attack Boost / add-on items; names kind 0x10, help 0x26, icon = item sheet cell 14), No. of Attacks, Ring Types + Explanation view, Auto Ring ON / OFF.  Matches `rc_main_a` / `rc_rows` / `rc_t2` / `rc_o1` within a few px. |
+| **Graveyard** (`cmd_misc.rs` `GraveBoard`) | done | GRAVE.MSD picture, six stones (`ElemArt::draw_at`, stone MDT 54 of attach 0, grades / SE from `MENU+0x380`), question / Yes / No, root list and the Soul Energy orb (no cash / time), as `gy_c`. |
+| **Root page** | Soul Energy orb added | CMDMENU attach 10: the orb picture at (285, 145) and the pool `%4d`, in `font_big` (live: an italic).  The gauge arc / sphere pulse are not animated. |
+| **Combo Magic** | done | textured fence, rows `????` / name + `%3d` MP, cyan selection, root list, Notes `????` for unknown rows. |
+| **Button Customization** | done | pad picture, connectors, ring frames, plates (common fence texture), the right list by physical button (circle / cross / triangle / square), retail swap logic (pick a row, then a second), `%iN` icons in the Notes line. |
+| **Combo Setup** | fixed | style names = demo key 0x32 (raw 49), the member's style mask (demo 0x31 data byte 7), `ConvertComboKeyDefault` defaults (row byte 1).  Karin now shows Standard / Hard Hit / High Angle / Knock Down. |
+| **SECHAR** (`cmd_sechar.rs`, new `CmdPage::SelectChar = 19`) | done | the shop's Equip opens the member pick (root-style member rows), then Equipment for that member; cancel closes the menu back to the shop.  Not compared live (no capture). |
+| Items | small fix | `[L2][R2] : Scroll` joins the report when the list scrolls (live `it1`). |
+| Element ring | fixed | the dashed ring takes the element colour (Fire red, Earth / Water teal, Wind yellow) on the Library / Magic / Graveyard stones. |
 
-**In progress:** the design of the menu 3D-model renderer (for Library, Personal and the soul charge), not started in code.
-
-**Exact next steps:**
-1. **Check this first:** on the current tree, `tools/live/menu_dev.sh` (US, AP_02_U and DB_00_U) photographs **no menu at all**.  The log
-   says `cmd menu: goto Item -> true` and so on, but the screenshots show only the field
-   (`scratchpad/port0`, `scratchpad/port1/item.png`).  Find out whether the menu draw or the UI camera regressed, and whose change caused it
-   (`git diff ed231e6..` on `sh2_menu/src/bevy_ui.rs` and `sh2_gfx/src/bevy/screen.rs`, and the sh2_app camera setup).  Fix it if it is in MN2 files, or file a
-   request if it is not.
-2. Monster names (task 3): in `sh2_field/src/cmd_view.rs` ~708, replace `env.name(8, id)` with the name row
-   `db.monster(id).model` (record +2, as in `sh2_battle::bridge` `name_row`).  Do the same in the retail Library.  grep for other `name(8,` uses
-   (there were none in sh2_menu / sh2_field).
-3. New `sh2_field/src/menu_model.rs` (add `pub mod` in lib.rs, an additive hook).  Design:
-   * `CmdCache.model: Option<ModelReq>` is set by the page.  `menu_tick` copies it into a `MenuModelView` resource, and clears it when the menu closes.
-   * An Update system keeps one `Camera3d` (`ScreenExempt`; `RenderTarget::Image` of a 1024x768 `Rgba8UnormSrgb` image, so the gamma
-     decode pass applies and the projection is 4:3; clear colour transparent; `RenderLayers` 27, plus `Propagate` to the model,
-     `HierarchyPropagatePlugin<RenderLayers>` as in `cutscene_plugin`).  It also keeps the model under a flip root (`CharacterGpu::load/spawn`), and the weapons from
-     `sh2_battle::models::{weapon_files, parse_weapon}`, following frames EX01/EX02 like `follow_weapons`.  It registers the image in `UiTextures` under a fixed id
-     (`UiTextures` needs an `insert_handle(id, handle, size)`), and the page blits it full screen in its draw order.
-   * Camera (`CmdMenu::SetCamera`, US 0x466420): `MenuDataModel {i16 x, y, z (/10); i16 k (/10); f32 rot_x @8; f32 model_yaw @12}`.  The
-     camera is at (x, y, z) in PS2 space, rotated about X by rot_x, and looks along +z.  It converts with `ps2_to_bevy` (forward = ps2(R*(0,0,1)),
-     up = ps2(R*(0,-1,0))).  Projection = `SetViewMatrix(512, 0.8, 0.9333)`, so vertical fov = 2*atan(224 / (512*0.9333)) = 2*atan(0.46875).
-     Library Revenant: cam (-1.2, -8.6, -25.5), rot_x 0, yaw 0.506.  Heimann: (-2.2, -9.0, -26.1), yaw -0.349.
-   * Lights (`CmdMenu::CreateLight`, US 0x466600): ambient 0.2; directional colour 0.9, dir (-0.1926, -0.1926, 0.9623); directional
-     colour 0.4, dir (-0.0499, 0.9975, 0.0499).  I read these as PS2 travel directions; the port needs "towards the light" in Bevy, i.e. `-ps2_to_bevy(d)`.  Build them
-     through `sh2_gfx::light::LightControl::create_ambient/create_directional`, then `light_matrix`, as `sh2_battle::stage::scene_light_of` does, and put them on the
-     model with `ModelLightOverride`.  Check the result against `libr_k.png`.
-   * Motions (`MenuModelPack`): idle = list[0].  Square (`SetAction`) plays the next non-empty entry of the motion list (wrapping to 1).
-     When a non-looping motion finishes, the connect list (pairs from -> to) chains the next one; otherwise play idle again.  The right stick rotates the yaw.
-4. Retail Library page (rewrite `LibraryPage` for `is_retail()`, or a new `cmd_library_retail.rs`), data below.  Then Personal (the live `ps_b.png` has the 3D model,
-   `square : Action / R : Rotate L/R`, and Status / Sword Arts / Affinity / Profile tabs) and the soul-charge 3D Yuri.
-5. Ring Custom, Graveyard, Combo Magic, Button Customization, Items: build the retail layouts from the live captures listed below
-   (scene files `RINGCTM.MSD`, `GRAVE.MSD`, `CBMAGIC.MSD`, `KEYCUSTOM`, `ITEM.MSD`; dump them with `cargo run -p sh2_menu --example dump_msd -- MENU/MSD/X.MSD`,
-   with `SH2_DISC_DIR` set to the US disc).
-6. After that: SECHAR member pick, Combo Setup defaults (BT's `ConvertComboKeyDefault`), side-quest screens, live re-verification, coverage
-   `tools/coverage/run_all.sh run msd`, an OUTLINE paragraph and autoplay screenshots.
-
-Build rule: prefix every cargo call with `CARGO_BUILD_JOBS=6`, target `%USERPROFILE%\.cache\sh2-r6-mn2`, dev profile.
+Still open (priority order):
+1. The soul charge's 3D Yuri / stone: `SCCHAR.DAT` holds `chb_s / chb_i / chb_e` (15 frames, 15 atomics: not Yuri; it is probably the charge
+   beam), `SCSTONE.DAT` holds the stone (`chs_*`), `SCLV_00n.DAT` the grade-up (`chh_01`).  The camera / placement of `CmdRetailPage01` is
+   not decompiled.  `menu_model` can draw them once the screen feeds a `ModelReq` (it runs as a field screen, not in the menu overlay).
+2. Personal: the Sword Arts list should use `sword_arts_mask` (only the highest tier learned).  The tarot / aroma / Papillon (`Joachythms`) /
+   wolf / dress / album pages are generic lists, not their retail scenes (PERSONAL.MSD attaches 12..23).  No live capture of them.
+3. Library: the list window and the data view are not compared live; the name / description use measured positions (CmdExplain).
+4. Live re-verification of shops, Solomon's Key, tailor, save / warp points, title and Game Over (the PCSX2 instances are off).
+5. Root Soul Energy number: an italic big digit font; the gauge arc should fill with the pool.
 
 ## Live captures (PCSX2 instance 3, `SH2_PCSX2_INST=3`, debug map)
 

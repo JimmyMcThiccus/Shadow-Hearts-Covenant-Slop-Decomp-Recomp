@@ -202,6 +202,9 @@ pub struct UiTextures {
     next: TextureId,
 }
 
+/// First texture id reserved for [`UiTextures::insert_handle`].
+pub const FIXED_TEXTURE_BASE: TextureId = 0x8000_0000;
+
 impl UiTextures {
     pub fn add(&mut self, images: &mut Assets<Image>, w: u32, h: u32, rgba: Vec<u8>) -> TextureId {
         use bevy::asset::RenderAssetUsages;
@@ -223,6 +226,12 @@ impl UiTextures {
             });
         }
         id
+    }
+    /// Register an existing image (a render target, e.g. the menu's 3D model view) under a fixed id chosen by the producer.  Fixed ids
+    /// live in the top half of the id space so they never meet the counter of [`add`](Self::add).
+    pub fn insert_handle(&mut self, id: TextureId, handle: Handle<Image>, size: (u32, u32)) {
+        debug_assert!(id >= FIXED_TEXTURE_BASE);
+        self.map.insert(id, (handle, size));
     }
     /// Forget a texture (its image is freed when the last handle goes).
     pub fn remove(&mut self, id: TextureId) {

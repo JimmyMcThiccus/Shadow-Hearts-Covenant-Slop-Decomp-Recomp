@@ -710,7 +710,16 @@ impl Page for ItemPage {
     }
     fn report(&self) -> Option<Vec<(Button, usize)>> {
         // `CMDMENUS.MSD` attach 1 resources 4 ": Explanation" / 6 ": Sort"; only the list shows the report (live)
-        Some(if self.mode == Mode::List && !self.rows.is_empty() { vec![(Button::Triangle, 4), (Button::Square, 6)] } else { Vec::new() })
+        // `[L2][R2] : Scroll` (13) joins when the list is longer than the window (live `it1`, 13 items)
+        Some(if self.mode == Mode::List && !self.rows.is_empty() {
+            let mut v = vec![(Button::Triangle, 4), (Button::Square, 6)];
+            if self.list.len > self.list.visible {
+                v.push((Button::L2R2, 13));
+            }
+            v
+        } else {
+            Vec::new()
+        })
     }
 
     fn tick(&mut self, env: &mut Env, keys: u16) -> Flow {

@@ -25,7 +25,10 @@ pub fn make_page(env: &mut Env, page: CmdPage, pc: Option<u8>) -> Option<Box<dyn
         CmdPage::Help => crate::cmd_view::HelpPage::new(env).map(|p| Box::new(p) as Box<dyn Page>),
         CmdPage::Score if sh2_core::boot::is_retail() => crate::cmd_score_retail::RetailScorePage::new(env).map(|p| Box::new(p) as Box<dyn Page>),
         CmdPage::Score => crate::cmd_view::ScorePage::new(env).map(|p| Box::new(p) as Box<dyn Page>),
+        CmdPage::SelectChar => crate::cmd_sechar::SelectCharPage::new(env).map(|p| Box::new(p) as Box<dyn Page>),
+        CmdPage::Library if sh2_core::boot::is_retail() => crate::cmd_library_retail::RetailLibraryPage::new(env).map(|p| Box::new(p) as Box<dyn Page>),
         CmdPage::Library => crate::cmd_view::LibraryPage::new(env).map(|p| Box::new(p) as Box<dyn Page>),
+        CmdPage::RingCustom if sh2_core::boot::is_retail() => crate::cmd_ring_retail::RetailRingPage::new(env, pc).map(|p| Box::new(p) as Box<dyn Page>),
         CmdPage::RingCustom => crate::cmd_ring::RingPage::new(env, pc).map(|p| Box::new(p) as Box<dyn Page>),
         CmdPage::Graveyard => crate::cmd_misc::GraveyardPage::new(env).map(|p| Box::new(p) as Box<dyn Page>),
         CmdPage::KeyCustom => crate::cmd_misc::KeyCustomPage::new(env).map(|p| Box::new(p) as Box<dyn Page>),
@@ -121,6 +124,7 @@ pub fn title_index(page: CmdPage) -> usize {
         CmdPage::PropertyList => 34,
         CmdPage::Option => 8,
         CmdPage::KeyCustom => 9,
+        CmdPage::SelectChar => 12,
         CmdPage::Solomon => 0,
     }
 }

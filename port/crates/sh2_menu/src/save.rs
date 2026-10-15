@@ -705,6 +705,15 @@ impl BtlSave {
         let o = base + pc * 0x10 + slot * 4;
         (buf[o], rd_u16(buf, o + 2))
     }
+    /// Byte 1 of a shortcut row: the default attack style of the slot (`CmdParty::ConvertComboKey(1)` copies it, sign extended, into an
+    /// empty attack row's id: retail `ConvertComboKeyDefault`).
+    pub fn shortcut_default(&self, pc: usize, slot: usize) -> i8 {
+        if pc >= PC_COUNT || slot >= 4 {
+            return -1;
+        }
+        let (buf, base) = if self.retail.is_empty() { (&self.data, 0xf44) } else { (&self.retail, retail_btl::SKILL_SLOTS) };
+        buf.get(base + pc * 0x10 + slot * 4 + 1).map(|&b| b as i8).unwrap_or(-1)
+    }
     pub fn set_shortcut(&mut self, pc: usize, slot: usize, kind: u8, id: u16) {
         if pc >= PC_COUNT || slot >= 4 {
             return;

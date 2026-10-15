@@ -636,6 +636,15 @@ impl Page for ScorePage {
 // library
 // ----------------------------------------------------------------------------------------------------------------
 
+/// `MES` section 8 row of a monster's name: the US record's +2 name index (`MonsterParam::model`; it equals the id only up to monster 56,
+/// live: 58 -> "Pendulum" row 57, 142 -> "Susano-o" row 132, round 5b LV), the id itself on the JP demo.
+pub fn monster_name_row(env: &Env, id: usize) -> usize {
+    match env.db.and_then(|d| d.monster(id)) {
+        Some(m) if m.model >= 0 && sh2_core::boot::is_retail() => m.model as usize,
+        _ => id,
+    }
+}
+
 pub struct LibraryPage {
     sc: Arc<CmdScenes>,
     scene: Arc<SceneTex>,
@@ -705,7 +714,7 @@ impl LibraryPage {
                         return None;
                     }
                     first_met.insert(i, id);
-                    let n = env.name(8, id);
+                    let n = env.name(8, monster_name_row(env, id));
                     Some((i, if n.trim().is_empty() { short.clone() } else { n }))
                 } else {
                     if env.session.save.field.npc_level(i + base) == 0 && !reveal_all {

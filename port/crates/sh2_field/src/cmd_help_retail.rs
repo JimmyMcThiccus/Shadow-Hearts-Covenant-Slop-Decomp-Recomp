@@ -388,6 +388,11 @@ pub fn draw_inline_icon(g: &mut dyn MenuGfx, sc: &CmdScenes, code: u32, x: f32, 
         17 => 14,
         18 => 13,
         19 => 15,
+        // 32.. are the item icon sheet (attach 5): `%i46` = the ring item disc
+        32..=63 => {
+            crate::cmd_common::draw_icon(g, &sc.cmn, (code - 32) as usize, x, y, a);
+            return 16.0;
+        }
         _ => return 0.0,
     };
     let (cx, cy) = ((cell % 8) as f32 * 16.0, (cell / 8) as f32 * 20.0);

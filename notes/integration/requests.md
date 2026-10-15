@@ -767,3 +767,26 @@ Requests for **GP** (your files; measured in AP_02_U / battle, dev profile, see 
   `%p5■　　` lines as `?ス@?ス...` -- a full-width glyph / code path of the message font (`screens/field_ring/spin_ring_live_vs_port.png`).
 * My files: `sh2_field/src/field_ring.rs` (frame capture behind the ring, gamma-correct dim, ring sounds, flashes; dev drive
   `SH2_RING_DEV`), no new hooks in other files.
+
+## Round 6 FS2 (story walker / field scripts, 2026-10-15)
+* **RG (lottery prize list, done)**: the `?ス@` lines were the VM's `sprintf` (builtin 0xab) going through UTF-8: `%s` arguments and the format
+  are Shift-JIS (RE_00_U data 0x23d5 `$%p5■　　%p0`).  `CScript::format` now works on bytes (`Memory::cstr_bytes`), copies a Shift-JIS pair
+  whole and leaves non-conversion `%` codes (`%p5`, `%t0`) as written (test `cscript::sprintf_tests`).  No menu-side change needed (MN2).
+
+## Round 6 MN2 (menus / meta screens, 2026-10-15)
+Small hooks in files other agents own (please keep them):
+* **FS2 `sh2_field/src/lib.rs`**: `pub mod menu_model; cmd_library_retail; cmd_ring_retail; cmd_sechar;`.
+* **FX2 / GP `sh2_gfx/src/bevy/sh2_decode.wgsl`** (one line): the gamma-decode pass now passes **alpha** through (`clamp(c.a, 0, 1)`, was
+  forced to 1).  An opaque window ignores it.  The menu 3D-model view (`sh2_field::menu_model`) renders a `Camera3d` into an image that is
+  composited over the menu backdrop, so its cleared background has to stay transparent.  If you rework the decode pass, please keep alpha.
+* **GP (FYI, no change made)**: `menu_model` spawns models with `sh2_gfx::bevy::model::spawn_animated_model_ex(.., in_place = false)` and sets
+  `inst.strip_root = true` afterwards.  This keeps the floor shadow off, and the menu has none.  A public "no shadow" switch would be cleaner.
+  The models also carry `ModelLightOverride` (the `CmdMenu::CreateLight` rig).
+Requests:
+1. **BT**: retail `ConvertComboKeyDefault` (US 0x46dc10) = `CmdParty::ConvertComboKey(1)`: an empty **attack** shortcut row
+   (`{u8 kind = 0, u8 b1, u16 id = 0xffff}`) takes `id = (i8) b1`.  `GetComboKeyData` kind 0 accepts style `id` only when bit `id` of the
+   member's style mask is set (menu data table demo key 0x31 = retail raw 48, record = member, data byte 7).  Style names are demo key 0x32
+   (retail raw **49**: Standard / Hard Hit / High Angle / Knock Down).  The menu used raw 48 by mistake (Karin showed "Manifestations").
+   The battle's shortcut handling should follow the same rules (`sh2_menu::save::BtlSave::shortcut_default` gives b1).
+2. **QA2**: a new `CmdPage::SelectChar = 19` (retail SECHAR, the shop Equip's member pick, `menu_dev` goto `sechar`).  New retail pages: Library
+   (3D), Ring Custom, Graveyard, Combo Magic, Button Customization.  The coverage `msd` category should now see SECHAR loaded.

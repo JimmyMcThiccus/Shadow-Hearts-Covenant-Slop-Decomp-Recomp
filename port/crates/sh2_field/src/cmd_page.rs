@@ -203,6 +203,11 @@ pub struct CmdCache {
     /// entry is disabled (`CmdTopMenuData::CreateScene` 0x004c6950 calls the disable method on row 0 when the flag is clear); `None` = unrestricted (menus
     /// opened by scripts / the world map / the title).
     pub save_gate: Option<bool>,
+    /// the page's 3D model (`MenuModelManeger`), shown by [`crate::menu_model`]; pages set it every tick they want one
+    pub model: Option<crate::menu_model::ModelReq>,
+    pub model_ctl: crate::menu_model::ModelCtl,
+    /// buttons held this tick (`CPad::GetReal`; the model turn keys are level-triggered)
+    pub held: u16,
 }
 
 /// Requests from a page to the host (`CmdMenu` owner callbacks and scene changes).
@@ -387,12 +392,22 @@ pub trait Page: Send + Sync {
     fn backdrop(&self) -> Option<usize> {
         None
     }
+    /// retail: a page with its own full-screen picture (the Graveyard) draws it here, under the root list; `true` = drawn (the
+    /// `CMDMENUS.MSD` backdrop is then skipped)
+    fn own_backdrop(&self, _g: &mut dyn MenuGfx) -> bool {
+        false
+    }
+    /// retail: the root page's Soul Energy / cash / time panel stays up too (the Graveyard)
+    fn shows_root_info(&self) -> bool {
+        false
+    }
     /// retail: the root command list stays on the right (selected entry cyan) while this page is open
     fn shows_root_list(&self) -> bool {
         false
     }
-    /// the root page draws its command list for [`Page::shows_root_list`] pages
+    /// the root page draws its command list for [`Page::shows_root_list`] pages (and its info panel for [`Page::shows_root_info`] ones)
     fn draw_root_list(&self, _g: &mut dyn MenuGfx) {}
+    fn draw_root_info(&self, _g: &mut dyn MenuGfx) {}
     /// retail button report (`CMDMENUS.MSD` attach 1): `(button, resource index)` per line, top to bottom; `Some` replaces the hint bar
     fn report(&self) -> Option<Vec<(Button, usize)>> {
         None
@@ -591,6 +606,26 @@ impl TitleLog {
     }
 }
 
+/// One line with `%iN` icon codes ([`crate::cmd_help_retail::draw_inline_icon`]): text runs and 16 px icons in turn.
+fn note_text_icons(g: &mut dyn MenuGfx, sc: &CmdScenes, x: f32, y: f32, text: &str, c: Rgba, hs: f32) {
+    let mut x = x;
+    let mut rest = text;
+    while let Some(p) = rest.find("%i") {
+        let (head, tail) = rest.split_at(p);
+        if !head.is_empty() {
+            text_run_h(g, x, y, head, 0, c, Some((1, 1)), hs);
+            x += g.measure_text(0, &sh2_menu::sjis::encode(head)).0 * hs;
+        }
+        let digits: String = tail[2..].chars().take_while(|ch| ch.is_ascii_digit()).collect();
+        let code = digits.parse::<u32>().unwrap_or(u32::MAX);
+        x += crate::cmd_help_retail::draw_inline_icon(g, sc, code, x, y, c.a);
+        rest = &tail[2 + digits.len()..];
+    }
+    if !rest.is_empty() {
+        text_run_h(g, x, y, rest, 0, c, Some((1, 1)), hs);
+    }
+}
+
 /// Note window (`CmdNote`): label sprite and one explanation line.
 pub struct Note {
     pub slide: Slide,
@@ -637,7 +672,12 @@ impl Note {
         if lines.len() <= 1 {
             // retail: live captures put the line 6 px lower than the demo's `my - 6`
             let dy = if sh2_core::boot::is_retail() { 0.0 } else { -6.0 };
-            text_run_h(g, w.x + mx, w.y + my + dy, &self.text, 0, c, Some((1, 1)), hs);
+            if self.text.contains("%i") {
+                // `%iN` inline button icons (Button Customization: "Change setting for the %i13 button.")
+                note_text_icons(g, sc, w.x + mx, w.y + my + dy, &self.text, c, hs);
+            } else {
+                text_run_h(g, w.x + mx, w.y + my + dy, &self.text, 0, c, Some((1, 1)), hs);
+            }
         } else {
             // multi-line explanations (`$` line breaks of the data tables): smaller type, from the right of the label
             for (i, l) in lines.iter().take(3).enumerate() {

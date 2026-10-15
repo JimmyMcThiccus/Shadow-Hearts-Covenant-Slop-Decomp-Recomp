@@ -130,6 +130,9 @@ pub struct TopPage {
     cash: u32,
     play_ms: u64,
     title_img: Option<(TextureId, (u32, u32))>,
+    /// retail: the Soul Energy orb (CMDMENU.MSD attach 10: window (285, 145), the 240 x 271 orb picture, `%4d` at (149, 144))
+    soul: Option<Arc<SceneTex>>,
+    soul_energy: u32,
 }
 
 impl TopPage {
@@ -181,6 +184,8 @@ impl TopPage {
             cash: env.session.cash(),
             play_ms: env.session.play_ms,
             title_img,
+            soul: if sh2_core::boot::is_retail() { env.nested_scene("MENU/DAT/CMDMENU.MSD", 10) } else { None },
+            soul_energy: crate::soul_charge::soul_energy(env),
         };
         p.clamp_block();
         p.update_note();
@@ -359,6 +364,10 @@ impl Page for TopPage {
     fn draw_root_list(&self, g: &mut dyn MenuGfx) {
         self.draw_menu(g, false);
     }
+    fn draw_root_info(&self, g: &mut dyn MenuGfx) {
+        // the Graveyard keeps the Soul Energy orb (live `gy_c`; the cash / time panel goes)
+        self.draw_soul_with(g, &Slide::done_open());
+    }
 
     fn resume(&mut self, env: &mut Env) {
         // the child page may have changed the party / cash
@@ -367,6 +376,7 @@ impl Page for TopPage {
         self.faces = self.pcs.iter().map(|p| sc.top.t_by_id(p.face as i16)).collect();
         self.battle_count = env.session.battle_party().len();
         self.cash = env.session.cash();
+        self.soul_energy = crate::soul_charge::soul_energy(env);
         self.flags.copy_from_slice(&env.session.save.menu.data[OFF_ENTRY_FLAGS..OFF_ENTRY_FLAGS + ENTRY_COUNT]);
         self.clamp_block();
         self.arrive();
@@ -647,10 +657,35 @@ impl TopPage {
     }
 
     fn draw_info(&self, g: &mut dyn MenuGfx) {
+        self.draw_soul_with(g, &self.s_info);
+        self.draw_info_with(g, &self.s_info);
+    }
+
+    /// Retail root: the Soul Energy orb and the pool (`BTL0+0`) as `%4d` in the italic digits.  The gauge arc (attach texture 1) and the
+    /// sphere's glow (texture 2) are not animated yet: the orb picture already shows the empty gauge and the sphere.
+    fn draw_soul_with(&self, g: &mut dyn MenuGfx, slide: &Slide) {
+        let Some(s) = &self.soul else { return };
+        let Some(w) = s.msd.window(0) else { return };
+        let (dx, dy, al) = slide.offset((w.x, w.y));
+        let a = slide_alpha(slide, al);
+        if a == 0 {
+            return;
+        }
+        let (ox, oy) = (w.x + dx, w.y + dy);
+        let (tw, th) = s.tex_size(0);
+        blit(g, s.t(0), ox, oy, tw as f32, th as f32, (0.0, 0.0, tw as f32, th as f32), Rgba::new(0x80, 0x80, 0x80, a));
+        let (fx, fy) = s.msd.font_pos(0).unwrap_or((149.0, 144.0));
+        let fmt = s.msd.resource_bytes(0).map(sj).unwrap_or_else(|| "%4d".into());
+        let txt = cfmt(&fmt, &[self.soul_energy.into()]);
+        // font 4 of the record: the large digits (the level numbers of the party panel), live a white italic of the same size
+        self.sc.font_big.draw(g, ox + fx, oy + fy - 4.0, &txt, Rgba::new(0x80, 0x80, 0x80, a));
+    }
+
+    fn draw_info_with(&self, g: &mut dyn MenuGfx, slide: &Slide) {
         let sc = &*self.sc;
         let Some(w) = sc.top.msd.window(1) else { return };
-        let (dx, dy, al) = self.s_info.offset((w.x, w.y));
-        let a = slide_alpha(&self.s_info, al);
+        let (dx, dy, al) = slide.offset((w.x, w.y));
+        let a = slide_alpha(slide, al);
         if a == 0 {
             return;
         }

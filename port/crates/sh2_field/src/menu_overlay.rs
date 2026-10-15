@@ -169,6 +169,7 @@ fn menu_tick(
     tables: Option<Res<BattleTables>>,
     field: Option<ResMut<crate::plugin::FieldRuntime>>,
     mut screens: Option<ResMut<crate::fscreen::FieldScreens>>,
+    mut model_view: ResMut<crate::menu_model::MenuModelView>,
 ) {
     menu.tick += 1;
     // `SpecialMenu(3, entry | state << 8)`: the story unlocks / greys out command entries (`MENU+0x300 + entry`: 0 hidden, 1 grey, 2 usable)
@@ -180,6 +181,9 @@ fn menu_tick(
         }
     }
     if !menu.open {
+        if model_view.req.is_some() {
+            model_view.req = None;
+        }
         if menu.request {
             open_menu(&mut menu);
         }
@@ -219,6 +223,9 @@ fn menu_tick(
     let mut req: Vec<HostReq> = Vec::new();
     let mut close_now = false;
     let mut cache = std::mem::take(&mut menu.cache);
+    // the top page re-states its model every tick (a page that closes takes its model with it)
+    cache.model = None;
+    cache.held = pad.real();
     {
         let mut env = Env {
             session: &mut session,
@@ -237,6 +244,11 @@ fn menu_tick(
     for se in ses {
         canvas.ses.push(se);
     }
+    // the top page's 3D model (only the page on top may show one)
+    if model_view.req != cache.model {
+        model_view.req = cache.model.clone();
+    }
+    model_view.ctl = cache.model_ctl;
     menu.cache = cache;
     for r in req {
         match r {
@@ -396,6 +408,7 @@ fn draw(rt: &Runtime, cache: &CmdCache, canvas: &mut UiCanvas) {
     let Some(sc) = cache.scenes.as_ref() else { return };
     let retail = sc.retail.as_ref();
     match (retail, top.backdrop()) {
+        (Some(_), Some(_)) if top.own_backdrop(&mut g) => {}
         // retail sub-pages: the streak backdrop replaces the field (live capture: nothing of the map shows through)
         (Some(rf), Some(k)) => draw_backdrop(&mut g, rf, k, rt.fade),
         _ => draw_background(&mut g, sc, rt.fade),
@@ -404,6 +417,9 @@ fn draw(rt: &Runtime, cache: &CmdCache, canvas: &mut UiCanvas) {
     if retail.is_some() && top.shows_root_list() {
         if let Some(root) = rt.stack.first() {
             root.draw_root_list(&mut g);
+            if top.shows_root_info() {
+                root.draw_root_info(&mut g);
+            }
         }
     }
     top.draw(&mut g);
@@ -535,6 +551,7 @@ pub struct MenuOverlayPlugin;
 
 impl Plugin for MenuOverlayPlugin {
     fn build(&self, app: &mut App) {
+        app.add_plugins(crate::menu_model::MenuModelPlugin);
         app.init_resource::<InGameMenu>()
             .add_systems(FixedUpdate, menu_tick.in_set(GameSet::Logic).run_if(run_menu))
             .add_systems(Update, menu_shots)

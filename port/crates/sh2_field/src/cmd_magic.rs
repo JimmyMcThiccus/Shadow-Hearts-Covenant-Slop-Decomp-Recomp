@@ -101,7 +101,11 @@ fn retail_cost_count(sc: &CmdScenes, base: i32, count: i32, r: &PcRec) -> i32 {
 /// Retail `CmdElement` (`MENU/MSD/ELEMENT.MSD`, window (387, 221)): per element (attach 0..6, each a pack of four textures: the stone,
 /// its shadow, the glyph and the name plate) and the emblem icons (attach 7 = the seven kanji, one 16-colour CLUT per element; attach 8
 /// = the dark disc / the dashed ring).
-struct ElemArt {
+/// Colour of the dashed ring per element (0 Earth, 1 Water, 2 Fire, 3 Wind, 4 Light, 5 Dark, 6 none), measured on the live Graveyard
+/// / Library captures (`gy_c`, `lchar_b`; capture RGB halved to the 0x80 scale).
+const ELEMENT_RING: [(u8, u8, u8); 7] = [(0x1e, 0x6a, 0x6a), (0x2a, 0x5a, 0x5e), (0x72, 0x1e, 0x30), (0x74, 0x70, 0x10), (0x80, 0x80, 0x80), (0x78, 0x78, 0x7c), (0x80, 0x80, 0x80)];
+
+pub(crate) struct ElemArt {
     scene: Arc<SceneTex>,
     /// `(stone, stone size, name plate)` per element
     stones: Vec<(Option<TextureId>, (f32, f32), Option<TextureId>)>,
@@ -110,7 +114,7 @@ struct ElemArt {
 }
 
 impl ElemArt {
-    fn load(env: &mut Env) -> Option<Self> {
+    pub(crate) fn load(env: &mut Env) -> Option<Self> {
         use sh2_menu::disc::FileSource;
         const PATH: &str = "MENU/MSD/ELEMENT.MSD";
         let scene = env.file_scene(PATH)?;
@@ -156,11 +160,15 @@ impl ElemArt {
 
     /// The element display at the scene window: the stone, the name plate (sprite 3), the dark disc and the dashed ring (sprites 1 / 2 on
     /// attach 8) and the element's kanji (sprite 0, cell `k` of attach 7).
-    fn draw(&self, g: &mut dyn MenuGfx, k: u8, a: u8) {
+    pub(crate) fn draw(&self, g: &mut dyn MenuGfx, k: u8, a: u8) {
+        let Some(w) = self.scene.msd.window(0) else { return };
+        self.draw_at(g, k, w.x, w.y, a);
+    }
+
+    /// [`Self::draw`] with the stone's top left at `(ox, oy)` (the Graveyard shows six of them).
+    pub(crate) fn draw_at(&self, g: &mut dyn MenuGfx, k: u8, ox: f32, oy: f32, a: u8) {
         let k = (k as usize).min(6);
         let m = &self.scene.msd;
-        let Some(w) = m.window(0) else { return };
-        let (ox, oy) = (w.x, w.y);
         let c = Rgba::new(0x80, 0x80, 0x80, a);
         let (stone, (sw, sh), plate) = self.stones[k];
         blit(g, stone, ox, oy, sw, sh, (0.0, 0.0, sw, sh), c);
@@ -169,7 +177,9 @@ impl ElemArt {
         }
         for i in [1usize, 2] {
             if let Some(r) = m.sprite(i) {
-                blit(g, self.scene.t(8), ox + r.x, oy + r.y, r.w, r.h, (r.u0 as f32, r.v0 as f32, r.u1 as f32, r.v1 as f32), c);
+                // the dashed ring takes the element's colour (live: Fire red, Earth / Water teal, Wind yellow, Light / Dark white)
+                let tint = if i == 2 { ELEMENT_RING[k] } else { (0x80, 0x80, 0x80) };
+                blit(g, self.scene.t(8), ox + r.x, oy + r.y, r.w, r.h, (r.u0 as f32, r.v0 as f32, r.u1 as f32, r.v1 as f32), Rgba::new(tint.0, tint.1, tint.2, a));
             }
         }
         if let Some(r) = m.sprite(0) {

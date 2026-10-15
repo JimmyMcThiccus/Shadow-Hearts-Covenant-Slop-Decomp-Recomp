@@ -433,6 +433,7 @@ pub fn parse_menu_script(s: &str) -> Vec<Act> {
                 "plist" | "inventory" => CmdPage::PropertyList,
                 "option" => CmdPage::Option,
                 "keycustom" => CmdPage::KeyCustom,
+                "sechar" => CmdPage::SelectChar,
                 _ => continue,
             };
             v.push(Act::Goto(page, it.next().and_then(|c| c.parse().ok())));

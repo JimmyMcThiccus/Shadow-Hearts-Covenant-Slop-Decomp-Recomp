@@ -83,6 +83,8 @@ pub struct StatusPage {
     title_img: Option<(TextureId, (u32, u32))>,
     /// rows of the open character sub-list (fusion / sword arts / affinity): `(name, column 2, column 3)`
     sub_rows: Vec<(String, String, String)>,
+    /// retail: the Notes line of each sub row (tarot / aroma / ring help ...), empty = the entry's own explanation
+    sub_notes: Vec<String>,
     sub_list: ListState,
     /// retail scenes / textures (`None` on the demo disc)
     rt: Option<Retail>,
@@ -120,6 +122,7 @@ impl StatusPage {
             cursor: CmdCursor::new(0.0, 0.0),
             title_img,
             sub_rows: Vec::new(),
+            sub_notes: Vec::new(),
             sub_list: ListState::new(SUB_VISIBLE, 0),
             rt: None,
         };
@@ -137,12 +140,23 @@ impl StatusPage {
     }
 
     /// `CmdPrivate::UpdateMenu`: the entries this character has (ability values and profile always).
-    fn menu_entries(&self, _env: &Env) -> Vec<usize> {
+    fn menu_entries(&self, _env: &mut Env) -> Vec<usize> {
         let id = self.pc_id();
         let mut e = vec![0usize];
         if self.rt.is_some() {
-            // retail `CmdPrivateMenu::UpdateScene` reads the list from `CmdPC+0x44`; live (Karin, Nicolai early in the game): Status / Affinity
-            // / Profile.  Yuri keeps his Fusion entry; the other specialities are not ported.
+            // retail `CmdPrivateMenu::UpdateScene` reads the list from `CmdPC+0x44` = the member's record of the menu data table demo key 7
+            // (retail raw 9), data bytes 0..5: Yuri `0 1 1 16 17`, Blanca `0 5 10 16 17`, Gepetto `0 4 11`, Lucia `0 6 7`, Anastasia `0 9 12`,
+            // Karin `0 3 3` (live: Status / Sword Arts / Affinity / Profile), Joachim `0 8 13`, Kurando `0 2 2`, ...
+            let d = _env.scenes().map(|sc| sc.mdt.mdt_data(7, id as usize).to_vec()).unwrap_or_default();
+            if d.len() >= 5 {
+                let mut v: Vec<usize> = Vec::new();
+                for &b in &d[..5] {
+                    if (b as usize) < 20 && !v.contains(&(b as usize)) {
+                        v.push(b as usize);
+                    }
+                }
+                return v;
+            }
             if id == 0 {
                 e.push(1);
             }
@@ -196,7 +210,78 @@ impl StatusPage {
     fn build_sub(&mut self, env: &Env, entry: usize) {
         let pc = self.pc_id() as usize;
         let mut rows: Vec<(String, String, String)> = Vec::new();
+        let mut notes: Vec<String> = Vec::new();
+        let us = env.db.and_then(|d| d.us());
+        let raw = |o: usize| env.session.save.btl.retail.get(o).copied().unwrap_or(0);
         match entry {
+            // `CmdTarot` (Lucia): the cards she holds (`BTL0+0xf3f..0xf41`, one bit per card) with their help text (kind 0x25)
+            6 => {
+                if let Some(t) = env.tables {
+                    for (i, n) in t.tarot_names.iter().enumerate() {
+                        if raw(0xf3f + i / 8) & (1 << (i % 8)) != 0 {
+                            rows.push((n.clone(), String::new(), String::new()));
+                            notes.push(us.as_ref().and_then(|u| u.text(0x25, i, -1)).unwrap_or_default().replace('$', " "));
+                        }
+                    }
+                }
+            }
+            // `CmdAroma` (Lucia): the oils she owns (`BTL0+0xf42`, one bit per oil) and their help (kind 0x23)
+            7 => {
+                if let Some(t) = env.tables {
+                    for (i, n) in t.aroma_names.iter().enumerate().take(8) {
+                        if raw(0xf42) & (1 << i) != 0 {
+                            rows.push((n.clone(), String::new(), String::new()));
+                            notes.push(us.as_ref().and_then(|u| u.text(0x23, i, -1)).unwrap_or_default().replace('$', " "));
+                        }
+                    }
+                }
+            }
+            // `CmdWolfBout` (Blanca): the wolves beaten so far (stamp list `BTL0+0xfd8..`, count `+0xfd7`; names = bout challenges kind 0x2e)
+            5 => {
+                let n = raw(0xfd7) as usize;
+                for k in 0..n.min(16) {
+                    let bout = raw(0xfd8 + k) as usize;
+                    let name = us.as_ref().and_then(|u| u.text(0x2e, bout, -1)).unwrap_or_else(|| format!("#{}", bout + 1));
+                    rows.push((name, String::new(), String::new()));
+                    notes.push(String::new());
+                }
+            }
+            // `CmdDress` (Gepetto): Cornelia's costumes (kind 8 names), the worn one (`BTL0+0xdaa`) marked
+            4 => {
+                let worn = raw(0xdaa) as usize;
+                for i in 0..10usize {
+                    let Some(n) = us.as_ref().and_then(|u| u.text(8, i, -1)).filter(|n| !n.trim().is_empty()) else { break };
+                    rows.push((n, if i == worn { "E".into() } else { String::new() }, String::new()));
+                    notes.push(String::new());
+                }
+            }
+            // `CmdSnap` / album (Anastasia): the monsters photographed so far (`BTL0` snapped bits) with their library names
+            9 | 12 => {
+                if let Some(db) = env.db {
+                    for id in 0..db.dat.sections.get(sh2_battle::data::SEC_MONSTER).map(|_| db.dat.section(sh2_battle::data::SEC_MONSTER).len() / 0x38).unwrap_or(0) {
+                        if env.session.save.btl.monster_snapped(id) {
+                            rows.push((env.name(8, crate::cmd_view::monster_name_row(env, id)), String::new(), String::new()));
+                            notes.push(String::new());
+                        }
+                    }
+                }
+            }
+            // the personal skill lists of the others (Manifestations, Marionette, Muscle Arts, Support Fire): their `SKIL` group, as Sword Arts
+            10 | 11 | 13 | 14 => {
+                if let Some(t) = env.tables {
+                    // the battle's own list (`SetSkill1Menu` masks: Karin only the highest Sword Art tier learned, Blanca the wolf bouts won, ...)
+                    let n = t.groups.get(pc).map(|g| g.len()).unwrap_or(0);
+                    let mask = sh2_battle::menu_data::MenuSource { btl: &env.session.save.btl, menu: &env.session.save.menu, pc, retail: sh2_core::boot::is_retail() }.skill_mask(n);
+                    for (i, rec) in t.groups.get(pc).map(|g| g.iter().enumerate().collect::<Vec<_>>()).unwrap_or_default() {
+                        if rec.empty || (i < 64 && mask & (1u64 << i) == 0) {
+                            continue;
+                        }
+                        let n = env.name(15, rec.name_idx.max(0) as usize);
+                        rows.push((if n.trim().is_empty() { format!("#{}", i + 1) } else { n }, format!("MP {:>3}", rec.mp), String::new()));
+                        notes.push(us.as_ref().and_then(|u| u.text(0x1f, rec.name_idx.max(0) as usize, -1)).unwrap_or_default().replace('$', " "));
+                    }
+                }
+            }
             // `CmdFusion`: the fusion monsters Yuri can take the shape of, with level and experience of `BTL0` (names: `FUSM` name index)
             1 | 2 => {
                 if let Some(db) = env.db {
@@ -216,8 +301,11 @@ impl StatusPage {
             // `CmdSword`: Karin's technique list = SKIL group 5
             3 => {
                 if let Some(t) = env.tables {
+                    // the battle's own list (`SetSkill1Menu` masks: Karin only the highest Sword Art tier learned, Blanca the wolf bouts won, ...)
+                    let n = t.groups.get(pc).map(|g| g.len()).unwrap_or(0);
+                    let mask = sh2_battle::menu_data::MenuSource { btl: &env.session.save.btl, menu: &env.session.save.menu, pc, retail: sh2_core::boot::is_retail() }.skill_mask(n);
                     for (i, rec) in t.groups.get(pc).map(|g| g.iter().enumerate().collect::<Vec<_>>()).unwrap_or_default() {
-                        if rec.empty {
+                        if rec.empty || (i < 64 && mask & (1u64 << i) == 0) {
                             continue;
                         }
                         let n = env.name(15, rec.name_idx.max(0) as usize);
@@ -239,6 +327,7 @@ impl StatusPage {
         }
         self.sub_list = ListState::new(SUB_VISIBLE, rows.len());
         self.sub_rows = rows;
+        self.sub_notes = notes;
     }
 
     fn menu_origin(&self) -> (f32, f32) {
@@ -272,7 +361,10 @@ impl Page for StatusPage {
     fn note(&self) -> String {
         match self.mode {
             Mode::Menu => self.entries.get(self.sel).and_then(|&i| self.scene.msd.text_entry(i)).map(|e| sj(e.1)).unwrap_or_default(),
-            Mode::Sub(i) => self.scene.msd.text_entry(i).map(|e| sj(e.1)).unwrap_or_default(),
+            Mode::Sub(i) => match self.sub_notes.get(self.sub_list.sel).filter(|n| !n.is_empty()) {
+                Some(n) => n.clone(),
+                None => self.scene.msd.text_entry(i).map(|e| sj(e.1)).unwrap_or_default(),
+            },
         }
     }
     fn buttons(&self) -> Vec<(Button, String)> {
@@ -531,6 +623,39 @@ pub(crate) struct Retail {
     portrait: Option<TextureId>,
     /// ms since the shown scene changed (Profile typing)
     t: f32,
+    /// the member's 3D model (`CmdPrivate::UpdateModel`), its turn and action counter
+    model: Option<crate::menu_model::ModelReq>,
+    turn: f32,
+    action: u32,
+}
+
+/// `CmdPrivate::UpdateModel` (US 0x47c840): the member's model for the 3D view.  With a weapon (record `+0x2d` >= 0) the battle model
+/// (`BTLDATA/CHR/%03d.BCM` + `CHRANM`, the weapon's `.WPN` from `WPN_+4`) and the battle half of the motion lists, else the field model
+/// (`FIELD/MODEL/%03d.SET` + `%03dP.SET`) and the field half.  Motion lists: raw menu data table 57 (names; the chunk header's count = the
+/// field ones), connections: table 58 (pairs, same split).  Camera: table 63 (one record per member, pointer 6 = `MenuDataModel`).
+fn member_model(env: &Env, sc: &CmdScenes, pc: u8) -> Option<crate::menu_model::ModelReq> {
+    let r = env.session.save.btl.pc(pc as usize)?;
+    let m = &sc.mdt;
+    let rec = (0..m.mdt_count(63)).find(|&i| m.mdt_data(63, i).first().copied() == Some(pc)).unwrap_or(pc as usize);
+    let cam = crate::menu_model::MenuCam::parse(m.mdt_ptr_bytes(63, rec, 6, 16))?;
+    let chr = r.model_nums[0] as u32;
+    let battle = r.weapon >= 0;
+    let split = |ty: u16| m.mdt_base(ty) as usize;
+    let (n57, n58) = (m.mdt_count(57), m.mdt_count(58));
+    let (mr, cr) = if battle { (split(57)..n57, split(58)..n58) } else { (0..split(57).min(n57), 0..split(58).min(n58)) };
+    let motions: Vec<String> = mr.map(|i| sj(m.mdt_str(57, i, 0))).collect();
+    let connect = cr.map(|i| (sj(m.mdt_str(58, i, 0)), sj(m.mdt_str(58, i, 1)))).filter(|(a, _)| !a.is_empty()).collect();
+    let weapon = if battle {
+        env.db
+            .and_then(|db| db.dat.record(sh2_battle::data::SEC_WEAPON, r.weapon as usize, sh2_battle::data::WeaponRec::SIZE))
+            .map(|w| i16::from_le_bytes([w[4], w[5]]))
+            .filter(|&n| n >= 0)
+            .map(|n| sh2_battle::models::weapon_files(true, chr, (n % 100) as u32))
+    } else {
+        None
+    };
+    let files = if battle { sh2_battle::models::chr_files_for(true, chr).to_vec() } else { vec![format!("FIELD/MODEL/{chr:03}.SET"), format!("FIELD/MODEL/{chr:03}P.SET")] };
+    Some(crate::menu_model::ModelReq { files, weapon, motions, connect, cam })
 }
 
 /// A texture registered once per session under `key` (kept in the page cache's image map).
@@ -567,6 +692,9 @@ impl Retail {
             stone: None,
             portrait: None,
             t: 0.0,
+            model: None,
+            turn: 0.0,
+            action: 0,
         }
     }
 
@@ -625,7 +753,10 @@ impl StatusPage {
         let face = self.pcs[self.pc].face;
         let entries = self.entries.clone();
         let elem = self.v.elem as usize;
+        let model = member_model(env, &self.sc, pc);
         let Some(rt) = self.rt.as_mut() else { return };
+        rt.model = model;
+        rt.turn = 0.0;
         rt.portrait = rt.cms.as_ref().and_then(|c| c.t_by_id(face as i16));
         rt.titles = entries
             .iter()
@@ -650,6 +781,19 @@ impl StatusPage {
     fn tick_retail(&mut self, env: &mut Env, keys: u16) -> Flow {
         if let Some(rt) = self.rt.as_mut() {
             rt.t += DT;
+            // the 3D view: square plays the next action, L1 / R1 (held; the retail right stick) turn the model
+            if keys & padbit::SQUARE != 0 {
+                rt.action = rt.action.wrapping_add(1);
+            }
+            let held = env.cache.held;
+            if held & padbit::L1 != 0 {
+                rt.turn -= 0.05;
+            }
+            if held & padbit::R1 != 0 {
+                rt.turn += 0.05;
+            }
+            env.cache.model = rt.model.clone();
+            env.cache.model_ctl = crate::menu_model::ModelCtl { turn: rt.turn, action: rt.action };
         }
         let restart = |p: &mut Self| {
             if let Some(rt) = p.rt.as_mut() {
@@ -689,7 +833,7 @@ impl StatusPage {
                     env.sound(MenuSe::Cancel);
                     return Flow::Back;
                 }
-                // square (Action) and L1 / R1 (rotate) drive the 3D model, which is not drawn
+                // square (Action) and L1 / R1 (rotate) drive the 3D model (top of `tick_retail`)
             }
             Mode::Sub(_) => {
                 if self.sub_list.key(keys) {
@@ -707,6 +851,9 @@ impl StatusPage {
     fn draw_retail(&self, g: &mut dyn MenuGfx, rt: &Retail) {
         let a = 0x80u8;
         let m = &self.scene.msd;
+        if rt.model.is_some() {
+            crate::menu_model::draw_model_view(g, a);
+        }
         // ---- title image of the selected entry (title-log window)
         if let (Some(w), Some(Some((t, (iw, ih))))) = (self.sc.title.msd.window(0), rt.titles.get(self.sel)) {
             blit(g, Some(*t), w.x, w.y, *iw as f32, *ih as f32, (0.0, 0.0, *iw as f32, *ih as f32), white(a));

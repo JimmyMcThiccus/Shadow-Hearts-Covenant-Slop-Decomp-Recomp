@@ -68,6 +68,74 @@ pub struct GraveyardPage {
     /// `JumpGraveyard` fade 0..1 once the jump started
     jump: Option<f32>,
     note: String,
+    /// retail: the stone board (live `gy_c`)
+    board: Option<GraveBoard>,
+}
+
+/// Retail `CmdGraveyard` / `CmdGraveyardMenu` (US 0x493980 / 0x4946a0): GRAVE.MSD's full-screen picture (sprite 0), the six soul stones
+/// at window 1 (24, 48) + groups (0 / 112 / 224, 0 / 136), each with `GRADE.` + grade (`1 2 3 MAX`), the element stone of `CmdElement`
+/// and `SE.%3d/%3d` (charge towards the next grade / its need, MDT 54 of attach 0) over a dark band; the question at window 0 (24, 332)
+/// centred on x 174 with `Yes` / `No` at (132, 22 / 43), the selected one cyan.
+struct GraveBoard {
+    scene: Arc<SceneTex>,
+    elem: Option<crate::cmd_magic::ElemArt>,
+    /// (group origin, stone, grade, charge)
+    stones: Vec<((f32, f32), crate::soul_charge::Stone, usize, i32)>,
+}
+
+impl GraveBoard {
+    fn new(env: &mut Env, scene: Arc<SceneTex>) -> Self {
+        let elem = crate::cmd_magic::ElemArt::load(env);
+        let mdt = scene.msd.attach_scene(0);
+        let m = &scene.msd;
+        let (wx, wy) = m.window(1).map(|w| (w.x, w.y)).unwrap_or((24.0, 48.0));
+        let mut stones = Vec::new();
+        for gi in 0..m.count(ChunkType::Group) {
+            let Some(gr) = m.group(gi) else { continue };
+            let idx = gr.label as usize;
+            let Some(st) = mdt.as_ref().and_then(|d| crate::soul_charge::Stone::from_mdt(d, idx)) else { continue };
+            let o = crate::soul_charge::OFF_STONES + idx * 0x10;
+            let (grade, charge) = env.session.save.menu.data.get(o..o + 4).map(|b| ((b[0] as i8).max(0) as usize, i16::from_le_bytes([b[2], b[3]]) as i32)).unwrap_or((0, 0));
+            stones.push(((wx + gr.x, wy + gr.y), st, grade, charge.max(0)));
+        }
+        GraveBoard { scene, elem, stones }
+    }
+
+    fn draw_picture(&self, g: &mut dyn MenuGfx, a: u8) {
+        let m = &self.scene.msd;
+        if let Some(r) = m.sprite(0) {
+            // the picture is the 512 x 448 attach texture
+            let t = (0..m.attach_files().len()).find(|&i| self.scene.tex_size(i) == (512, 448)).and_then(|i| self.scene.t(i));
+            draw_sprite_rec(g, &r, t, 0.0, 0.0, a);
+        }
+    }
+
+    fn draw(&self, g: &mut dyn MenuGfx, a: u8) {
+        let m = &self.scene.msd;
+        let res = |i: usize| m.resource_bytes(i).map(sj).unwrap_or_default();
+        for ((ox, oy), st, grade, charge) in &self.stones {
+            if let Some(el) = &self.elem {
+                el.draw_at(g, st.element, *ox, *oy, a);
+            }
+            if let Some(t) = m.menu_text(2) {
+                text_run_h(g, ox + t.x, oy + t.y, &res(3), 2, crate::cmd_retail::rgb(crate::cmd_retail::LAVENDER, a), Some((1, 1)), sh2_menu::gfx::TextRun::hscale_of(t.flags));
+            }
+            if let Some(t) = m.menu_text(3) {
+                let v = if *grade >= st.grades as usize { res(7) } else { res(4 + grade) };
+                text_run_h(g, ox + t.x, oy + t.y, &v, 2, white(a), Some((1, 1)), sh2_menu::gfx::TextRun::hscale_of(t.flags));
+            }
+            if let Some(p) = m.polygon(0) {
+                crate::cmd_retail::gs_poly(g, &p, *ox, *oy, a);
+            }
+            if let Some(t) = m.menu_text(4) {
+                let maxed = *grade >= st.grades as usize;
+                let base = st.base(*grade);
+                let need = st.need.get(*grade).copied().unwrap_or(0);
+                let (cur, of) = if maxed { (need.max(st.need.last().copied().unwrap_or(0)), st.need.last().copied().unwrap_or(0)) } else { ((charge - base).clamp(0, need), need) };
+                text_run_h(g, ox + t.x, oy + t.y, &cfmt(&res(8), &[cur.into(), of.into()]), 0, white(a), Some((1, 1)), sh2_menu::gfx::TextRun::hscale_of(t.flags));
+            }
+        }
+    }
 }
 
 impl GraveyardPage {
@@ -88,6 +156,7 @@ impl GraveyardPage {
         use sh2_menu::disc::FileSource;
         let available = env.assets.disc.as_ref().map(|d| d.read(&format!("FIELD/MPS/{GRAVEYARD_MAP}.MPS")).is_some()).unwrap_or(false);
         let w = m.window(0);
+        let board = retail.then(|| GraveBoard::new(env, scene.clone()));
         let mut p = GraveyardPage {
             sc,
             win,
@@ -101,6 +170,7 @@ impl GraveyardPage {
             cursor: CmdCursor::new(0.0, 0.0),
             jump: None,
             note,
+            board,
         };
         p.cursor_to_sel();
         p.cursor.snap();
@@ -108,6 +178,11 @@ impl GraveyardPage {
     }
 
     fn cursor_to_sel(&mut self) {
+        if self.board.is_some() {
+            // `Yes` / `No` records at (132, 22 / 43): the arrow tip 5 px left of the text
+            self.cursor.set_target(self.win.0 + 132.0 - 5.0, self.win.1 + 22.0 + self.sel as f32 * 21.0 + 10.0);
+            return;
+        }
         self.cursor.set_target(self.win.0 + 100.0, self.win.1 + 24.0 + self.sel as f32 * 22.0 + 10.0);
     }
 }
@@ -128,6 +203,27 @@ impl Page for GraveyardPage {
     }
     fn wants_background(&self) -> bool {
         true
+    }
+    /// retail: the page shows its own picture (GRAVE.MSD sprite 0) over a black backdrop, with the root list on the right
+    fn backdrop(&self) -> Option<usize> {
+        self.board.as_ref().map(|_| 0)
+    }
+    fn shows_root_list(&self) -> bool {
+        self.board.is_some()
+    }
+    fn shows_root_info(&self) -> bool {
+        self.board.is_some()
+    }
+    fn own_backdrop(&self, g: &mut dyn MenuGfx) -> bool {
+        let Some(b) = &self.board else { return false };
+        b.draw_picture(g, 0x80);
+        true
+    }
+    fn title_image(&self) -> Option<(TextureId, (u32, u32))> {
+        self.board.as_ref().and_then(|b| b.scene.t(1).map(|t| (t, b.scene.tex_size(1))))
+    }
+    fn report(&self) -> Option<Vec<(Button, usize)>> {
+        self.board.as_ref().map(|_| Vec::new())
     }
     fn tick(&mut self, env: &mut Env, keys: u16) -> Flow {
         self.slide.tick(DT);
@@ -177,6 +273,28 @@ impl Page for GraveyardPage {
             return;
         }
         let (x, y) = self.win;
+        if let Some(b) = &self.board {
+            b.draw(g, a);
+            let m = &b.scene.msd;
+            let q = self.blocked.as_deref().unwrap_or(&self.question);
+            let hs = 0.8;
+            let qx = m.message(0).map(|r| r.common.x).unwrap_or(150.0);
+            let (tw, _) = g.measure_text(0, &sh2_menu::sjis::encode(q));
+            text_run_h(g, x + qx - tw * hs * 0.5, y, q, 0, white(a), Some((1, 1)), hs);
+            if self.blocked.is_none() {
+                for (i, s) in [&self.yes, &self.no].into_iter().enumerate() {
+                    let t = m.menu_text(i);
+                    let (tx, ty) = t.as_ref().map(|t| (t.x, t.y)).unwrap_or((132.0, 22.0 + 21.0 * i as f32));
+                    let c = if self.sel == i { Rgba::new(0x00, 0x80, 0x80, a) } else { white(a) };
+                    text_run_h(g, x + tx, y + ty, s, 0, c, Some((1, 1)), hs);
+                }
+                self.cursor.draw(g, &self.sc.cmn, a);
+            }
+            if let Some(f) = self.jump {
+                fill(g, 0.0, 0.0, SCREEN_W, SCREEN_H, Rgba::new(0, 0, 0, (f.min(1.0) * 128.0) as u8));
+            }
+            return;
+        }
         message_frame(g, &self.sc.cmn, x - 20.0, y - 28.0, 430.0, a);
         let w = white(a);
         let q = self.blocked.as_deref().unwrap_or(&self.question);
@@ -219,7 +337,14 @@ pub struct KeyCustomPage {
     pick: usize,
     cursor: CmdCursor,
     slide: Slide,
+    retail: bool,
 }
+
+/// Retail rows of the Button Customization list (live `bc_b`): the physical buttons circle, cross, triangle, square (their pad bits), the
+/// order of KEYCUS.MSD groups 0..3 (diagram boxes) and 4..7 (list rows).
+const RETAIL_ROWS: [u16; 4] = [0xd, 0xe, 0xc, 0xf];
+/// `pad_icon` index (0 triangle, 1 circle, 2 cross, 3 square) of each retail row.
+const RETAIL_ROW_ICON: [usize; 4] = [1, 2, 0, 3];
 
 impl KeyCustomPage {
     pub fn new(env: &mut Env) -> Option<Self> {
@@ -250,6 +375,7 @@ impl KeyCustomPage {
             sel: 0,
             pick: 0,
             cursor: CmdCursor::new(0.0, 0.0),
+            retail: sh2_core::boot::is_retail(),
         };
         p.cursor_to_sel();
         p.cursor.snap();
@@ -261,6 +387,12 @@ impl KeyCustomPage {
     }
 
     fn cursor_to_sel(&mut self) {
+        if self.retail {
+            let (x, y) = self.list_origin();
+            let row_y = |r: usize| if r < 4 { r as f32 * 21.0 } else { 110.0 + (r - 4) as f32 * 21.0 };
+            self.cursor.set_target(x - 5.0, y + row_y(self.sel) + 10.0);
+            return;
+        }
         match self.mode {
             KeyMode::List => {
                 let (x, y) = self.list_origin();
@@ -310,6 +442,14 @@ impl Page for KeyCustomPage {
         self.title_img
     }
     fn note(&self) -> String {
+        if self.retail {
+            return match self.mode {
+                // the physical button of the row: text `bit - 12` ("Change setting for the %i13 button.")
+                KeyMode::List if self.sel < 4 => self.notes.get(RETAIL_ROWS[self.sel] as usize - 12).cloned().unwrap_or_default(),
+                KeyMode::List => self.notes.get(self.sel).cloned().unwrap_or_default(),
+                KeyMode::Pick(_) => self.notes.get(6).cloned().unwrap_or_default(),
+            };
+        }
         match self.mode {
             KeyMode::List => self.notes.get(self.sel).cloned().unwrap_or_default().replace("%%i", "").replace("%i", ""),
             KeyMode::Pick(_) => self.notes.get(6).cloned().unwrap_or_default(),
@@ -318,6 +458,9 @@ impl Page for KeyCustomPage {
     fn tick(&mut self, env: &mut Env, keys: u16) -> Flow {
         self.slide.tick(DT);
         self.cursor.tick(DT);
+        if self.retail {
+            return self.tick_retail(env, keys);
+        }
         match self.mode {
             KeyMode::List => {
                 if keys & padbit::UP != 0 {
@@ -398,6 +541,10 @@ impl Page for KeyCustomPage {
         if a == 0 {
             return;
         }
+        if self.retail {
+            self.draw_retail(g, a);
+            return;
+        }
         let m = &self.scene.msd;
         let w = white(a);
         // controller diagram: pad picture (attach 1) with a box + connector line per physical button
@@ -434,6 +581,155 @@ impl Page for KeyCustomPage {
             if i < 4 {
                 pad_icon(g, &self.sc.cmn, PHYS.iter().position(|p| p.1 == self.assign[i]).unwrap_or(0), lx + 108.0, y, a);
             }
+        }
+        self.cursor.draw(g, &self.sc.cmn, a);
+    }
+}
+
+impl KeyCustomPage {
+    /// Function (0 menu, 1 confirm, 2 cancel, 3 other) on the physical button of retail row `r`.
+    fn retail_function(&self, r: usize) -> usize {
+        self.assign.iter().position(|&a| a == RETAIL_ROWS[r]).unwrap_or(r)
+    }
+
+    /// Retail `CmdKeyCustom::SelectButton / SwapButton` (US 0x4b2820 / 0x4b2c00): pick a button row, then a second one; their functions
+    /// change places.  Default restores the US assignment, Confirm (or cancel on the list) stores and leaves.
+    fn tick_retail(&mut self, env: &mut Env, keys: u16) -> Flow {
+        let n = if matches!(self.mode, KeyMode::Pick(_)) { 4 } else { 6 };
+        if keys & padbit::UP != 0 {
+            self.sel = (self.sel + n - 1) % n;
+            env.sound(MenuSe::CursorMove);
+            self.cursor_to_sel();
+            return Flow::Stay;
+        }
+        if keys & padbit::DOWN != 0 {
+            self.sel = (self.sel + 1) % n;
+            env.sound(MenuSe::CursorMove);
+            self.cursor_to_sel();
+            return Flow::Stay;
+        }
+        match self.mode {
+            KeyMode::List => {
+                if keys & padbit::CIRCLE != 0 {
+                    match self.sel {
+                        0..=3 => {
+                            env.sound(MenuSe::Decide);
+                            self.mode = KeyMode::Pick(self.sel);
+                        }
+                        4 => {
+                            self.assign = sh2_core::game::US_DEFAULT_BUTTONS;
+                            env.sound(MenuSe::Decide);
+                        }
+                        _ => {
+                            env.sound(MenuSe::Decide);
+                            self.store(env);
+                            return Flow::Back;
+                        }
+                    }
+                } else if keys & (padbit::CROSS | padbit::TRIANGLE) != 0 {
+                    env.sound(MenuSe::Cancel);
+                    self.store(env);
+                    return Flow::Back;
+                }
+            }
+            KeyMode::Pick(first) => {
+                if keys & padbit::CIRCLE != 0 {
+                    let (fa, fb) = (self.retail_function(first), self.retail_function(self.sel));
+                    self.assign.swap(fa, fb);
+                    env.sound(MenuSe::Decide);
+                    self.mode = KeyMode::List;
+                    self.sel = first;
+                    self.cursor_to_sel();
+                } else if keys & (padbit::CROSS | padbit::TRIANGLE) != 0 {
+                    env.sound(MenuSe::Cancel);
+                    self.mode = KeyMode::List;
+                    self.sel = first;
+                    self.cursor_to_sel();
+                }
+            }
+        }
+        Flow::Stay
+    }
+
+    /// Retail layout (live `bc_b` / `bc_k`): the pad picture (sprite 0, attach 1), per button the connector (polygons 2i / 2i+1), the ring
+    /// frame (sprite 1), the button icon (sprite 2) and the plate (sprites 3..5, attach 2) with the function name; the right list rows
+    /// `icon : name` then `Default` / `Confirm`.  Highlighted rows (the one under the cursor and, while picking, the first one): cyan names,
+    /// a dark plate, a bright frame and connector.
+    fn draw_retail(&self, g: &mut dyn MenuGfx, a: u8) {
+        let m = &self.scene.msd;
+        if let Some(r) = m.sprite(0) {
+            draw_sprite_rec(g, &r, self.scene.t(1), 0.0, 0.0, a);
+        }
+        let hl = |r: usize| match self.mode {
+            KeyMode::List => self.sel == r,
+            KeyMode::Pick(first) => first == r || self.sel == r,
+        };
+        let cyan = Rgba::new(0x00, 0x80, 0x80, a);
+        let dim = Rgba::new(0x50, 0x50, 0x48, a);
+        let modu = |v: u8| Rgba::new(v, v, v, a);
+        for r in 0..4 {
+            let Some(gr) = m.group(r) else { continue };
+            let on = hl(r);
+            for k in [2 * r, 2 * r + 1] {
+                if let Some(p) = m.polygon(k) {
+                    let v = if on { p.rgba[0][0] } else { p.rgba[0][0] / 2 };
+                    let c = modu(v);
+                    g.draw(sh2_menu::gfx::DrawCmd::Quad {
+                        tex: None,
+                        v: [vtx(p.x[0], p.y[0], 0.0, 0.0, c), vtx(p.x[1], p.y[1], 0.0, 0.0, c), vtx(p.x[2], p.y[2], 0.0, 0.0, c), vtx(p.x[3], p.y[3], 0.0, 0.0, c)],
+                        blend: sh2_menu::gfx::Blend::Alpha,
+                    });
+                }
+            }
+            let (ox, oy) = (gr.x, gr.y);
+            if let Some(s) = m.sprite(1) {
+                blit(g, self.scene.t(2), ox + s.x, oy + s.y, s.w, s.h, (s.u0 as f32, s.v0 as f32, s.u1 as f32, s.v1 as f32), modu(if on { 0x80 } else { 0x40 }));
+            }
+            for k in 3..6 {
+                if let Some(s) = m.sprite(k) {
+                    // the plate is cut from the common fence / frame texture (the same 64 x 28 cells as the fences' headers)
+                    blit(g, self.sc.fence_tex, ox + s.x, oy + s.y, s.w, s.h, (s.u0 as f32, s.v0 as f32, s.u1 as f32, s.v1 as f32), modu(0x60));
+                }
+            }
+            if on {
+                // the highlighted plate keeps its rim and goes black inside (live `bc_b`)
+                if let (Some(l), Some(r)) = (m.sprite(3), m.sprite(5)) {
+                    fill(g, ox + l.x + 4.0, oy + l.y + 4.0, r.x + r.w - l.x - 8.0, l.h - 8.0, Rgba::new(0, 0, 0, (a as u32 * 0x78 / 0x80) as u8));
+                }
+            }
+            if let Some(s) = m.sprite(2) {
+                pad_icon(g, &self.sc.cmn, RETAIL_ROW_ICON[r], ox + s.x, oy + s.y, a);
+            }
+            if let Some(t) = m.menu_text(0) {
+                let f = self.retail_function(r);
+                let c = if on { cyan } else { dim };
+                text_run_h(g, ox + t.x, oy + t.y - 1.0, self.labels.get(f).map(|s| s.as_str()).unwrap_or(""), 0, c, Some((1, 1)), sh2_menu::gfx::TextRun::hscale_of(t.flags));
+            }
+        }
+        // the list
+        let (lx, ly) = self.list_origin();
+        let hs = m.menu_text(1).map(|t| sh2_menu::gfx::TextRun::hscale_of(t.flags)).unwrap_or(0.8);
+        let name_x = m.menu_text(1).map(|t| t.x).unwrap_or(30.0);
+        let colon_x = m.menu_text(4).map(|t| t.x).unwrap_or(16.0);
+        let colon = self.labels.get(6).cloned().unwrap_or_else(|| ":".into());
+        for r in 0..4 {
+            let gy = m.group(4 + r).map(|gr| gr.y).unwrap_or(r as f32 * 21.0);
+            let y = ly + gy;
+            pad_icon(g, &self.sc.cmn, RETAIL_ROW_ICON[r], lx, y, a);
+            let c = if hl(r) { cyan } else { white(a) };
+            text_run_h(g, lx + colon_x, y - 1.0, &colon, 0, c, None, hs);
+            text_run_h(g, lx + name_x, y - 1.0, self.labels.get(self.retail_function(r)).map(|s| s.as_str()).unwrap_or(""), 0, c, None, hs);
+        }
+        let picking = matches!(self.mode, KeyMode::Pick(_));
+        for (k, rec) in [(4usize, 2usize), (5, 3)] {
+            let (tx, ty, ths) = m.menu_text(rec).map(|t| (t.x, t.y, sh2_menu::gfx::TextRun::hscale_of(t.flags))).unwrap_or((0.0, 110.0, 0.8));
+            let c = if picking { Rgba::new(0x80, 0x80, 0x80, a / 2) } else if self.sel == k { cyan } else { white(a) };
+            text_run_h(g, lx + tx, ly + ty - 1.0, self.labels.get(k).map(|s| s.as_str()).unwrap_or(""), 0, c, None, ths);
+        }
+        // picking: the white marker on the first row (common attach 4, right arrow cell)
+        if let (KeyMode::Pick(first), Some(t)) = (self.mode, self.sc.cmn.s.t(4)) {
+            let gy = m.group(4 + first).map(|gr| gr.y).unwrap_or(first as f32 * 21.0);
+            blit(g, Some(t), lx - 26.0, ly + gy - 2.0, 24.0, 22.0, (0.0, 3.0 * 22.0, 24.0, 4.0 * 22.0), white(a));
         }
         self.cursor.draw(g, &self.sc.cmn, a);
     }
@@ -555,6 +851,10 @@ impl Page for ComboMagicPage {
     fn page(&self) -> CmdPage {
         CmdPage::ComboMagic
     }
+    /// retail (live `cmg_b`): the root list stays on the right
+    fn shows_root_list(&self) -> bool {
+        sh2_core::boot::is_retail()
+    }
     fn title(&self) -> usize {
         crate::cmd_pages::title_index(CmdPage::ComboMagic)
     }
@@ -564,6 +864,10 @@ impl Page for ComboMagicPage {
     fn note(&self) -> String {
         match self.rows.get(self.list.sel) {
             Some(r) if !r.desc.is_empty() => r.desc.clone(),
+            // retail (live `cmg_b`): an unknown combination's Notes line is the `????` of the scene, like its name
+            Some(r) if sh2_core::boot::is_retail() && !r.known => self.unknown.clone(),
+            // the retail scene's own note is an untranslated Japanese leftover
+            None if sh2_core::boot::is_retail() => String::new(),
             _ => self.note.clone(),
         }
     }
@@ -588,6 +892,10 @@ impl Page for ComboMagicPage {
             return;
         }
         let (x, y) = self.origin();
+        if sh2_core::boot::is_retail() {
+            self.draw_retail(g, x, y, a);
+            return;
+        }
         if let Some(f) = &self.fence {
             draw_fence(g, f, 38.0, 80.0, a, true);
         }
@@ -607,6 +915,33 @@ impl Page for ComboMagicPage {
         }
         if self.rows.is_empty() {
             text_run(g, x, y, &self.unknown, 0, grey(a), None);
+        }
+        draw_scroll_marks(g, x + 96.0, y - 4.0, y + COMBO_VISIBLE as f32 * COMBO_ROW_H, self.list.can_scroll_up(), self.list.can_scroll_down(), self.time, a);
+        self.cursor.draw(g, &self.sc.cmn, a);
+    }
+}
+
+impl ComboMagicPage {
+    /// Retail (live `cmg_b`): the textured `Name / MP` fence of attach 1 (window (38, 80)), the rows at window 0 (42, 124) with the name
+    /// at record 0 and `%3d` MP at record 1 (x 160), narrow text; the selected row cyan, the others white -- also the unknown `????` ones,
+    /// which keep their MP.
+    fn draw_retail(&self, g: &mut dyn MenuGfx, x: f32, y: f32, a: u8) {
+        if let Some(f) = &self.fence {
+            let (fx, fy) = f.msd.window(0).map(|w| (w.x, w.y)).unwrap_or((38.0, 80.0));
+            draw_fence_tex(g, f, self.sc.fence_tex, fx, fy, a, true);
+        }
+        let m = &self.scene.msd;
+        let (nr, mr) = (m.menu_text(0), m.menu_text(1));
+        let hs = nr.as_ref().map(|t| sh2_menu::gfx::TextRun::hscale_of(t.flags)).unwrap_or(0.8);
+        let mx = mr.as_ref().map(|t| t.x).unwrap_or(160.0);
+        let fmt = m.resource_bytes(1).map(sj).unwrap_or_else(|| "%3d".into());
+        for k in 0..self.list.visible {
+            let i = self.list.top + k;
+            let Some(r) = self.rows.get(i) else { break };
+            let yy = y + k as f32 * COMBO_ROW_H;
+            let c = if i == self.list.sel { Rgba::new(0x00, 0x80, 0x80, a) } else { white(a) };
+            text_run_h(g, x, yy - 1.0, &r.name, 0, c, None, hs);
+            text_run_h(g, x + mx, yy - 1.0, &cfmt(&fmt, &[r.mp.into()]), 0, c, None, hs);
         }
         draw_scroll_marks(g, x + 96.0, y - 4.0, y + COMBO_VISIBLE as f32 * COMBO_ROW_H, self.list.can_scroll_up(), self.list.can_scroll_down(), self.time, a);
         self.cursor.draw(g, &self.sc.cmn, a);
@@ -750,19 +1085,37 @@ impl ComboKeyPage {
             .iter()
             .enumerate()
             .map(|(k, &(kind, id))| {
-                // retail `ConvertComboKeyDefault`: an unset button does the attack style of its own index (L1 Standard, R1 Hard Hit, ...)
-                let id = if retail && kind == KIND_ATTACK && id == 0xffff { k as u16 } else { id };
+                // retail `ConvertComboKeyDefault` (US 0x46dc10 -> `CmdParty::ConvertComboKey(1)`): an empty attack row takes the default style of
+                // its byte 1 (per member and slot; a negative default stays unset)
+                let id = if retail && kind == KIND_ATTACK && id == 0xffff {
+                    let d = env.session.save.btl.shortcut_default(self.pc_id() as usize, k);
+                    if d >= 0 { d as u16 } else { id }
+                } else {
+                    id
+                };
+                // `GetComboKeyData` kind 0: a style the member cannot use (menu data table 0x31 per member, `+0xb` style mask) shows as unset
+                let id = if kind == KIND_ATTACK && id != 0xffff && !self.style_allowed(id) { 0xffff } else { id };
                 let name = if id == 0xffff && kind == KIND_ATTACK { self.unset.clone() } else { self.command_name(env, kind, id) };
                 (kind, id, name)
             })
             .collect();
     }
 
+    /// `CmdParty::GetComboKeyData` kind 0: bit `id` of the member's style mask (menu data table demo key 0x31, record = member, data byte 7).
+    fn style_allowed(&self, id: u16) -> bool {
+        let d = self.sc.mdt.mdt_data(0x31, self.pc_id() as usize);
+        match d.get(7) {
+            Some(&mask) if id < 8 => mask & (1 << id) != 0,
+            Some(_) => false,
+            None => true,
+        }
+    }
+
     fn command_name(&self, env: &Env, kind: u8, id: u16) -> String {
         match kind {
             KIND_ATTACK => {
                 let styles = &self.sc.mdt;
-                let ty = if sh2_core::boot::is_retail() { 49 } else { 50 };
+                let ty = 50; // the attack-style table (demo key 0x32; retail raw 49 through `us_mdt_type`): Standard, Hard Hit, High Angle, Knock Down
                 let i = if id == 0xffff { 0 } else { id as usize };
                 let s = sj(styles.mdt_str(ty, i, 0));
                 if s.is_empty() { format!("{}", i + 1) } else { s }
@@ -780,11 +1133,11 @@ impl ComboKeyPage {
         let mut v = Vec::new();
         match kind {
             KIND_ATTACK => {
-                let ty = if sh2_core::boot::is_retail() { 49 } else { 50 };
+                let ty = 50; // the attack-style table (demo key 0x32; retail raw 49 through `us_mdt_type`): Standard, Hard Hit, High Angle, Knock Down
                 for i in 0..self.sc.mdt.mdt_count(ty).min(8) {
                     let name = sj(self.sc.mdt.mdt_str(ty, i, 0));
                     let note = sj(self.sc.mdt.mdt_str(ty, i, 1)).replace('$', "\n");
-                    if !name.is_empty() {
+                    if !name.is_empty() && self.style_allowed(i as u16) {
                         v.push(Choice { kind, id: i as u16, name, note });
                     }
                 }
