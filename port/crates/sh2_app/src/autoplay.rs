@@ -885,6 +885,8 @@ mod tests {
     /// (`GameOverScene` -> `ShiftTitle` -> `opening()`).
     #[test]
     fn headless_game_over_returns_to_title() {
+        // process-wide state (retail flag, env vars, the session) is shared with the US story tests: run one at a time
+        let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
         let mut app = App::new();
         app.add_plugins((MinimalPlugins, StatesPlugin, bevy::input::InputPlugin))
             .insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_micros(16_667)))
@@ -925,6 +927,8 @@ mod tests {
     /// the map and enters the field (`TitleCmd::EnterLoadedGame`).
     #[test]
     fn headless_continue_loads_the_save() {
+        // process-wide state (retail flag, env vars, the session) is shared with the US story tests: run one at a time
+        let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
         use sh2_menu::plugin::SaveDevice;
         use sh2_menu::session::{save_session, FileStorage};
         let dir = std::env::temp_dir().join(format!("sh2_headless_continue_{}", std::process::id()));

@@ -1,30 +1,29 @@
 # Round 6 QA2: coverage harness, sh2_app, integration (2026-10-14)
 
-## Paused (2026-10-14 ~20:40, coordinator: CPU saturated, max 2 running agents)
+## Status (2026-10-15 evening, resumed after the pause; done)
 
-State: every QA2 file compiles (`cargo check -p sh2_app --example coverage` green, dev).  No locks held, no processes left running
-(the coordinator stopped the sweep's workers; nothing under `sh2-r6-qa2` is running).  `coverage.md` is still the round-5 matrix
-(+ the "Load" line); `tools/coverage/out/field.s*.tsv` hold ~412 rows of the interrupted round-6 `all --fresh` sweep (field only; the
-other categories' round-5 rows are untouched), the stale round-5 shard files `field.s6..s19` are among them.
+Coverage (`run_all.sh all --fresh --jobs 4`, then `run field story --fresh` and an `lsd` rerun after the harness fixes below):
+**3810 items, 3578 ok, 90 stub, 3 fails, 0 timeout, 139 untested** (round-5 end: 3793 / 3543 / 97 / 3 / 150).  Per category: field 559 =
+532 ok / 27 stub (was 495 / 64), story 1690 = 1531 / 17 / 3 fails / 139 untested, battles 412 / 413, battle app **327 / 327**
+(the finisher cleared the 9 untested late sets), party 319 / 321, effects 301 / 306, cut scenes 128 / 166 (38 stubs = CS2 request 1),
+menu scenes **28 / 28** (SECHAR and MFIELD now loaded).  Status changes vs round 5 (row by row): 43 stub -> ok, 11 untested -> ok, 2 ok -> stub
+(SMROOM / SMROOM2: `fldAttachBG2` now detected), and the 38 cut scenes (the `lsdGetModel` check is new).  `srcscan` printed no warning.
 
-Done: harness fixes below (unknown category fails fast, grab.py output path, battleapp finisher, field all-args + explore inputs +
-idle / needed_input / loop-ip verdicts, srcscan instead of copied lists, round-6 owner ids, 6-worker default `--jobs` / `SH2_COV_JOBS`,
-resume across shard counts, `CARGO_BUILD_JOBS=6` in the scripts); baseline workspace check + tests (green, one transient doctest).
-Verified on single items: `run bogus` / bare `run` exit 2 and leave coverage.md byte-identical; battleapp monset 288 = ok via the
-finisher (247 s); field MI_03_U ok via explore inputs, AI_01_U / TD_02_U / GI_03_N still stuck (now with the loop-ip hint).
+Tests (dev, `--no-fail-fast`, 14:44-14:56): `cargo check --workspace --all-targets` clean, 49 test binaries / doc-test sets, **843 passed,
+0 failed, 6 ignored**.  First attempt at 14:21 hit the coordinator's half-written `sh2_menu::hifont` (module file missing) -- retried
+once it landed.  Final: workspace check clean; `cargo test -p sh2_app` 4 passed / 1 ignored after the SERIAL fix below.
 
-Next steps, in order:
-1. `CARGO_BUILD_JOBS=6 tools/coverage/run_all.sh run field` (resumes the interrupted field rows; 6 workers) then
-   `run_all.sh run fx battle battleapp party lsd msd story --fresh` -- or simply `run_all.sh all --fresh` when the machine is free
-   (expect > 1 h with 6 workers and field args 1 / 2 / 4).  Look at the field `stuck` rows' new `[loop ip ..]` / `[ip .., suspended]`
-   hints and file FS2 requests for real blockers; check that `srcscan` printed no "could not read" warning.
-2. Round-6 tests again (`ct.sh` in the scratchpad: dev profile, `--no-fail-fast`), report breakages under "## Round 6 QA2" in requests.md.
-3. Integration play-throughs (dev build): `SH2_MAX_SECONDS=300 timeout -k 5 330 sh2_app --us --autoplay --boost 80 --shots
-   notes/integration/screens/r6_qa2/auto` and a `--story` run; view field / battle HUD / ring / result / menus / cut scenes.
-4. Final: `run_all.sh all --fresh`, coverage.md, tools/coverage/notes.md top-blockers refresh, OUTLINE.md status paragraph
-   (round-5 end: 3793 items, 3543 ok, 97 stub, 3 fails, 150 untested).
-
-Target dir `%USERPROFILE%\.cache\sh2-r6-qa2`.  Owns `sh2_app/**`, `tools/coverage/**`.
+Changes this session (all in owned files unless noted):
+* `coverage/lsd.rs` + `fx.rs`: effect tracks run with the LSD's model names as `named_models` (CS2's note: the 48 `lsdGetModel(2900)`
+  stubs); the names still missing are listed per row and attributed: the scene's **map track** name -> CS2 (the player does not register
+  maps), anything else -> FX2.  `FxRun::missing_names`; `run_program(.., named)`.  Outside: `sh2_gfx` `FxScene::lsd_names()` accessor.
+* `coverage/field.rs`: the map loads that only prepare an event run the start function **circle-only** (`MapAcc::circle_only`).  The first
+  run gave the start function the explore inputs there too: in the MI_* maps a button press leaves for MI_00_U, the events then ran on that
+  state and lost their MI_03_U / MI_06_U ... jumps (6 story maps went ok -> untested).  Fixed; MI_04_U jumps = MI_00_U:0, MI_03_U:1, MI_06_U:0.
+* `coverage/main.rs`: the story graph always runs as one worker (`--jobs 4` wrote 4 identical `story.sK.tsv`).
+* `sh2_app/src/autoplay.rs` tests: `headless_game_over_returns_to_title` / `headless_continue_loads_the_save` take the `SERIAL` lock (they
+  failed twice in a row beside the US story test: left `[Boot, Title, GameOver, Field]`; process-wide retail flag).
+* `tools/coverage/notes.md`: top blockers refreshed; `docs/OUTLINE.md` status paragraph.
 
 ## Harness fixes
 
@@ -66,8 +65,32 @@ Script: `cargo check --workspace --all-targets` + `cargo test --workspace --rele
 
 ## Integration play-throughs
 
+Dev build, windowed, one at a time, `timeout -k 5 330`, while a 4-worker sweep ran:
+* `sh2_app --us --autoplay --boost 80 --shots notes/integration/screens/r6_qa2/auto` (exit 0, 180 s): disclaimer, title, OP_00_U, world map,
+  AP_00_U / AP_02_U field (radar, save point), battle command menu (turn order, HP / MP / SP panel, help line), Judgement Ring, hit panel
+  "2Hit 19Damage", back in the field; menu tour `auto/menu/01..37` incl. MN2's new Graveyard, Library 3D, Ring Custom, Combo Magic, Key Custom.
+  Looked fine.  Nits: `gp_13_battle_victory.png` shows the hit panel, not the result screen (shot timing); in `menu/30_graveyard.png` the
+  side list highlights "Equipment" while Graveyard is open.
+* `--story` (300 s, exit 2 = timeout, expected): OP_00_U -> world map -> AP_00_U -> AP_02_U, battles 2, AP_10_U and back, then stuck in AP_02_U
+  with two windows open (requests "Round 6 QA2" 3).  `screens/r6_qa2/story/`.
+* `--story` with `SH2_CUTSCENE=on SH2_CUTSCENE_SPEED=4 SH2_CUTSCENE_SHOTS=..`: the title opening movie (through the cut scene player),
+  MOVIE_A, N001 (7 models, 2277 camera keys) and M01 play; `screens/r6_qa2/cutscene/`.  N001's white background is now 233 grey (round 5:
+  252), FYI GPA / CS2.
+
 ## Regressions found
+
+* Harness (mine, fixed): explore inputs before events lost the MI_* jumps; story shards duplicated.
+* `sh2_app` tests: the two title-flow tests vs the story test (fixed with `SERIAL`).
+* No game regression found in the matrix: every round-5 `ok` row is still ok except where a check became stricter.
 
 ## Final totals
 
+3810 items: 3578 ok, 90 stub, 3 fails, 0 timeout, 139 untested.  Open per owner: CS2 38 stub; FS2 3 fails / 44 stub / 106 untested;
+FX2 11 stub.
+
 ## Open
+
+* CS2: map track names for `lsdGetModel` (38 scenes).  FS2: `SpecialMenu` 0 / 1, `WaitModel` / `PathMove` / `AutoMove` waits, PA_02_A
+  character 5, RU_04_U `GetFieldData(0x23)`, TD_* pad loops.  FX2: 096 / 131 / UNION, Inferno / Ecstasy, `fldAttachBG2`, BgFx 202 / 209.
+* PCSX2 (cannot load states myself): a state at the AP_02_U Pieta after the first fight would show what window 2 (`typed`) is in retail.
+* The field category now takes ~50 min with 4 workers (events x3 arguments + explore phase); `--arg1` halves it for quick checks.

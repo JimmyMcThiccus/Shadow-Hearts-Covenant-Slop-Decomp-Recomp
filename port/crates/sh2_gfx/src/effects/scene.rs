@@ -776,6 +776,11 @@ fn ps2_rot(deg: Vec4) -> Mat4 {
 }
 
 impl FxScene {
+    /// the cut scene model names `lsdGetModel` looked up so far (round 6 QA2: the coverage harness lists the ones missing from `named_models`)
+    pub fn lsd_names(&self) -> &[String] {
+        &self.lsd_names
+    }
+
     pub fn new(assets: Arc<FxAssets>) -> Self {
         FxScene {
             assets,

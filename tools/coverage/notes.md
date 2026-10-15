@@ -2,62 +2,42 @@
 
 * Rerun everything: `tools/coverage/run_all.ps1` (PowerShell) or `tools/coverage/run_all.sh` (Git Bash) -- resumes the rows already in
   `tools/coverage/out/`; add `--fresh` to start over; one category: `run_all.sh run battle party`; one item: `--only AP_02_U`;
-  regenerate this file only: `run_all.sh report`.  The whole run takes ~15 min on this machine (6 worker processes per category; `--jobs N` / `SH2_COV_JOBS`).
+  regenerate this file only: `run_all.sh report`.  The whole run takes ~60 min with 4 workers (field ~50 min: events with arguments 1 / 2 / 4 plus the explore phase); default 6 worker
+  processes per category, `--jobs N` / `SH2_COV_JOBS` (the story graph always runs as one worker).
   The scripts build `sh2_app --example coverage`; when another agent's half-done edit breaks the build they run the last binary that
   built (`cov-good.exe` in the target dir) and say so.
 * Each check runs in worker processes with a per-item watchdog (a hang becomes a `timeout` row, a crash a `fails` row with the exit code).
   Panics are caught per item and reported with `file:line`; the owner is derived from that file (round5_brief.md ownership table).
 * When you fix something listed here, rerun your category (`run_all.sh run <cat> --fresh`) and the matrix updates itself.
 
-## Top blockers (QA analysis, 2026-10-14, third full run)
+## Top blockers (QA2 analysis, 2026-10-15, round 6 full run)
 
-Owner in brackets.  Numbers = items affected in the tables below.
+Owner in brackets.  Round 6 totals: 3810 items, 3578 ok / 90 stub / 3 fails / 139 untested (round-5 end: 3793 / 3543 / 97 / 3 / 150).
+No `ok` row of round 5 got worse except by stricter checks (SMROOM / SMROOM2 `fldAttachBG2`, the 38 cut scenes below).
 
-1. **[FS] `MapJump` with name pointer 1 = "back to the saved map"** (`CField::MapJump`: `a0 == 1 -> GetSavedMpsName(1)`, decomp/G/CField.c:4951):
-   `host.rs` op 0x20 reads pointer 1 as an empty string and requests map `""`.  33 run-time jumps (shop / house / dungeon exits:
-   AI_00_U, IN_03_U, FU_17_U, PE_00_N, RE_03_U, SA_01_U, ...).  Story table, rows `jump X -> :n`.
-2. **[FS] `GetFieldData` first arguments the port answers with -1**: packed values `0x10000..0x40d00` / `0x100..0xd00` (step 0x100) in the
-   save-point / party scripts (27 maps for `0x4xx00`, 17 for `0x3xx00`, 4 each for the others: MI_02_U, SK_03_U, OP_00_U, PA_01_U, GI_01_U ...),
-   `0x26`, `0x2a` (2 maps each).  (0x16, 0x25, 0x29, 0x36..0x38 were added by FS during the round.)  61 maps still have a job that never ends
-   headless, most spinning on `GetFieldData` (field rows `stuck`).
-3. **[BE] the fused member's skill banner / effect**: BP's `Battle::resolve_party_effect` now applies the fusion group's record, but
-   `plugin.rs::begin_action_fx` takes the name and the effect program from `BtlHost::describe`, whose `FusionSkill` arm / `record` kind 3
-   read `tables.mon_skills`: Sorm's *Crag* shows *Evil Ray* and plays effect 68 instead of 85 -- all 95 fusion skills (party rows).
-4. **[BE] Fusion itself is a stat-boost stand-in** in `BtlHost::resolve_effect` (kind 7: +50 % / -30 % for 5 turns, no FUSM stats): 23 fusions.
-5. **[FX] battle effect programs that never end** (cut by the 10 s cap `MAX_TICKS`): 102 programs, used by most battles -- `064` (64 uses),
-   `108` (46), `067` (44), `090` White Magic *Blessed Light* (22), `074` (20), `193` (16), `246`, `166`, `153`, `107`, `155`, `105` ...  They wait
-   for something the battle host never sends (motion end of a character, `btlGetWait` hand-off, a hit test) -- in the game they play 10 s.
-6. **[FX] effect syscall families accepted but not drawn** in ~100 programs and 34 cut scenes: `blr*` line blur (2107-2112), `fef*` smoke
-   (3000-3008), `fld*` (2300-2303), `sbg*` (3300-3305), `camSetFog*` (1206/1207/1209), `shrSetBackColor`, `mdlCreateShadow`; one unhandled:
-   `btlChangeBattleBG` (1108).
-7. **[BE] AI decisions turned into Guard**: `Leave` (8 monster sets, the monster should leave the battle), `LastBoss` (1, the final boss phase 0xe).
-   (`Move` / `Escape` are mapped now.)  `host.rs` ~493.
-8. **[CS] cut-scene LSCR ops accepted but not applied**: `BGEffectAlpha` (c0.0e, 3 scenes), `SetBGMotion` (c0.0b / 0c).  (`InvokeBattle`
-   now ends the scene and the field script issues the battle -- fixed by CS during the round.)
-9. **[BP] effect record kinds that `apply_records` leaves unchanged** on the probe (party records on the party member, monster
-   records on a monster with SP / MP and a dead copy): `0x54` / `0x55` (8 party rows), `0x4c..0x4e`, `0xf`, `0x15` (BP: some need state the
-   probe lacks -- drops, an aux status, a beneficial record).  Probe = `examples/coverage/battle.rs::kind_applied`.
-10. **[FS] chapters**: 46 of 69 chapter / Wolfbout flags are set by a reachable map or by entering the setter map with the earlier
-    chapter flags set; 23 stay `untested` (no constant `setFlag` in any script, or the setter map's jobs need more state).  9 chapters need
-    **disc 2** scenes (`needs_disc2`: second-half opening OP_01_U -> M16 / OPI_J00, red-brick warehouse N077, the other world N090A, Todo lab 2
-    N101, Nihonbashi / Ring Tower HUB_NA -> MOVIE_F / N121 / N122, last dungeon IN_03_U -> MOVIE_E / N109A); all 75 disc-2 scenes are found
-    through `sh2_core::fileio::Disc`'s `SH2_US_DISC2_DIR` fallback and play headless.
-11. **[FS] 190 of 559 maps are not reached by run-time jumps from `OP_00_U`** (154 only through static name references: story branches the
-    headless run cannot take; 36 not referenced at all: debug / unused maps).
-12. **[FX] background effect types not drawn** on field maps / stages: 200 (PA_01_U), 202 (stage 062), 204 (IN_03_U, stages 051 / 097),
-    208 (FU_15_U / FU_17_U / FU_17_A), 209 (WE_01_U), 210 (stage 101).
-13. **[FS] field Judgement Ring (`SetRing` / `RingControl`)**: recorded now, but `RingControl` "plays" the ring at once with a fixed result
-    (host.rs 0x64: no field ring screen yet).
-14. **[BE] battles that end without Victory / Defeat events in the logic check** -- fixed in the harness (party defeat by status); rerun shows none.
-15. **[MN] menu scenes nothing loads**: `MENU/MSD/NENTRY.MSD`, `SCHARGE.MSD`, `SECHAR.MSD`, `WSTAMP.MSD` (Wolf stamp), `MENU/DAT/MFIELD.MSD`
-    (name entry, soul charge, ... screens not implemented?).  Minor: `Msd::attach_files` (msd.rs ~288) reads 12-byte rows unchecked and
-    panics on `.MDT` attachments with 8-byte rows (CMDMENU attach 11) -- the port never calls it there, the harness now skips MDT tables.
-16. **[FS] scripts waiting on `GetCharacterInfo` `what` 0xd (motion) / `OpenMessage` / `SpecialMenu`** in 23 / 17 / 9 maps (AI_01_U..AI_03_U,
-    DH_00_U.., TD_02_U.., YO_02_U, GI_01_N / GI_03_N): blocked jobs that may be harness artefacts (no player input) -- check the `stuck` text.
-17. **[--] late-game monster sets cannot be finished by a level-30 autoplayer in 600 s** (battleapp `untested`) and 109 sets beat the logic
-    check's level-60 party (which guards until every enemy acted 4 times): expected for late sets, not a bug; the rows still show what the
-    enemies did.
-18. **[CS/FX] cut-scene effect tracks** with `fef*` smoke (N094, N100B).
+1. **[CS2] cut-scene effect tracks look their map up by name** (38 cut scenes, every `fx lsdGetModel '<Map>' = this scene's map track`):
+   `lsdGetModel` (2900) is called with the LSD's **MPS track name** (`Do_06_u`, `Gi_00_u`, `Td_16_m` ...; the track header `body_str(0)`),
+   but `cutscene_plugin` (~1097) fills `named_models` from `data.models` only, so the effect attaches to nothing.  Register each map track's
+   model under its name too (frame lookups then need the map's frames / root).  N094 / N100B also look up `''` (FX2).
+2. **[FS2] `SpecialMenu(1, 0)` / `SpecialMenu(0, 0)` jobs never return headless**: AI_01_U..AI_03_U (34-37 jobs each, loop at 0x3495..0x34a2
+   after `OpenMessage`), DB_00_U, SM_15_U, YO_02_U (105 jobs).  Which menu is `SpecialMenu` 0 / 1 and what does the host answer?
+3. **[FS2] engine waits that never end headless**: `WaitModel` (GI_01_N / GI_03_N 46-49 jobs, SO_00_U, RU_01_U, AP_08_U), `PathMove`
+   (CA_01_U 43 jobs, YO_02_U), `AutoMove` (ND_06_U / ND_07_U), `WaitCharacterEx` (SM_13_B), `GetCharacterInfo(5, 0xd)` = -1 (PA_02_A:
+   character 5 is not loaded).
+4. **[FS2] script loops that read the pad themselves** (`get_pad` 0xac) and still spin after the explore inputs: TD_01_U / TD_02_U / TD_03_U /
+   TD_05_U / TD_06_U event 5 / 6 (clock + motion loop at 0x6719..0x6ada), BO_02_U, WE_01_U, SA_00_U; `SelectWait(1)` menus that loop
+   (GT_10_U, GI_02_N: circle picks the first entry each time); RU_04_U event 0x10 loops on `GetFieldData(0x23)` = 1.
+5. **[FX2] effect programs that never end headless**: 096, 131, UNION (memory-model motions missing in the headless host), party Inferno
+   (1096) / Ecstasy (1131); `fldAttachBG2` (SMROOM / SMROOM2); stage 062 background effect 202, WE_01_U type 209.
+6. **[FS2] story**: 372 of 559 maps reached by run-time jumps (+151 through static references only); 139 `untested` story rows are maps /
+   chapter flags the headless jumps do not reach; 3 `fails` are references to maps not on the disc (GY_00_DB, `%i45`, JU_01_U, debug data);
+   17 stubs are jumps to entry numbers the target map does not have (`*_DB:3`, `SM_17_U:2000`, `FU_17_U:232` ...: debug / computed entries).
+7. **[--] harness**: 35 maps have jobs that end only with the explore inputs (other buttons / d-pad: `needed_input`), 4 maps have background
+   jobs polling the clock (`idle`) -- both count as ok.
+
+Gone from the matrix since the round-5 list: `MapJump(1)` rows, unanswered `GetFieldData` selectors (0 maps), fused skill banner / fusion
+stand-in rows, the never-ending battle effect rows (3 programs left), the `fef` / `blr` / `sbg` / `camSetFog` families, `BGEffectAlpha`, the 9
+untested late-game monster sets in the game app (harness finisher), the unloaded SECHAR / MFIELD menu scenes; field stubs 64 -> 27.
 
 Nothing panicked in the field, battle, party, effect, cut-scene or battle-app runs (0 fails from panics); no unimplemented field op
 (`ex 0xc2` fall-through) is hit by any of the 559 map scripts.

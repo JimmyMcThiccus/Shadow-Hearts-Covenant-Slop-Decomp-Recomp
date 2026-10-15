@@ -197,9 +197,13 @@ fn check(disc: &sh2_core::fileio::Disc, path: &str, decode_all: bool) -> Row {
     }
     // effect tracks
     let mut fx_bad = 0;
+    // what the cut scene player gives the effect tracks to look up by name: its models (`cutscene_plugin` fills `named_models` from `data.models`)
+    let named: Vec<String> = data.models.iter().map(|m| m.name.clone()).collect();
+    // the map tracks' names (`lsdGetModel` looks maps up too: 30 scenes ask for their map by name, round 6 QA2)
+    let map_names: Vec<String> = data.map_tracks.iter().filter_map(|&t| data.content.tracks.get(t)).map(|h| h.body_str(0)).collect();
     for &t in &data.efd_tracks {
         let Some(raw) = data.content.raw(t) else { continue };
-        match super::fx::run_program(2000 + t as i32, raw.to_vec(), 1) {
+        match super::fx::run_program(2000 + t as i32, raw.to_vec(), 1, &named) {
             Err(e) => {
                 fx_bad += 1;
                 row.worse("fails");
@@ -207,7 +211,20 @@ fn check(disc: &sh2_core::fileio::Disc, path: &str, decode_all: bool) -> Row {
                 row.add_owner("FX");
             }
             Ok(r) => {
-                for k in r.unknown.keys().chain(r.unhandled.keys()).chain(r.ignored.keys()) {
+                // a name `lsdGetModel` did not find: the scene's map (MPS track name; the player does not register maps -> CS2) or nothing (FX2)
+                for n in &r.missing_names {
+                    row.worse("stub");
+                    if map_names.iter().any(|m| m.eq_ignore_ascii_case(n)) {
+                        missing.insert(format!("fx lsdGetModel '{n}' = this scene's map track (not in named_models)"));
+                        row.add_owner("CS");
+                    } else {
+                        missing.insert(format!("fx lsdGetModel '{n}' (no model or map of this scene)"));
+                        row.add_owner("FX");
+                    }
+                }
+                // the scene counts every miss as `lsdGetModel(2900)` too: listed above by name
+                let by_name = !r.missing_names.is_empty();
+                for k in r.unknown.keys().chain(r.unhandled.keys()).chain(r.ignored.keys()).filter(|k| !(by_name && k.starts_with("lsdGetModel("))) {
                     missing.insert(format!("fx {k}"));
                     row.worse("stub");
                     row.add_owner("FX");
@@ -229,6 +246,9 @@ fn check(disc: &sh2_core::fileio::Disc, path: &str, decode_all: bool) -> Row {
         }
     }
     row.kv("maps", data.map_tracks.len());
+    if !map_names.is_empty() {
+        row.kv("map_names", map_names.join(","));
+    }
     // captions
     for ((t, lines), (_, font)) in data.captions.iter().zip(data.caption_fonts.iter()) {
         if !lines.is_empty() && font.is_none() {

@@ -1,5 +1,5 @@
-story graph	ok	372 of 559 maps reachable from OP_00_U through jumps the headless scripts made (+151 more through static references)		maps=559;runtime_reachable=372;static_reachable=523;runtime_edges=1056;disc2_only_scenes=75;maps_needing_disc2=25
-jump AD_00_DB -> AD_00_DB:3	stub	entry 3 not in AD_00_DB (1 entry points)	FS	entries=1
+story graph	ok	372 of 559 maps reachable from OP_00_U through jumps the headless scripts made (+151 more through static references)		maps=559;runtime_reachable=372;static_reachable=523;runtime_edges=1072;disc2_only_scenes=75;maps_needing_disc2=25
+jump AD_00_DB -> AD_00_DB:3	stub	entry 3 not in AD_00_DB (1 entry points)	FS2	entries=1
 jump AD_00_DB -> AD_16_U:0	ok			entries=3
 jump AD_00_U -> AD_02_U:0	ok			entries=9
 jump AD_00_U -> AD_09_U:1	ok			entries=3
@@ -37,7 +37,7 @@ jump AI_05_U -> AI_00_U:0	ok			entries=67
 jump AI_05_U -> AI_05_U:0	ok			entries=4
 jump AI_06_U -> AI_06_U:0	ok			entries=30
 jump AI_06_U -> GY_00_D:0	ok			entries=8
-jump AP_00_DB -> AP_00_DB:3	stub	entry 3 not in AP_00_DB (1 entry points)	FS	entries=1
+jump AP_00_DB -> AP_00_DB:3	stub	entry 3 not in AP_00_DB (1 entry points)	FS2	entries=1
 jump AP_00_DB -> AP_02_U:0	ok			entries=4
 jump AP_00_N -> AP_09_U:1	ok			entries=2
 jump AP_00_U -> AP_02_A:0	ok			entries=3
@@ -136,7 +136,7 @@ jump CA_01_U -> CA_02_U:0	ok			entries=33
 jump CA_01_U -> CA_03_U:0	ok			entries=16
 jump CA_02_U -> CA_01_U:2	ok			entries=12
 jump CA_03_U -> CA_01_U:1	ok			entries=12
-jump DB_00_U -> GY_00_DB:0	fails	target map GY_00_DB is not on the disc	FS	
+jump DB_00_U -> GY_00_DB:0	fails	target map GY_00_DB is not on the disc	FS2	
 jump DC_01_U -> DC_01_U:0	ok			entries=1
 jump DC_01_U -> OP_01_U:0	ok			entries=1
 jump DH_00_DB -> DH_02_U:0	ok			entries=23
@@ -165,7 +165,7 @@ jump DO_05_U -> DO_00_U:0	ok			entries=9
 jump DO_05_U -> DO_04_U:1	ok			entries=13
 jump DO_06_U -> AR_15_U:0	ok			entries=11
 jump DO_06_U -> DO_02_U:5	ok			entries=18
-jump FI_00_DB -> FI_00_DB:3	stub	entry 3 not in FI_00_DB (1 entry points)	FS	entries=1
+jump FI_00_DB -> FI_00_DB:3	stub	entry 3 not in FI_00_DB (1 entry points)	FS2	entries=1
 jump FI_00_DB -> FI_00_U:0	ok			entries=12
 jump FI_00_U -> FI_01_U:1	ok			entries=10
 jump FI_01_U -> FI_00_U:0	ok			entries=12
@@ -192,7 +192,7 @@ jump FU_16_U -> FU_17_U:0	ok			entries=18
 jump FU_17_A -> FU_16_U:1	ok			entries=2
 jump FU_17_A -> FU_18_U:0	ok			entries=2
 jump FU_17_U -> FU_17_A:0	ok			entries=18
-jump FU_17_U -> FU_17_U:232	stub	entry 232 not in FU_17_U (18 entry points)	FS	entries=18
+jump FU_17_U -> FU_17_U:232	stub	entry 232 not in FU_17_U (18 entry points)	FS2	entries=18
 jump FU_17_U -> FU_17_U:3	ok			entries=18
 jump FU_18_U -> FU_18_U:0	ok			entries=2
 jump FU_18_U -> FU_18_U:1	ok			entries=2
@@ -212,7 +212,7 @@ jump GI_02_U -> GI_00_U:2	ok			entries=17
 jump GI_03_N -> GI_00_N:1	ok			entries=17
 jump GI_03_N -> GI_03_R:0	ok			entries=37
 jump GI_04_R -> GI_03_N:1	ok			entries=24
-jump GT_00_DB -> %i45:1496347685	fails	target map %i45 is not on the disc	FS	
+jump GT_00_DB -> %i45:1496347685	fails	target map %i45 is not on the disc	FS2	
 jump GT_00_DB -> GT_10_U:0	ok			entries=5
 jump GT_01_U -> GT_02_U:0	ok			entries=2
 jump GT_01_U -> GT_03_U:0	ok			entries=10
@@ -410,7 +410,7 @@ jump IF_23_D -> IF_24_U:0	ok			entries=3
 jump IF_23_U -> IF_23_D:0	ok			entries=8
 jump IF_24_U -> IF_23_D:1	ok			entries=8
 jump IF_24_U -> IF_25_U:0	ok			entries=1
-jump IF_25_U -> IF_25_U:1	stub	entry 1 not in IF_25_U (1 entry points)	FS	entries=1
+jump IF_25_U -> IF_25_U:1	stub	entry 1 not in IF_25_U (1 entry points)	FS2	entries=1
 jump IK_00_U -> IK_00_U:0	ok			entries=7
 jump IK_00_U -> IK_01_U:0	ok			entries=7
 jump IK_00_U -> IK_02_U:0	ok			entries=6
@@ -441,7 +441,7 @@ jump IN_06_U -> IN_04_U:1	ok			entries=60
 jump IN_06_U -> IN_06_U:5	ok			entries=74
 jump KA_00_U -> KA_05_U:1	ok			entries=19
 jump KA_01_U -> IN_02_U:0	ok			entries=38
-jump KA_01_U -> KA_01_U:1	stub	entry 1 not in KA_01_U (1 entry points)	FS	entries=1
+jump KA_01_U -> KA_01_U:1	stub	entry 1 not in KA_01_U (1 entry points)	FS2	entries=1
 jump KA_02_U -> KA_02_U:13	ok			entries=20
 jump KA_02_U -> KA_03_U:2	ok			entries=30
 jump KA_03_U -> KA_02_U:0	ok			entries=20
@@ -478,34 +478,48 @@ jump MI_02_U -> MI_01_U:1	ok			entries=4
 jump MI_02_U -> MI_02_U:0	ok			entries=30
 jump MI_02_U -> MI_03_U:0	ok			entries=6
 jump MI_02_U -> MI_11_U:0	ok			entries=8
+jump MI_03_U -> MI_00_U:0	ok			entries=5
 jump MI_03_U -> MI_02_U:2	ok			entries=30
 jump MI_03_U -> MI_04_U:0	ok			entries=5
 jump MI_03_U -> MI_05_U:0	ok			entries=8
+jump MI_04_U -> MI_00_U:0	ok			entries=5
 jump MI_04_U -> MI_03_U:1	ok			entries=6
 jump MI_04_U -> MI_06_U:0	ok			entries=6
+jump MI_05_U -> MI_00_U:0	ok			entries=5
 jump MI_05_U -> MI_03_U:2	ok			entries=6
 jump MI_05_U -> MI_14_U:1	ok			entries=9
+jump MI_06_U -> MI_00_U:0	ok			entries=5
 jump MI_06_U -> MI_04_U:1	ok			entries=5
 jump MI_06_U -> MI_07_U:0	ok			entries=7
 jump MI_07_U -> MI_06_U:2	ok			entries=6
+jump MI_07_U -> MI_07_U:0	ok			entries=7
+jump MI_08_U -> MI_00_U:0	ok			entries=5
+jump MI_09_U -> MI_00_U:0	ok			entries=5
 jump MI_09_U -> MI_10_U:0	ok			entries=6
+jump MI_10_U -> MI_00_U:0	ok			entries=5
 jump MI_10_U -> MI_09_U:0	ok			entries=4
 jump MI_10_U -> MI_11_U:1	ok			entries=8
 jump MI_10_U -> MI_12_U:0	ok			entries=4
+jump MI_11_U -> MI_00_U:0	ok			entries=5
 jump MI_11_U -> MI_10_U:1	ok			entries=6
 jump MI_11_U -> MI_13_U:0	ok			entries=4
+jump MI_12_U -> MI_00_U:0	ok			entries=5
 jump MI_12_U -> MI_10_U:2	ok			entries=6
+jump MI_13_U -> MI_00_U:0	ok			entries=5
 jump MI_13_U -> MI_11_U:2	ok			entries=8
 jump MI_13_U -> MI_14_U:0	ok			entries=9
+jump MI_14_U -> MI_00_U:0	ok			entries=5
 jump MI_14_U -> MI_05_U:2	ok			entries=8
 jump MI_14_U -> MI_13_U:2	ok			entries=4
 jump MI_14_U -> MI_15_U:25	ok			entries=30
 jump MI_15_U -> MI_14_U:2	ok			entries=9
+jump MI_15_U -> MI_15_U:0	ok			entries=30
 jump MI_15_U -> MI_15_U:1	ok			entries=30
 jump MI_15_U -> MI_16_U:0	ok			entries=13
 jump MI_16_U -> MI_15_U:2	ok			entries=30
+jump MI_17_U -> MI_00_U:0	ok			entries=5
 jump MI_17_U -> MI_11_U:3	ok			entries=8
-jump MS_00_DB -> MS_00_DB:3	stub	entry 3 not in MS_00_DB (1 entry points)	FS	entries=1
+jump MS_00_DB -> MS_00_DB:3	stub	entry 3 not in MS_00_DB (1 entry points)	FS2	entries=1
 jump MS_00_DB -> MS_00_U:0	ok			entries=2
 jump MS_00_U -> MS_01_U:0	ok			entries=4
 jump MS_01_U -> MS_00_U:0	ok			entries=2
@@ -556,7 +570,7 @@ jump MS_47_U -> MS_46_U:0	ok			entries=6
 jump MS_47_U -> MS_48_U:0	ok			entries=7
 jump MS_48_U -> MS_37_U:2	ok			entries=5
 jump MS_49_U -> MS_48_U:2	ok			entries=7
-jump MU_00_DB -> MU_00_DB:3	stub	entry 3 not in MU_00_DB (1 entry points)	FS	entries=1
+jump MU_00_DB -> MU_00_DB:3	stub	entry 3 not in MU_00_DB (1 entry points)	FS2	entries=1
 jump MU_00_DB -> MU_00_U:0	ok			entries=6
 jump ND_00_U -> ND_01_U:0	ok			entries=5
 jump ND_00_U -> WE_00_U:2	ok			entries=23
@@ -604,6 +618,7 @@ jump PA_03_U -> PA_06_U:0	ok			entries=3
 jump PA_03_U -> SM_20_U:0	ok			entries=30
 jump PA_03_U -> SU_22_U:1	ok			entries=24
 jump PA_04_U -> PA_01_U:1	ok			entries=44
+jump PA_04_U -> PA_04_U:0	ok			entries=12
 jump PA_05_U -> PA_02_U:1	ok			entries=6
 jump PA_06_U -> PA_03_U:1	ok			entries=37
 jump PA_06_U -> PA_07_U:0	ok			entries=2
@@ -690,7 +705,7 @@ jump RO_09_U -> RO_08_U:0	ok			entries=3
 jump RO_09_U -> RO_10_U:0	ok			entries=1
 jump RO_09_U -> RO_11_U:0	ok			entries=3
 jump RO_10_U -> RO_09_U:1	ok			entries=3
-jump RO_10_U -> RO_10_U:1	stub	entry 1 not in RO_10_U (1 entry points)	FS	entries=1
+jump RO_10_U -> RO_10_U:1	stub	entry 1 not in RO_10_U (1 entry points)	FS2	entries=1
 jump RO_11_U -> RO_09_U:2	ok			entries=3
 jump RO_11_U -> RO_12_U:0	ok			entries=1
 jump RO_11_U -> RO_13_U:0	ok			entries=3
@@ -733,7 +748,7 @@ jump RU_05_U -> RU_03_U:2	ok			entries=8
 jump RU_05_U -> RU_05_U:17	ok			entries=20
 jump RU_05_U -> RU_06_U:0	ok			entries=3
 jump RU_06_N -> RU_06_N:0	ok			entries=1
-jump RU_06_N -> RU_06_N:1	stub	entry 1 not in RU_06_N (1 entry points)	FS	entries=1
+jump RU_06_N -> RU_06_N:1	stub	entry 1 not in RU_06_N (1 entry points)	FS2	entries=1
 jump RU_06_U -> RU_05_U:3	ok			entries=20
 jump SA_00_U -> GY_00_D:0	ok			entries=8
 jump SA_00_U -> SA_03_U:0	ok			entries=3
@@ -753,6 +768,7 @@ jump SE_09_U -> SE_09_U:0	ok			entries=4
 jump SE_10_U -> SE_11_U:1	ok			entries=2
 jump SE_11_U -> SE_10_U:1	ok			entries=2
 jump SE_15_U -> SE_01_9:0	ok			entries=3
+jump SH_00_U -> SH_00_U:2	ok			entries=9
 jump SH_00_U -> SH_01_U:0	ok			entries=3
 jump SH_01_U -> SH_00_U:0	ok			entries=9
 jump SH_01_U -> SH_00_U:1	ok			entries=9
@@ -849,7 +865,8 @@ jump SM_31_U -> SM_30_U:1	ok			entries=9
 jump SM_32_U -> SM_31_U:1	ok			entries=6
 jump SM_32_U -> SM_33_U:0	ok			entries=9
 jump SM_33_U -> SM_32_U:1	ok			entries=3
-jump SO_00_DB -> SO_00_DB:3	stub	entry 3 not in SO_00_DB (1 entry points)	FS	entries=1
+jump SM_33_U -> SM_33_U:8	ok			entries=9
+jump SO_00_DB -> SO_00_DB:3	stub	entry 3 not in SO_00_DB (1 entry points)	FS2	entries=1
 jump SO_00_DB -> SO_00_U:0	ok			entries=1
 jump SO_00_U -> GT_10_U:0	ok			entries=5
 jump SU_00_A -> SU_01_U:0	ok			entries=5
@@ -879,7 +896,7 @@ jump SU_08_U -> SU_10_U:0	ok			entries=3
 jump SU_08_U -> SU_10_U:2	ok			entries=3
 jump SU_09_U -> SU_08_U:1	ok			entries=4
 jump SU_10_A -> SU_07_U:1	ok			entries=3
-jump SU_10_A -> SU_10_A:1	stub	entry 1 not in SU_10_A (1 entry points)	FS	entries=1
+jump SU_10_A -> SU_10_A:1	stub	entry 1 not in SU_10_A (1 entry points)	FS2	entries=1
 jump SU_10_S -> SU_03_U:0	ok			entries=2
 jump SU_10_S -> SU_08_U:2	ok			entries=4
 jump SU_10_U -> SU_03_U:0	ok			entries=2
@@ -902,7 +919,7 @@ jump SU_30_U -> BO_01_U:1	ok			entries=4
 jump SU_30_U -> SU_20_U:0	ok			entries=6
 jump SU_31_U -> SU_22_U:0	ok			entries=24
 jump SU_31_U -> SU_22_U:2	ok			entries=24
-jump TD_00_DB -> TD_00_DB:3	stub	entry 3 not in TD_00_DB (1 entry points)	FS	entries=1
+jump TD_00_DB -> TD_00_DB:3	stub	entry 3 not in TD_00_DB (1 entry points)	FS2	entries=1
 jump TD_00_DB -> TD_22_U:0	ok			entries=4
 jump TD_00_U -> TD_21_U:0	ok			entries=3
 jump TD_00_U -> TD_22_U:1	ok			entries=4
@@ -1005,22 +1022,22 @@ world map point 01 AP_00_U	ok			entry=0
 world map point 02 DO_04_U	ok			entry=0
 world map point 03 AR_15_U	ok			entry=0
 world map point 05 BO_01_U	ok			entry=2
-world map point 06 PA_01_U	stub	field check stub: bg effect types not drawn {200}	FX	entry=2
-world map point 07 PA_03_U	stub	field check stub: 2 stuck jobs: event 0x14(1) still running after 3000 ticks, last calls GetFieldData(c2.24)[23, 0, 0] => 0x1 | event 0x19(1) still running after 3000 ticks, last	FS	entry=2
-world map point 08 PA_02_A	stub	field check stub: 1 stuck jobs: event 0xd(1) still running after 3000 ticks, last calls GetCharacterInfo(c2.00)[5, d] => 0xffffffff	FS	entry=2
+world map point 06 PA_01_U	ok			entry=2
+world map point 07 PA_03_U	ok			entry=2
+world map point 08 PA_02_A	stub	field check stub: 3 stuck jobs: event 0xd(1) still running after 3000 + 1500 explore ticks [ip 0x2a69, suspended in the call], last calls GetCharacterInfo(c2.00)[5, d] => 0xfffff	FS2	entry=2
 world map point 09 RU_03_U	ok			entry=0
 world map point 10 WI_12_U	ok			entry=0
 world map point 11 SA_01_U	ok			entry=0
 world map point 12 RO_00_U	ok			entry=0
 world map point 13 WE_00_U	ok			entry=0
-world map point 14 FI_01_U	stub	field check stub: 1 stuck jobs: event 0x4(1) still running after 3000 ticks, last calls CloseWindow(c2.35)[0, a] < SetActiveWindow(c2.31) < CloseWindow(c2.35) < SetActiveWindow(c	FS	entry=0
+world map point 14 FI_01_U	ok			entry=0
 world map point 15 CA_00_U	ok			entry=0
 world map point 16 AD_16_U	ok			entry=0
 world map point 17 AZ_10_N	ok			entry=0
 world map point 18 SM_00_U	ok			entry=0
 world map point 19 PE_00_N	ok			entry=0
 world map point 20 SK_00_U	ok			entry=0
-world map point 21 GT_10_U	stub	field check stub: unanswered selectors: GetFieldData sel 0x26 (returns -1); 3 stuck jobs: start still running after 3000 ticks, last calls SetCharacterDir(c2.16)[8, 83, 3, 0] < C	FS	entry=0
+world map point 21 GT_10_U	stub	field check stub: 6 stuck jobs: event 0x5(1) still running after 3000 + 1500 explore ticks [loop ip 0x6c5c..0xaa4e, get_pad byte 0xac in the loop, wait byte 0xaa in the loop], la	FS2	entry=0
 world map point 23 RE_03_U	ok			entry=0
 world map point 24 YO_01_U	ok			entry=0
 world map point 25 MI_00_U	ok			entry=0
@@ -1035,14 +1052,14 @@ world map point 34 FU_00_U	ok			entry=0
 world map point 35 QG_14_U	ok			entry=0
 world map point 36 AI_05_U	ok			entry=0
 world map point 37 AG_00_U	ok			entry=0
-world map point 38 SH_00_U	stub	field check stub: 2 stuck jobs: start still running after 3000 ticks, last calls GetFieldData(c2.24)[23, 0, 0] => 0x1 | event 0x4(1) still running after 3000 ticks, last calls Ge	FS	entry=0
+world map point 38 SH_00_U	ok			entry=0
 world map point 39 MS_25_U	ok			entry=0
 world map point 40 SE_15_U	ok			entry=0
 world map point 41 DH_06_U	ok			entry=0
-world map point 42 BO_02_U	stub	field check stub: 7 stuck jobs: event 0x0(1) still running after 3000 ticks, last calls GetFieldData(c2.24)[23, 0, 0] => 0x1 | event 0x3(1) still running after 3000 ticks, last c	FS	entry=0
-world map point 43 DB_00_U	stub	field check stub: 12 stuck jobs: start still running after 3000 ticks, last calls SpecialMenu(c2.7f)[0, 0] < SetManual(c2.1c) < SetFader1(c2.28) < SavePoint(c2.7e) | event 0x1(1)	FS	entry=0
+world map point 42 BO_02_U	stub	field check stub: 6 stuck jobs: event 0x3(1) still running after 3000 + 1500 explore ticks [loop ip 0x1ae..0x5dd8, get_pad byte 0xac in the loop, wait byte 0xaa in the loop], las	FS2	entry=0
+world map point 43 DB_00_U	stub	field check stub: 31 stuck jobs: start still running after 3000 + 1500 explore ticks [loop ip 0x5b65..0x5bec, get_pad byte 0xac in the loop], last calls SpecialMenu(c2.7f)[0, 0] 	FS2	entry=0
 world map point 44 IF_11_U	ok			entry=0
-world map point 45 JU_01_U	fails	JU_01_U is not on the disc	FS	entry=0
+world map point 45 JU_01_U	fails	JU_01_U is not on the disc	FS2	entry=0
 chapter flag 0x0008 first half: Opening	untested	no map script sets this flag with a constant (set by a cut scene / computed / debug only?)		set_by=
 chapter flag 0x0009 first half: Apoina part A	ok	set in AP_06_U (chain from OP_00_U) by the FS story walk		
 chapter flag 0x000a first half: Domremy	ok	set in DO_06_U (chain from OP_00_U) by the FS story walk		
@@ -1090,55 +1107,55 @@ chapter flag 0x0046 second half: Nihonbashi 1	ok	set in HUB_NA (chain from OP_00
 chapter flag 0x0047 second half: Todo lab 2	ok	set in TD_00_U (reachable, depth 11); needs disc 2 (TD_00_U: disc-2 scenes N101)		set_by=TD_00_U;needs_disc2=TD_00_U: disc-2 scenes N101
 chapter flag 0x0048 second half: Muhyoan 2	ok	set in MU_00_U (chain from OP_00_U, Mikasa key puzzle skipped) by the FS story walk		
 chapter flag 0x0049 second half: Nihonbashi 2	ok	set in GI_01_N (chain from OP_00_U, Mikasa keys and Todo lab 2 power skipped) by the FS story walk		
-chapter flag 0x0064 hidden dungeon: Sesshoseki	untested	set in SE_09_U: reachable only through static references, and no job of SE_09_U sets it headless with the earlier chapter flags set (needs more state)	FS	set_by=SE_09_U
-chapter flag 0x0065 hidden dungeon: Doll house	untested	set in DH_00_U: reachable only through static references, and no job of DH_00_U sets it headless with the earlier chapter flags set (needs more state)	FS	set_by=DH_00_U
+chapter flag 0x0064 hidden dungeon: Sesshoseki	untested	set in SE_09_U: reachable only through static references, and no job of SE_09_U sets it headless with the earlier chapter flags set (needs more state)	FS2	set_by=SE_09_U
+chapter flag 0x0065 hidden dungeon: Doll house	untested	set in DH_00_U: reachable only through static references, and no job of DH_00_U sets it headless with the earlier chapter flags set (needs more state)	FS2	set_by=DH_00_U
 chapter flag 0x0066 hidden dungeon: Schwarzwald	ok	set in SH_04_U (event 0x0(1)) when the map is entered with the earlier chapter flags set; the map is reachable only through static references		set_by=FI_00_DB,SH_04_U
 chapter flag 0x0067 hidden dungeon: wakuraba (cut)	untested	no map script sets this flag with a constant (set by a cut scene / computed / debug only?)		set_by=
-chapter flag 0x0068 hidden dungeon: Nemeton deepest level	untested	set in ND_22_U: reachable only through static references, and no job of ND_22_U sets it headless with the earlier chapter flags set (needs more state)	FS	set_by=ND_22_U
-chapter flag 0x0069 hidden dungeon: Ring Tower	untested	set in HUB_NA: reachable only through static references, and no job of HUB_NA sets it headless with the earlier chapter flags set (needs more state)	FS	set_by=HUB_NA;needs_disc2=HUB_NA: disc-2 scenes MOVIE_F N121 N122
+chapter flag 0x0068 hidden dungeon: Nemeton deepest level	untested	set in ND_22_U: reachable only through static references, and no job of ND_22_U sets it headless with the earlier chapter flags set (needs more state)	FS2	set_by=ND_22_U
+chapter flag 0x0069 hidden dungeon: Ring Tower	untested	set in HUB_NA: reachable only through static references, and no job of HUB_NA sets it headless with the earlier chapter flags set (needs more state)	FS2	set_by=HUB_NA;needs_disc2=HUB_NA: disc-2 scenes MOVIE_F N121 N122
 chapter flag 0x00a0 Wolfbout: Tetsu	ok	set in PA_01_U (reachable, depth 2)		set_by=PA_01_U,SU_22_DB
 chapter flag 0x00a1 Wolfbout: Terry	ok	set in WI_17_U (reachable, depth 8)		set_by=SU_22_DB,WI_17_U
-chapter flag 0x00a2 Wolfbout: Jerome	untested	set in SU_22_DB which nothing reaches from OP_00_U	FS	set_by=SU_22_DB
-chapter flag 0x00a3 Wolfbout: Henri	untested	set in AZ_09_D: reachable only through static references, and no job of AZ_09_D sets it headless with the earlier chapter flags set (needs more state)	FS	set_by=AZ_09_D,SU_22_DB
-chapter flag 0x00a4 Wolfbout: Philip	untested	set in SM_21_U: reachable only through static references, and no job of SM_21_U sets it headless with the earlier chapter flags set (needs more state)	FS	set_by=SM_21_U,SU_22_DB
+chapter flag 0x00a2 Wolfbout: Jerome	untested	set in SU_22_DB which nothing reaches from OP_00_U	FS2	set_by=SU_22_DB
+chapter flag 0x00a3 Wolfbout: Henri	untested	set in AZ_09_D: reachable only through static references, and no job of AZ_09_D sets it headless with the earlier chapter flags set (needs more state)	FS2	set_by=AZ_09_D,SU_22_DB
+chapter flag 0x00a4 Wolfbout: Philip	untested	set in SM_21_U: reachable only through static references, and no job of SM_21_U sets it headless with the earlier chapter flags set (needs more state)	FS2	set_by=SM_21_U,SU_22_DB
 chapter flag 0x00a5 Wolfbout: R3	ok	set in PE_01_N (reachable, depth 5)		set_by=PE_01_N,SU_22_DB
-chapter flag 0x00a6 Wolfbout: Necross	untested	set in SU_22_DB which nothing reaches from OP_00_U	FS	set_by=SU_22_DB
+chapter flag 0x00a6 Wolfbout: Necross	untested	set in SU_22_DB which nothing reaches from OP_00_U	FS2	set_by=SU_22_DB
 chapter flag 0x00a7 Wolfbout: triple star	ok	set in DO_04_U (reachable, depth 2)		set_by=DO_04_U,SU_22_DB
-chapter flag 0x00a8 Wolfbout: Kibolin	untested	set in SU_22_DB which nothing reaches from OP_00_U	FS	set_by=SU_22_DB
-chapter flag 0x00a9 Wolfbout: Eleonore	untested	set in SU_22_DB which nothing reaches from OP_00_U	FS	set_by=SU_22_DB
+chapter flag 0x00a8 Wolfbout: Kibolin	untested	set in SU_22_DB which nothing reaches from OP_00_U	FS2	set_by=SU_22_DB
+chapter flag 0x00a9 Wolfbout: Eleonore	untested	set in SU_22_DB which nothing reaches from OP_00_U	FS2	set_by=SU_22_DB
 chapter flag 0x00aa Wolfbout: Matsunaga	ok	set in IN_03_U (reachable, depth 4); needs disc 2 (IN_03_U: disc-2 scenes MOVIE_E N109A)		set_by=IN_03_U,SU_22_DB;needs_disc2=IN_03_U: disc-2 scenes MOVIE_E N109A
 chapter flag 0x00ab Wolfbout: Robo	untested	no map script sets this flag with a constant (set by a cut scene / computed / debug only?)		set_by=
-chapter flag 0x00ac Wolfbout: Henri 2	untested	set in IN_00_DB which nothing reaches from OP_00_U	FS	set_by=IN_00_DB,MS_00_DB
+chapter flag 0x00ac Wolfbout: Henri 2	untested	set in IN_00_DB which nothing reaches from OP_00_U	FS2	set_by=IN_00_DB,MS_00_DB
 chapter flag 0x00ad Wolfbout: Robo 2	ok	set in KT_01_U (reachable, depth 3)		set_by=KT_01_U
 chapter flag 0x00ae Wolfbout: Phantom Wolf	ok	set in PA_01_U (reachable, depth 2)		set_by=MS_00_DB,PA_01_U
 chapter flag 0x0054 last dungeon appears	ok	set in IN_03_U (reachable, depth 4); needs disc 2 (IN_03_U: disc-2 scenes MOVIE_E N109A)		set_by=IN_00_DB,IN_03_U;needs_disc2=IN_03_U: disc-2 scenes MOVIE_E N109A
-map AD_00_DB	untested	referenced, but not from anything reachable from OP_00_U	FS	
+map AD_00_DB	untested	referenced, but not from anything reachable from OP_00_U	FS2	
 map AD_00_U	ok			depth=3
 map AD_01_U	ok			depth=6
 map AD_02_U	ok			depth=4
 map AD_03_U	ok	played by the FS story walk		
 map AD_04_U	ok			depth=5
-map AD_05_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map AD_05_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
 map AD_06_U	ok	played by the FS story walk		
 map AD_07_U	ok	played by the FS story walk		
 map AD_08_U	ok	played by the FS story walk		
 map AD_09_U	ok			depth=4
-map AD_10_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map AD_10_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
 map AD_11_U	ok			depth=6
-map AD_12_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map AD_13_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map AD_14_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map AD_15_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map AD_12_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map AD_13_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map AD_14_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map AD_15_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
 map AD_16_U	ok			depth=2
 map AG_00_U	ok	needs disc 2: disc-2 scenes G03		needs_disc2=disc-2 scenes G03;depth=2
 map AI_00_U	ok			depth=3
-map AI_01_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map AI_02_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map AI_03_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map AI_04_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map AI_01_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map AI_02_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map AI_03_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map AI_04_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
 map AI_05_U	ok	needs disc 2: disc-2 scenes MOVIE_G		needs_disc2=disc-2 scenes MOVIE_G;depth=2
-map AI_06_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map AP_00_DB	untested	referenced, but not from anything reachable from OP_00_U	FS	
+map AI_06_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map AP_00_DB	untested	referenced, but not from anything reachable from OP_00_U	FS2	
 map AP_00_N	ok			depth=5
 map AP_00_U	ok			depth=2
 map AP_01_U	untested	no script or world map point names it (unused / debug / reached by a computed name)		
@@ -1196,14 +1213,14 @@ map CA_03_U	ok			depth=4
 map DB_00_U	ok	needs disc 2: DiskChange		needs_disc2=DiskChange;depth=2
 map DC_01_U	ok	played by the FS story walk		needs_disc2=DiskChange
 map DH_00_DB	untested	debug map (only the debug menu reaches it)		
-map DH_00_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map DH_00_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
 map DH_01_U	ok			depth=4
 map DH_02_U	ok			depth=3
 map DH_03_U	ok			depth=4
 map DH_04_U	ok			depth=5
 map DH_05_U	ok			depth=5
 map DH_06_U	ok			depth=2
-map DH_07_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map DH_07_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
 map DO_00_DB	untested	debug map (only the debug menu reaches it)		
 map DO_00_U	ok			depth=4
 map DO_01_U	ok			depth=5
@@ -1212,7 +1229,7 @@ map DO_04_U	ok			depth=2
 map DO_05_U	ok			depth=3
 map DO_06_U	ok			depth=7
 map ED_00_U	ok	played by the FS story walk		needs_disc2=disc-2 scenes N129
-map FI_00_DB	untested	referenced, but not from anything reachable from OP_00_U	FS	
+map FI_00_DB	untested	referenced, but not from anything reachable from OP_00_U	FS2	
 map FI_00_U	ok			depth=3
 map FI_01_U	ok			depth=2
 map FU_00_U	ok			depth=2
@@ -1227,14 +1244,14 @@ map FU_08_U	ok	played by the FS story walk
 map FU_09_U	ok	played by the FS story walk		
 map FU_10_U	ok	played by the FS story walk		
 map FU_11_U	ok	played by the FS story walk		
-map FU_12_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map FU_13_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map FU_14_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map FU_15_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map FU_16_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map FU_17_A	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map FU_17_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map FU_18_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	needs_disc2=disc-2 scenes N113
+map FU_12_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map FU_13_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map FU_14_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map FU_15_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map FU_16_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map FU_17_A	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map FU_17_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map FU_18_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	needs_disc2=disc-2 scenes N113
 map GB_00_U	ok			depth=2
 map GB_01_U	ok			depth=3
 map GB_DB_U	untested	debug map (only the debug menu reaches it)		
@@ -1244,9 +1261,9 @@ map GI_01_N	ok	played by the FS story walk
 map GI_01_U	ok			depth=4
 map GI_02_N	ok	played by the FS story walk		
 map GI_02_U	ok			depth=4
-map GI_03_N	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map GI_03_R	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map GI_04_R	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map GI_03_N	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map GI_03_R	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map GI_04_R	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
 map GI_05_N	ok	played by the FS story walk		needs_disc2=disc-2 scenes N095
 map GT_00_DB	untested	debug map (only the debug menu reaches it)		
 map GT_00_U	untested	no script or world map point names it (unused / debug / reached by a computed name)		
@@ -1267,8 +1284,8 @@ map GY_03_U	ok			depth=4
 map GY_04_U	ok			depth=5
 map GY_05_F	ok			depth=4
 map GY_05_U	ok			depth=6
-map GY_06_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	needs_disc2=disc-2 scenes N125
-map GY_07_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map GY_06_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	needs_disc2=disc-2 scenes N125
+map GY_07_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
 map GY_08_U	ok			depth=5
 map GY_09_U	ok			depth=5
 map GY_10_U	ok			depth=5
@@ -1291,7 +1308,7 @@ map HE_07_U	ok			depth=3
 map HE_08_N	ok	played by the FS story walk		
 map HE_09_N	ok			depth=10
 map HE_10_N	ok	played by the FS story walk		
-map HE_11_M	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map HE_11_M	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
 map HE_11_N	ok			depth=11
 map HE_12_N	ok			depth=9
 map HE_12_O	ok			depth=7
@@ -1316,7 +1333,7 @@ map HE_25_U	ok			depth=5
 map HE_26_N	ok			depth=12
 map HE_26_U	ok			depth=5
 map HE_28_N	ok			depth=10
-map HUB_NA	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	needs_disc2=disc-2 scenes MOVIE_F N121 N122
+map HUB_NA	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	needs_disc2=disc-2 scenes MOVIE_F N121 N122
 map IF_00_DB	untested	debug map (only the debug menu reaches it)		
 map IF_00_U	ok			depth=6
 map IF_01_U	ok			depth=7
@@ -1347,7 +1364,7 @@ map IK_01_U	ok			depth=5
 map IK_02_U	ok			depth=5
 map IK_03_U	ok	needs disc 2: disc-2 scenes N090A		needs_disc2=disc-2 scenes N090A;depth=6
 map IK_DB_U	untested	debug map (only the debug menu reaches it)		
-map IN_00_DB	untested	referenced, but not from anything reachable from OP_00_U	FS	
+map IN_00_DB	untested	referenced, but not from anything reachable from OP_00_U	FS2	
 map IN_00_U	ok	needs disc 2: disc-2 scenes N108		needs_disc2=disc-2 scenes N108;depth=2
 map IN_01_U	ok			depth=3
 map IN_02_U	ok			depth=3
@@ -1378,7 +1395,7 @@ map MI_04_U	ok			depth=6
 map MI_05_U	ok			depth=6
 map MI_06_U	ok			depth=7
 map MI_07_U	ok			depth=8
-map MI_08_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map MI_08_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
 map MI_09_U	ok			depth=7
 map MI_10_U	ok			depth=6
 map MI_11_U	ok			depth=5
@@ -1387,10 +1404,10 @@ map MI_13_U	ok			depth=6
 map MI_14_U	ok			depth=7
 map MI_15_U	ok			depth=8
 map MI_16_U	ok			depth=9
-map MI_17_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map MI_17_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
 map MI_DB_U	untested	debug map (only the debug menu reaches it)		
 map MOVIE	ok	played by the FS story walk		
-map MS_00_DB	untested	referenced, but not from anything reachable from OP_00_U	FS	
+map MS_00_DB	untested	referenced, but not from anything reachable from OP_00_U	FS2	
 map MS_00_U	ok	played by the FS story walk		
 map MS_01_U	ok	played by the FS story walk		
 map MS_02_U	ok	played by the FS story walk		
@@ -1411,23 +1428,23 @@ map MS_30_U	ok			depth=6
 map MS_31_U	ok			depth=7
 map MS_35_U	ok			depth=13
 map MS_36_U	ok			depth=12
-map MS_37_D	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map MS_37_D	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
 map MS_37_U	ok			depth=11
-map MS_38_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map MS_39_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	needs_disc2=disc-2 scenes G05
+map MS_38_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map MS_39_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	needs_disc2=disc-2 scenes G05
 map MS_42_U	ok			depth=16
 map MS_43_U	ok			depth=15
 map MS_46_U	ok			depth=14
 map MS_47_U	ok			depth=15
 map MS_48_U	ok			depth=10
 map MS_49_U	ok			depth=9
-map MU_00_DB	untested	referenced, but not from anything reachable from OP_00_U	FS	
+map MU_00_DB	untested	referenced, but not from anything reachable from OP_00_U	FS2	
 map MU_00_U	ok			depth=2
 map ND_00_U	ok			depth=4
 map ND_01_U	ok			depth=5
 map ND_02_U	ok			depth=6
 map ND_03_U	ok			depth=7
-map ND_04_A	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map ND_04_A	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
 map ND_04_U	ok			depth=8
 map ND_05_U	ok			depth=9
 map ND_06_U	ok			depth=10
@@ -1439,9 +1456,9 @@ map ND_11_U	untested	no script or world map point names it (unused / debug / rea
 map ND_12_U	untested	no script or world map point names it (unused / debug / reached by a computed name)		
 map ND_13_U	untested	no script or world map point names it (unused / debug / reached by a computed name)		
 map ND_14_U	ok			depth=14
-map ND_20_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map ND_21_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map ND_22_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map ND_20_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map ND_21_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map ND_22_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
 map OP_00_U	ok			depth=0
 map OP_01_U	ok	played by the FS story walk		needs_disc2=disc-2 scenes M16 OPI_J00
 map PA_00_DB	untested	debug map (only the debug menu reaches it)		
@@ -1464,9 +1481,9 @@ map PE_05_N	ok			depth=3
 map QG_00_U	ok			depth=3
 map QG_01_U	ok			depth=4
 map QG_02_U	ok			depth=4
-map QG_03_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map QG_03_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
 map QG_04_U	ok			depth=5
-map QG_05_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map QG_05_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
 map QG_06_U	ok			depth=6
 map QG_07_U	ok			depth=6
 map QG_08_U	ok			depth=5
@@ -1523,32 +1540,32 @@ map SA_02_U	ok	played by the FS story walk
 map SA_03_U	ok			depth=5
 map SA_04_U	ok			depth=6
 map SA_05_U	ok			depth=5
-map SE_00_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SE_01_4	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SE_00_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SE_01_4	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
 map SE_01_9	ok			depth=3
-map SE_01_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SE_02_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SE_03_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SE_04_2	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SE_04_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SE_05_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SE_06_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SE_07_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SE_08_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SE_09_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SE_10_4	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SE_10_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SE_11_1	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SE_11_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SE_13_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SE_14_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SE_01_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SE_02_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SE_03_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SE_04_2	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SE_04_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SE_05_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SE_06_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SE_07_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SE_08_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SE_09_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SE_10_4	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SE_10_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SE_11_1	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SE_11_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SE_13_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SE_14_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
 map SE_15_U	ok			depth=2
 map SH_00_DB	untested	debug map (only the debug menu reaches it)		
 map SH_00_U	ok			depth=2
 map SH_01_U	ok			depth=3
-map SH_02_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SH_03_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SH_04_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SH_02_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SH_03_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SH_04_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
 map SK_00_U	ok			depth=2
 map SK_01_U	ok			depth=3
 map SK_02_U	ok			depth=4
@@ -1567,36 +1584,36 @@ map SM_00_U	ok			depth=2
 map SM_01_U	ok			depth=3
 map SM_02_U	ok			depth=4
 map SM_03_U	ok			depth=5
-map SM_04_O	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SM_04_O	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
 map SM_04_U	ok			depth=6
 map SM_05_U	ok			depth=6
-map SM_06_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SM_07_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SM_08_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SM_09_B	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SM_09_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SM_10_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SM_11_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SM_12_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SM_13_B	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SM_13_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SM_14_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SM_15_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SM_16_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SM_17_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SM_18_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SM_19_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SM_06_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SM_07_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SM_08_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SM_09_B	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SM_09_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SM_10_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SM_11_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SM_12_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SM_13_B	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SM_13_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SM_14_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SM_15_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SM_16_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SM_17_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SM_18_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SM_19_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
 map SM_20_U	ok			depth=3
-map SM_21_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SM_22_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SM_23_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SM_24_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SM_30_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SM_31_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SM_32_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SM_33_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
-map SO_00_DB	untested	referenced, but not from anything reachable from OP_00_U	FS	
-map SO_00_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS	
+map SM_21_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SM_22_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SM_23_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SM_24_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SM_30_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SM_31_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SM_32_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SM_33_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
+map SO_00_DB	untested	referenced, but not from anything reachable from OP_00_U	FS2	
+map SO_00_U	untested	reachable only through static references (story flags / branches the headless run does not take)	FS2	
 map SU_00_A	ok	played by the FS story walk		
 map SU_00_U	ok			depth=4
 map SU_01_U	ok			depth=5
@@ -1614,12 +1631,12 @@ map SU_10_U	ok			depth=6
 map SU_11_U	ok			depth=3
 map SU_12_U	ok			depth=4
 map SU_20_U	ok			depth=3
-map SU_22_DB	untested	referenced, but not from anything reachable from OP_00_U	FS	
+map SU_22_DB	untested	referenced, but not from anything reachable from OP_00_U	FS2	
 map SU_22_U	ok			depth=3
 map SU_30_U	ok			depth=3
 map SU_31_U	ok			depth=4
 map SU_40_U	ok	played by the FS story walk		
-map TD_00_DB	untested	referenced, but not from anything reachable from OP_00_U	FS	
+map TD_00_DB	untested	referenced, but not from anything reachable from OP_00_U	FS2	
 map TD_00_U	ok	needs disc 2: disc-2 scenes N101		needs_disc2=disc-2 scenes N101;depth=11
 map TD_01_U	ok			depth=10
 map TD_02_U	ok			depth=11

@@ -130,6 +130,9 @@ struct MapAcc {
     game_over: bool,
     /// the explore input policy is on (set by `run` for its second phase)
     explore: bool,
+    /// no explore phase (round 6 QA2): the map loads that only prepare an event.  The explore buttons can make a start function take
+    /// another branch (MI_* mazes: a button press leaves for MI_00_U), and the event then ran on that state (lost MI jumps / story maps)
+    circle_only: bool,
     /// jobs that ended only with the explore inputs
     needed_input: Vec<String>,
     /// jobs still running that only poll the clock (`GetFieldData(0x1d)`) in a loop: ambient / timed background jobs, not blocked
@@ -200,7 +203,7 @@ fn run(rt: &mut FieldRuntime, session: &mut GameSession, acc: &mut MapAcc, max: 
     acc.explore = false;
     let mut clock_polls = 0u32;
     let mut ips: BTreeSet<u32> = BTreeSet::new();
-    let total = max + max / 2;
+    let total = if acc.circle_only { max } else { max + max / 2 };
     while t < total && rt.vm.is_running() {
         if t == max {
             acc.explore = true;
@@ -368,7 +371,7 @@ fn check_map(set: &PkbSet, map: &str, start_ticks: u32, ev_ticks: u32, all_args:
                 for args in &arg_sets {
                     // a fresh map load per event (the real game runs the start function on every entry)
                     let Some(mut r2) = build_runtime(set, None, map, 0, &session) else { continue };
-                    let mut a2 = MapAcc::default();
+                    let mut a2 = MapAcc { circle_only: true, ..MapAcc::default() };
                     let _ = run(&mut r2, &mut session, &mut a2, start_ticks.min(1500), "start");
                     harvest(&mut r2, &mut a2);
                     if r2.vm.is_running() {
@@ -380,7 +383,7 @@ fn check_map(set: &PkbSet, map: &str, start_ticks: u32, ev_ticks: u32, all_args:
                         vm.start_script();
                         vm.mem.regs = r2.vm.mem.regs.clone();
                         r2.vm = vm;
-                        let mut tmp = MapAcc::default();
+                        let mut tmp = MapAcc { circle_only: true, ..MapAcc::default() };
                         let _ = run(&mut r2, &mut session, &mut tmp, 600, "restart");
                         harvest(&mut r2, &mut tmp);
                     }
@@ -495,7 +498,7 @@ pub fn sets_flag(set: &PkbSet, map: &str, flag: u32, pre: &[u32]) -> Option<Stri
     for id in ids {
         for arg in [1u32, 2, 4] {
             let Some(mut r2) = build_runtime(set, None, map, 0, &session) else { continue };
-            let mut a2 = MapAcc::default();
+            let mut a2 = MapAcc { circle_only: true, ..MapAcc::default() };
             let _ = run(&mut r2, &mut session, &mut a2, 1500, "start");
             if r2.vm.is_running() {
                 let mut vm = sh2_script::cscript::CScript::new(0x200, 0x400, 6000);

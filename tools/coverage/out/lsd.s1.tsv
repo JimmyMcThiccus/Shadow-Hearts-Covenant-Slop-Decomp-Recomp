@@ -1,28 +1,42 @@
-LSD/G01.LSD	ok			secs=230.0;tracks=19;models=4;events=83;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=0;maps=1;disc=disc 2;via_disc2_fallback=1
-LSD/G05.LSD	ok			secs=170.5;tracks=19;models=4;events=74;lscr_ops=c0.00x2,c0.05x1,c0.0dx1,c0.0fx1;efd=0;maps=1;disc=disc 2;via_disc2_fallback=1
+LSD/G01.LSD	ok			secs=230.0;tracks=19;models=4;events=83;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=0;maps=1;map_names=Td_17_m;disc=disc 2;via_disc2_fallback=1
+LSD/G04B.LSD	ok			secs=196.7;tracks=31;models=8;events=127;lscr_ops=c0.00x6,c0.05x1,c0.0dx1,c0.0fx1;efd=0;maps=1;map_names=Gi_04_m;disc=disc 2;via_disc2_fallback=1
+LSD/G06B.LSD	ok			secs=59.9;tracks=17;models=3;events=44;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=0;maps=1;map_names=Screen;disc=disc 2;via_disc2_fallback=1
 LSD/M01.LSD	ok			secs=40.2;tracks=5;models=0;events=12;lscr_ops=c0.00x2,c0.0fx1;efd=0;maps=0;movie=1;pictures=60;size=512x448;disc=disc 1
-LSD/M09.LSD	ok			secs=106.7;tracks=5;models=0;events=11;lscr_ops=c0.00x2;efd=0;maps=0;movie=1;pictures=60;size=512x448;disc=disc 1
+LSD/M06.LSD	ok			secs=83.0;tracks=5;models=0;events=12;lscr_ops=c0.00x2;efd=0;maps=0;movie=1;pictures=60;size=512x448;disc=disc 1
+LSD/M13.LSD	ok			secs=79.7;tracks=5;models=0;events=11;lscr_ops=c0.00x2;efd=0;maps=0;movie=1;pictures=60;size=512x448;disc=disc 1
 LSD/MOVIE_A.LSD	ok			secs=421.3;tracks=6;models=0;events=13;lscr_ops=c0.00x2,c0.06x6,c0.0fx1;efd=0;maps=0;dlby=1;movie=1;pictures=60;size=512x448;disc=disc 1
-LSD/MOVIE_G.LSD	ok			secs=244.8;tracks=7;models=0;events=16;lscr_ops=c0.00x2,c0.06x1,c0.08x3,c0.0fx1;efd=0;maps=0;dlby=1;movie=1;pictures=60;size=512x448;disc=disc 2;via_disc2_fallback=1
-LSD/N006.LSD	stub	effect tracks: fx lsdGetModel(2900)	FX2	secs=51.9;tracks=38;models=8;events=112;lscr_ops=c0.00x2,c0.05x1,c0.06x5,c0.07x2,c0.08x3,c0.0dx1,c0.0fx1;efd=5;maps=1;missing=fx lsdGetModel(2900);disc=disc 1
-LSD/N012.LSD	stub	effect tracks: fx lsdGetModel(2900)	FX2	secs=140.0;tracks=21;models=3;events=68;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=2;maps=2;missing=fx lsdGetModel(2900);disc=disc 1
-LSD/N018.LSD	stub	effect tracks: fx lsdGetModel(2900)	FX2	secs=49.9;tracks=45;models=13;events=112;lscr_ops=c0.00x2,c0.05x1,c0.0dx1,c0.0fx1;efd=2;maps=1;missing=fx lsdGetModel(2900);disc=disc 1
-LSD/N024.LSD	ok			secs=206.9;tracks=41;models=12;events=192;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=0;maps=1;disc=disc 1
-LSD/N031.LSD	stub	effect tracks: fx lsdGetModel(2900)	FX2	secs=80.0;tracks=39;models=11;events=94;lscr_ops=c0.00x2,c0.05x1,c0.0dx1,c0.0fx1;efd=1;maps=1;missing=fx lsdGetModel(2900);disc=disc 1
-LSD/N037.LSD	ok			secs=208.9;tracks=41;models=12;events=134;lscr_ops=c0.00x4,c0.05x1,c0.06x1,c0.0fx1;efd=0;maps=1;disc=disc 1
-LSD/N043.LSD	ok			secs=92.2;tracks=38;models=11;events=111;lscr_ops=c0.00x2,c0.05x1,c0.06x2,c0.0fx1;efd=0;maps=1;disc=disc 1
-LSD/N051.LSD	stub	effect tracks: fx lsdGetModel(2900)	FX2	secs=177.7;tracks=49;models=14;events=184;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=1;maps=1;missing=fx lsdGetModel(2900);disc=disc 1
-LSD/N057.LSD	ok			secs=101.0;tracks=44;models=14;events=104;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=0;maps=1;disc=disc 1
-LSD/N063.LSD	stub	effect tracks: fx lsdGetModel(2900)	FX2	secs=71.5;tracks=34;models=8;events=98;lscr_ops=c0.00x2,c0.05x1,c0.06x10,c0.07x1,c0.08x5,c0.0dx1,c0.0fx1;efd=4;maps=1;missing=fx lsdGetModel(2900);disc=disc 1
-LSD/N069A.LSD	stub	effect tracks: fx lsdGetModel(2900)	FX2	secs=329.4;tracks=171;models=61;events=537;lscr_ops=c0.00x2,c0.05x1,c0.06x8,c0.08x1,c0.09x1,c0.0ax1,c0.0fx1;efd=5;maps=1;missing=fx lsdGetModel(2900);disc=disc 1
-LSD/N074.LSD	ok			secs=27.5;tracks=13;models=2;events=28;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=0;maps=1;disc=disc 1
-LSD/N080.LSD	stub	effect tracks: fx lsdGetModel(2900)	FX2	secs=62.7;tracks=64;models=19;events=251;lscr_ops=c0.00x2,c0.05x1,c0.06x7,c0.07x4,c0.0fx1;efd=6;maps=1;missing=fx lsdGetModel(2900);disc=disc 2;via_disc2_fallback=1
-LSD/N086.LSD	ok			secs=39.9;tracks=21;models=4;events=52;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=0;maps=1;disc=disc 2;via_disc2_fallback=1
-LSD/N091.LSD	ok			secs=206.7;tracks=44;models=11;events=130;lscr_ops=c0.00x13,c0.05x1,c0.09x3,c0.0ax3,c0.0fx1;efd=0;maps=1;disc=disc 2;via_disc2_fallback=1
-LSD/N097.LSD	ok			secs=14.7;tracks=21;models=4;events=44;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=0;maps=1;disc=disc 2;via_disc2_fallback=1
-LSD/N102.LSD	stub	effect tracks: fx lsdGetModel(2900)	FX2	secs=153.3;tracks=21;models=4;events=78;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=1;maps=1;missing=fx lsdGetModel(2900);disc=disc 2;via_disc2_fallback=1
-LSD/N108.LSD	ok			secs=44.8;tracks=34;models=12;events=83;lscr_ops=c0.00x2,c0.05x1,c0.06x1,c0.0fx1;efd=0;maps=1;disc=disc 2;via_disc2_fallback=1
-LSD/N113.LSD	stub	effect tracks: fx lsdGetModel(2900)	FX2	secs=182.2;tracks=49;models=13;events=172;lscr_ops=c0.00x6,c0.03x1,c0.04x1,c0.05x1,c0.06x3,c0.08x2,c0.0dx1,c0.0fx1;efd=2;maps=1;missing=fx lsdGetModel(2900);disc=disc 2;via_disc2_fallback=1
-LSD/N119.LSD	ok			secs=329.9;tracks=31;models=8;events=155;lscr_ops=c0.00x10,c0.05x1,c0.09x3,c0.0ax3,c0.0fx1;efd=0;maps=1;disc=disc 2;via_disc2_fallback=1
-LSD/N125.LSD	ok			secs=238.8;tracks=23;models=5;events=107;lscr_ops=c0.00x2,c0.05x1,c0.06x33,c0.07x20,c0.0fx1;efd=0;maps=1;disc=disc 2;via_disc2_fallback=1
-LSD/OPI_E00.LSD	ok			secs=7.9;tracks=3;models=0;events=6;lscr_ops=c0.00x2,c0.0fx1;efd=0;maps=0;movie=1;pictures=60;size=512x448;disc=disc 1
+LSD/MOVIE_E.LSD	ok			secs=229.9;tracks=7;models=0;events=16;lscr_ops=c0.00x2,c0.06x2,c0.07x1,c0.08x2,c0.0dx1,c0.0fx1;efd=0;maps=0;dlby=1;movie=1;pictures=60;size=512x448;disc=disc 2;via_disc2_fallback=1
+LSD/N002.LSD	ok			secs=29.5;tracks=22;models=5;events=50;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=0;maps=1;map_names=We_00_u;disc=disc 1
+LSD/N006.LSD	stub	effect tracks: fx lsdGetModel 'Ap_06_u' = this scene's map track (not in named_models)	CS2	secs=51.9;tracks=38;models=8;events=112;lscr_ops=c0.00x2,c0.05x1,c0.06x5,c0.07x2,c0.08x3,c0.0dx1,c0.0fx1;efd=5;maps=1;map_names=Ap_06_u;missing=fx lsdGetModel 'Ap_06_u' = this scene's map track (not in named_models);disc=disc 1
+LSD/N010.LSD	ok			secs=373.3;tracks=66;models=22;events=205;lscr_ops=c0.00x2,c0.05x1,c0.0ex1,c0.0fx1;efd=1;maps=2;map_names=Do_03_u,Ag_00_n;disc=disc 1
+LSD/N014.LSD	ok			secs=64.8;tracks=27;models=7;events=70;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=0;maps=1;map_names=Ar_15_n;disc=disc 1
+LSD/N018.LSD	stub	effect tracks: fx lsdGetModel 'Ru_06_n' = this scene's map track (not in named_models)	CS2	secs=49.9;tracks=45;models=13;events=112;lscr_ops=c0.00x2,c0.05x1,c0.0dx1,c0.0fx1;efd=2;maps=1;map_names=Ru_06_n;missing=fx lsdGetModel 'Ru_06_n' = this scene's map track (not in named_models);disc=disc 1
+LSD/N022.LSD	stub	effect tracks: fx lsdGetModel 'Wi_17_u' = this scene's map track (not in named_models)	CS2	secs=103.3;tracks=42;models=12;events=129;lscr_ops=c0.00x4,c0.05x1,c0.06x5,c0.0dx1,c0.0fx1;efd=3;maps=1;map_names=Wi_17_u;missing=fx lsdGetModel 'Wi_17_u' = this scene's map track (not in named_models);disc=disc 1
+LSD/N026.LSD	stub	effect tracks: fx lsdGetModel 'We_00_u' = this scene's map track (not in named_models)	CS2	secs=154.0;tracks=85;models=29;events=226;lscr_ops=c0.00x2,c0.05x1,c0.06x1,c0.07x1,c0.0dx1,c0.0fx1;efd=1;maps=1;map_names=We_00_u;missing=fx lsdGetModel 'We_00_u' = this scene's map track (not in named_models);disc=disc 1
+LSD/N031.LSD	stub	effect tracks: fx lsdGetModel 'Ad_05_m' = this scene's map track (not in named_models)	CS2	secs=80.0;tracks=39;models=11;events=94;lscr_ops=c0.00x2,c0.05x1,c0.0dx1,c0.0fx1;efd=1;maps=1;map_names=Ad_05_m;missing=fx lsdGetModel 'Ad_05_m' = this scene's map track (not in named_models);disc=disc 1
+LSD/N035.LSD	ok			secs=134.3;tracks=40;models=11;events=121;lscr_ops=c0.00x10,c0.05x1,c0.0fx1;efd=0;maps=2;map_names=Gy_04_u,Nd_14_u;movie=1;pictures=60;size=512x448;disc=disc 1
+LSD/N039.LSD	ok			secs=70.4;tracks=67;models=23;events=190;lscr_ops=c0.00x2,c0.05x1,c0.0dx1,c0.0fx1;efd=0;maps=1;map_names=Sm_20_m;disc=disc 1
+LSD/N043.LSD	ok			secs=92.2;tracks=38;models=11;events=111;lscr_ops=c0.00x2,c0.05x1,c0.06x2,c0.0fx1;efd=0;maps=1;map_names=Sm_20_m;disc=disc 1
+LSD/N049.LSD	ok			secs=145.1;tracks=25;models=6;events=103;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=1;maps=1;map_names=Pe_02_m;disc=disc 1
+LSD/N053.LSD	ok			secs=223.3;tracks=127;models=46;events=327;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=0;maps=1;map_names=He_09_m;disc=disc 1
+LSD/N057.LSD	ok			secs=101.0;tracks=44;models=14;events=104;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=0;maps=1;map_names=Pe_03_n;disc=disc 1
+LSD/N061.LSD	ok			secs=160.7;tracks=47;models=14;events=186;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=0;maps=1;map_names=Gt_04_u;disc=disc 1
+LSD/N065.LSD	ok			secs=243.3;tracks=19;models=4;events=99;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=0;maps=1;map_names=He_10_m;disc=disc 1
+LSD/N069A.LSD	stub	effect tracks: fx lsdGetModel 'He_09_m' = this scene's map track (not in named_models)	CS2	secs=329.4;tracks=171;models=61;events=537;lscr_ops=c0.00x2,c0.05x1,c0.06x8,c0.08x1,c0.09x1,c0.0ax1,c0.0fx1;efd=5;maps=1;map_names=He_09_m;missing=fx lsdGetModel 'He_09_m' = this scene's map track (not in named_models);disc=disc 1
+LSD/N072.LSD	ok			secs=181.0;tracks=66;models=22;events=211;lscr_ops=c0.00x2,c0.05x1,c0.0dx1,c0.0fx1;efd=3;maps=1;map_names=If_25_u;disc=disc 1
+LSD/N076.LSD	stub	effect tracks: fx lsdGetModel 'Ap_06_n' = this scene's map track (not in named_models), fx lsdGetModel 'Pe_01_n' = this scene's map track (not in named_models)	CS2	secs=183.3;tracks=83;models=24;events=229;lscr_ops=c0.00x2,c0.05x1,c0.06x6,c0.08x2,c0.0fx1;efd=13;maps=2;map_names=Ap_06_n,Pe_01_n;missing=fx lsdGetModel 'Ap_06_n' = this scene's map track (not in named_models),fx lsdGetModel 'Pe_01_n' = this scene's map track (not in named_models);disc=disc 1
+LSD/N080.LSD	ok			secs=62.7;tracks=64;models=19;events=251;lscr_ops=c0.00x2,c0.05x1,c0.06x7,c0.07x4,c0.0fx1;efd=6;maps=1;map_names=Yo_03_u;disc=disc 2;via_disc2_fallback=1
+LSD/N084.LSD	stub	effect tracks: fx lsdGetModel 'Ka_01_u' = this scene's map track (not in named_models)	CS2	secs=220.0;tracks=26;models=6;events=108;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=1;maps=1;map_names=Ka_01_u;missing=fx lsdGetModel 'Ka_01_u' = this scene's map track (not in named_models);disc=disc 2;via_disc2_fallback=1
+LSD/N088.LSD	ok			secs=49.7;tracks=31;models=8;events=68;lscr_ops=c0.00x4,c0.05x1,c0.0dx1,c0.0fx1;efd=0;maps=1;map_names=Ik_00_u;disc=disc 2;via_disc2_fallback=1
+LSD/N091.LSD	ok			secs=206.7;tracks=44;models=11;events=130;lscr_ops=c0.00x13,c0.05x1,c0.09x3,c0.0ax3,c0.0fx1;efd=0;maps=1;map_names=Gb_00_u;disc=disc 2;via_disc2_fallback=1
+LSD/N095.LSD	ok			secs=90.9;tracks=47;models=14;events=141;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=1;maps=1;map_names=Gi_00_u;disc=disc 2;via_disc2_fallback=1
+LSD/N099.LSD	ok			secs=336.5;tracks=51;models=17;events=261;lscr_ops=c0.00x8,c0.05x1,c0.09x1,c0.0ax1,c0.0fx1;efd=0;maps=1;map_names=Mu_00_u;disc=disc 2;via_disc2_fallback=1
+LSD/N102.LSD	ok			secs=153.3;tracks=21;models=4;events=78;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=1;maps=1;map_names=Ka_01_u;disc=disc 2;via_disc2_fallback=1
+LSD/N106.LSD	ok			secs=76.4;tracks=49;models=15;events=114;lscr_ops=c0.00x2,c0.05x1,c0.0dx1,c0.0fx1;efd=0;maps=1;map_names=Zi_01_u;disc=disc 2;via_disc2_fallback=1
+LSD/N109B.LSD	ok			secs=15.2;tracks=25;models=7;events=51;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=0;maps=1;map_names=In_03_u;disc=disc 2;via_disc2_fallback=1
+LSD/N113.LSD	stub	effect tracks: fx lsdGetModel 'Fu_18_u' = this scene's map track (not in named_models)	CS2	secs=182.2;tracks=49;models=13;events=172;lscr_ops=c0.00x6,c0.03x1,c0.04x1,c0.05x1,c0.06x3,c0.08x2,c0.0dx1,c0.0fx1;efd=2;maps=1;map_names=Fu_18_u;missing=fx lsdGetModel 'Fu_18_u' = this scene's map track (not in named_models);disc=disc 2;via_disc2_fallback=1
+LSD/N117.LSD	ok			secs=223.6;tracks=23;models=6;events=136;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=0;maps=1;map_names=Gb_00_u;disc=disc 2;via_disc2_fallback=1
+LSD/N121.LSD	stub	effect tracks: fx lsdGetModel 'Wi_04_u' = this scene's map track (not in named_models)	CS2	secs=253.3;tracks=37;models=8;events=143;lscr_ops=c0.00x10,c0.05x1,c0.06x2,c0.07x2,c0.0fx1;efd=5;maps=1;map_names=Wi_04_u;movie=1;pictures=60;size=512x448;missing=fx lsdGetModel 'Wi_04_u' = this scene's map track (not in named_models);disc=disc 2;via_disc2_fallback=1
+LSD/N125.LSD	ok			secs=238.8;tracks=23;models=5;events=107;lscr_ops=c0.00x2,c0.05x1,c0.06x33,c0.07x20,c0.0fx1;efd=0;maps=1;map_names=Gy_07_u;disc=disc 2;via_disc2_fallback=1
+LSD/N129.LSD	ok			secs=66.4;tracks=22;models=4;events=52;lscr_ops=c0.00x2,c0.03x1,c0.04x1,c0.05x1,c0.06x6,c0.07x1,c0.08x2,c0.0dx1,c0.0fx1;efd=0;maps=1;map_names=Ta_00_u;movie=1;pictures=60;size=512x448;disc=disc 2;via_disc2_fallback=1
+OPENING/DEMO.LSD	ok			secs=134.6;tracks=4;models=0;events=9;lscr_ops=c0.0fx1;efd=0;maps=0;movie=1;pictures=60;size=640x448;disc=both

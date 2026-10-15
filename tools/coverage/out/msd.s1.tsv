@@ -1,0 +1,7 @@
+MENU/DAT/CMDMENUS.MSD	ok			records=33;attached_scenes=3
+MENU/MSD/CBKEY.MSD	ok			records=103;attached_scenes=4
+MENU/MSD/EQUIP.MSD	ok			records=108;attached_scenes=5
+MENU/MSD/HELP.MSD	ok			records=25;attached_scenes=0
+MENU/MSD/MAGIC.MSD	ok			records=106;attached_scenes=6
+MENU/MSD/PLIST.MSD	ok			records=175;attached_scenes=10
+MENU/MSD/SECHAR.MSD	ok			records=26;attached_scenes=0

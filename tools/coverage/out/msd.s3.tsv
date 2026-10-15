@@ -1,0 +1,7 @@
+MENU/MSD/BACK.MSD	ok			records=2;attached_scenes=0
+MENU/MSD/CREST.MSD	ok			records=146;attached_scenes=7
+MENU/MSD/GAMEOVER.MSD	ok			records=19;attached_scenes=1
+MENU/MSD/KEYCUS.MSD	ok			records=40;attached_scenes=0
+MENU/MSD/OPTION.MSD	ok			records=112;attached_scenes=0
+MENU/MSD/SCHARGE.MSD	ok			records=85;attached_scenes=5;unknown_chunks=1
+MENU/MSD/WSTAMP.MSD	ok			records=21;attached_scenes=1;unknown_chunks=1

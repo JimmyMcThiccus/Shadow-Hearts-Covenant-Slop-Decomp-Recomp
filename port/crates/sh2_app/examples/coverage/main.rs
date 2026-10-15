@@ -114,6 +114,8 @@ fn main() {
                     "field" | "battle" | "party" | "battleapp" | "lsd" => MAX_JOBS,
                     _ => 1,
                 }).max(1);
+                // the story graph is one whole-graph job (no shards): N workers wrote N identical copies (round 6 QA2)
+                let jobs = if cat == "story" { 1 } else { jobs };
                 let exe = std::env::current_exe().unwrap();
                 let handles: Vec<_> = (0..jobs)
                     .map(|k| {

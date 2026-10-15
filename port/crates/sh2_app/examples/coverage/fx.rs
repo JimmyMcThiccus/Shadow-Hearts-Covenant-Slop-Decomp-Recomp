@@ -58,6 +58,8 @@ pub struct FxRun {
     pub ignored: BTreeMap<String, u32>,
     pub models: usize,
     pub damage_events: usize,
+    /// `lsdGetModel` names not among `named` (round 6 QA2)
+    pub missing_names: Vec<String>,
 }
 
 /// Name of a syscall id for the "accepted, not drawn" list: `name(id)`.
@@ -66,14 +68,16 @@ pub fn ignored_name(id: i32) -> String {
     format!("{n}({id})")
 }
 
-/// Runs one EFMG effect image to its end (or the host's 10 s cap).
-pub fn run_program(id: i32, bytes: Vec<u8>, targets: usize) -> Result<FxRun, String> {
+/// Runs one EFMG effect image to its end (or the host's 10 s cap).  `named` = the host scene's model names the program may look up
+/// (`lsdGetModel`; a cut scene's LSD models, default pose -- round 6 QA2, as `cutscene_plugin` fills `named_models`).
+pub fn run_program(id: i32, bytes: Vec<u8>, targets: usize, named: &[String]) -> Result<FxRun, String> {
     let ctx = FxContext {
         gen: vec![Vec3::new(-50.0, 0.0, 0.0)],
         targets: (0..targets.max(1)).map(|i| Vec3::new(50.0, 0.0, -20.0 + 20.0 * i as f32)).collect(),
         height: 30.0,
     };
     let mut p = FxProgram::new(id, bytes, ctx)?;
+    p.host.scene.named_models = named.iter().map(|n| (n.clone(), sh2_gfx::effects::scene::FxActor::default())).collect();
     let mut models = 0;
     let mut dmg = 0;
     while !p.finished {
@@ -105,6 +109,7 @@ pub fn run_program(id: i32, bytes: Vec<u8>, targets: usize) -> Result<FxRun, Str
         },
         models,
         damage_events: dmg,
+        missing_names: p.host.scene.lsd_names().iter().filter(|n| !named.iter().any(|m| m.eq_ignore_ascii_case(n))).cloned().collect(),
     })
 }
 
@@ -120,7 +125,7 @@ fn check(disc: &sh2_core::fileio::Disc, path: &str) -> Row {
         }
     };
     let id = efd_id(path);
-    match run_program(id, bytes, 1) {
+    match run_program(id, bytes, 1, &[]) {
         Err(e) => {
             row.status = "fails".into();
             row.detail = format!("parse: {e}");

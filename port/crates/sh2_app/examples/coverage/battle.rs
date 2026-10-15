@@ -200,7 +200,7 @@ pub fn fx_status(c: &Ctx, id: i32) -> Result<(bool, Vec<String>), String> {
     };
     let r = match c.disc.read(&efd_path(eid)) {
         Err(_) => Err(format!("EFFECT/{eid:03}_00.EFD missing (record effect {id})")),
-        Ok(b) => super::fx::run_program(eid, b, 1).map(|r| {
+        Ok(b) => super::fx::run_program(eid, b, 1, &[]).map(|r| {
             let mut miss: Vec<String> = r.unknown.keys().chain(r.unhandled.keys()).cloned().collect();
             miss.extend(r.ignored.keys().map(|k| format!("{k} (not drawn)")));
             (r.ended, miss)

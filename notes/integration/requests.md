@@ -904,3 +904,26 @@ Details in `notes/integration/hires_fonts.md`.  Small edits in files other agent
 * **Retail finding (all menus, FYI MN2 / FS2)**: `FontItem::Clear` sets `+0x58 = 0x18`, i.e. every retail text item is proportional (bit 3:
   advance = the glyph's width byte, the lsb byte is unused) and narrow (bit 4: x `FontDraw+0x40` = 0.8, `FontDraw::Clear` 0x0026d280).  The
   port still lays out every run but the field windows with `xo + width`; switching a screen means `proportional: true` on its runs.
+
+## Round 6 QA2 (coverage / sh2_app / integration, 2026-10-15)
+Matrix: `notes/integration/coverage.md` (full `all --fresh` run with 4 workers + field / story / lsd reruns): 3810 items, 3578 ok, 90 stub, 3 fails,
+139 untested (round-5 end 3793 / 3543 / 97 / 3 / 150).  Details and the per-map `stuck` text: `tools/coverage/notes.md` "Top blockers".
+Edits outside my files: `sh2_gfx/src/effects/scene.rs` `FxScene::lsd_names()` (read-only accessor, 5 lines; the harness lists the names
+`lsdGetModel` did not find).
+
+1. **CS2 (38 cut scenes, `cutscene_plugin` ~1097)**: the `.EFD` tracks call `lsdGetModel` with the scene's **map track name** (MPS track
+   header `body_str(0)`: N009 `Do_06_u`, N094 `Gi_00_u`, N100A/B `Td_16_m` / `Td_18_m`, G04A `Gi_03_m` ...; the harness now passes the
+   LSD's model names like the player does, CS2's earlier note).  The player registers only `data.models` in `named_models`, so these effects
+   attach to nothing.  Please add the map models under their track names (the coverage rows say `= this scene's map track`).
+2. **FS2 (field, real blockers in the headless host)**: `SpecialMenu(1, 0)` after `OpenMessage` never returns (AI_01_U..AI_03_U, 34-37
+   jobs each, loop 0x3495..0x34a2), `SpecialMenu(0, 0)` (DB_00_U, SM_15_U, YO_02_U); `WaitModel` suspended forever (GI_01_N / GI_03_N
+   46-49 jobs, SO_00_U, RU_01_U); `PathMove` suspended (CA_01_U 43 jobs, YO_02_U); `GetCharacterInfo(5, 0xd)` = -1 (PA_02_A event 0xd:
+   character 5 not loaded); RU_04_U event 0x10 loops on `GetFieldData(0x23)` = 1.  Full texts in the Field maps table.
+3. **FS2 (autopilot, FYI)**: `sh2_app --us --autoplay --story --boost 80` (300 s) stops in AP_02_U from 195 s with two windows open
+   (window 0 message, window 2 `typed`), examine target key 1 at the Pieta; battle #1 sat at "turn 0" for 60 s before ending (machine
+   loaded by a 4-worker sweep, may be timing).
+4. **GPA / CS2 (FYI)**: N001's white caption background is now (233, 233, 233) where round 5 rendered (252, 252, 252)
+   (`screens/r6_qa2/cutscene/LSD_N001.LSD_t1200.png` vs `screens/r5_cs/autoplay_cs/LSD_N001.LSD_t1000.png`): the gamma-space UI
+   compositing / absolute brightness veil?  Worth one live comparison.
+5. **Everyone (tests)**: `sh2_app` `headless_game_over_returns_to_title` / `headless_continue_loads_the_save` failed when run beside the US
+   story test (process-wide retail flag / env): they now take the same `SERIAL` lock.  Workspace tests otherwise green (843 passed).
