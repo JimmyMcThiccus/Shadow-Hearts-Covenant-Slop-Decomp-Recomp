@@ -49,7 +49,16 @@ Now the 3D scene of a battle has the same brightness as the field.  (The gfx2d c
 Notes on the swirl: the menu_m1 capture's "global 0.925" factor was fitted against the *linear* port, so it cannot arbitrate between the two;
 geometry differs too (different rotation time).  `SWIRL_ALPHA = 0.5` is left as it is: its doc formula `Cd + (255 - Cd) * lum * 0.5` is a
 gamma-space formula, which is now literally what the GPU computes.  A live title capture (reset to the title) would settle the strength.
-A live effect white flash was not captured (needs a live battle; see "Open").
+**Live battle (slot 8, fight 1 in AP_02_U, ring played by `ringd.py`):**
+
+| measure | retail | port before | port after |
+|---|---|---|---|
+| lower half (floor) of a wide battle frame, mean / p90 luminance (`battle_floor_retail_before_after.png`: retail Nicolai attack vs port victory, same fight and stage) | 65.6 / 111 and 71.3 / 110 | 27.3 / 58 | 74.7 / 129 |
+| Karin's command menu, coat / stone wall median (`battle_menu_retail_before_after.png`; cameras differ, rough) | 52 / 28 | 14 / 4 | 66 / 13 |
+
+So the double decode really was the "battles too dark" bug, and after the fix the battle scene sits at retail brightness (a little above it
+on the floor).  The retail weapon-hit flash (`retail_hit_flash_frames.png`, ~0.2 s apart) is a white core with rays plus a soft white glow
+ring over the target, the same construction as the port's hit spark; frame timing of the PCSX2 grabs is too coarse for a pixel comparison.
 
 ## 2. Effect drivers vs `animate_models` -- ordered; run-to-run differences come from elsewhere
 
@@ -82,12 +91,17 @@ A live effect white flash was not captured (needs a live battle; see "Open").
 * Live (US, main instance, debug map DB_00_U where the user's state was): `setDropShadow` (US 0x255db0) sets `Model+0x48c = 1` and adds a
   0x2e0 node (`+0x2b0` = model) to `ShadowControl`.  The live `SavePoint` object (vtable 0x43c180 at +0x14, found at 0xbba020) has three
   `ExModel`s (vtable 0x4383d0) at +0x18 / +0x1c / +0x20, all with `+0x48c = 0`.  Caveat: that map has no casters at all (the player has no shadow
-  there either, `retail_debug_map_save_point.png`), so this live reading has no positive control; a real map (slot 8, AP_02_U) was requested.
+  there either, `retail_debug_map_save_point.png`), so that reading alone had no positive control.
+* **Live on a real map (slot 8, AP_02_U, loaded by the user):** the `SavePoint` at 0xc94b60 (pos -25.75, -0.19, 73) has its three models at
+  0xc73a40 / 0xc80f90 / 0xcc5900, all `+0x48c = 0`, while three other live models **are** registered casters (`+0x48c = 1` and referenced from
+  a `ShadowControl` node's `+0x2b0`: 0x1015aec / 0x1312920 (vtable 0x438100) and 0xc6c3b0 (0x439640), i.e. the party / actors).  The picture
+  agrees: no shadow under the ring (`retail_ap02_save_point.png`, `save_point_retail_vs_port.png`).
+  Side finding (not fixed here): the retail ring glows **cyan**, the port's is **green** (same crop).
 * Port: new `sh2_gfx::bevy::model::NoDropShadow` marker + `drop_unwanted_shadows` (removes the shadow geometry, frees the atlas tile);
   `sh2_field::points::spawn_visual` puts it on every save point / warp pad model.  This also removes PF's `save_point_0_*/shadow_surface`
   uploads.
 
 ## Open
-* Live positive control for item 3 and a live battle white flash / battle brightness comparison: need a state on a real map (slot 8).
+* Save point ring colour: retail cyan, port green (live AP_02_U).
 * Ring gizmo fallback (`sh2_battle::plugin::RingGizmos`, only without `JRING.BIN`) is drawn by Bevy's gizmo pipeline, which has no sRGB
   compositing: it now comes out darker.  Unused with the US / JP discs.
