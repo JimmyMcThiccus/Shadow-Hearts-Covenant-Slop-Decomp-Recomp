@@ -707,6 +707,29 @@ fn advance_model(am: &mut AnimatedModel, gt: &GlobalTransform, dt: f32, gpu_on: 
     am.frame = Some(FrameWork { w, cam_axes, sl, ext });
 }
 
+/// Keeps a model from casting a drop shadow.  In the original only models registered with `ShadowControl::setDropShadow` cast one
+/// (`CFieldModel` actors, `BtlModel`, VEC effect models, map models / LSD models flagged as casters); `ExModel`s created directly -- the save
+/// point (`SavePoint::CreateDirect`) and warp pad models -- never register (round 6 GPA, `notes/integration/r6_gpa.md`).  Put it on the entity
+/// that holds the [`AnimatedModel`]; [`drop_unwanted_shadows`] removes the shadow geometry and frees its atlas tile.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct NoDropShadow;
+
+/// Removes the shadow of models marked [`NoDropShadow`] (despawning the shadow quad frees its atlas tile).
+pub fn drop_unwanted_shadows(mut commands: Commands, mut models: Query<&mut AnimatedModel, With<NoDropShadow>>) {
+    for mut am in &mut models {
+        if am.shadow.is_none() {
+            continue;
+        }
+        if let Some(sh) = am.shadow.take() {
+            commands.entity(sh.quad).despawn();
+            commands.entity(sh.surface).despawn();
+        }
+        for part in am.parts.iter_mut() {
+            part.caster = false;
+        }
+    }
+}
+
 /// Per frame: advance the motion clock, re-evaluate the skeleton (+ hair / cloth chains) and the palettes ([`advance_model`], in parallel over the
 /// models), then upload: palettes into the GPU skins, `TXA*` / blink texture frames, `Visible ` / alpha / colour events into the render assets, the
 /// shadow cameras (serial: these touch shared assets).

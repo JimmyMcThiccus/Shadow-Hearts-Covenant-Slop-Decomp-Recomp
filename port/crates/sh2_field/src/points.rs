@@ -141,7 +141,10 @@ fn spawn_visual(commands: &mut Commands, gpu: &mut CharacterGpu, assets: &[Arc<C
     let mut parts = vec![];
     for (i, a) in assets.iter().enumerate() {
         let mut ctx = GpuCtx { meshes: &mut gpu.meshes, images: &mut gpu.images, materials: &mut gpu.materials, filter: gpu.settings.filter };
-        parts.push(spawn_character(commands, flip, a, &mut ctx, Transform::default(), &format!("{name}_{i}")));
+        let part = spawn_character(commands, flip, a, &mut ctx, Transform::default(), &format!("{name}_{i}"));
+        // `SavePoint::CreateDirect` / `WarpPoint` build plain `ExModel`s that never register with `ShadowControl::setDropShadow`: no drop shadow
+        commands.entity(part).insert(sh2_gfx::bevy::model::NoDropShadow);
+        parts.push(part);
     }
     Visual { root, parts, pos, kind, on: false, fx: 0 }
 }

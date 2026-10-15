@@ -643,6 +643,7 @@ impl Plugin for Sh2MaterialPlugin {
             .add_plugins(FullscreenMaterialPlugin::<Sh2GammaDecode>::default())
             .add_systems(PostUpdate, ((setup_gamma_cameras, patch_ui_shaders).chain(), sync_material_globals))
             .add_systems(Startup, super::model::spawn_skin_joint)
+            .add_systems(Update, super::model::drop_unwanted_shadows.before(super::model::animate_models))
             .add_plugins((super::fxquad::Sh2FxQuadPlugin, super::perf::Sh2PerfPlugin, super::shadow::Sh2ShadowPlugin));
     }
 }
