@@ -23,6 +23,8 @@ pub struct ActionInfo {
     pub effect_id: i32,
     pub target: usize,
     pub offensive: bool,
+    /// every unit the action reaches (`GetTargetList`, the chosen target first; empty = only `target`), see [`BtlHost::action_targets`]
+    pub targets: Vec<usize>,
 }
 
 pub struct BtlHost {
@@ -76,6 +78,9 @@ pub struct BtlHost {
     pub fused: Vec<i32>,
     /// per fighter slot: the wave-bank id of its motion SE bank (`0x9000 | BCD(chr)`, 0 = none), filled by the plugin when the banks are loaded
     pub se_bank: Vec<u32>,
+    /// per fighter slot: the wave-bank ids of its character package banks `ase` (SE set 0x6000) and `dse` (SE set 0x7000) (0 = none), filled
+    /// by the plugin when it makes them resident (`AudioRequest::LoadSeData`); the choreography's [`crate::choreo::ChrSe`] play on them
+    pub chr_se: Vec<(u32, u32)>,
     /// per fighter slot: the boss death program `EFFECT/BD_%03d.EFD` of its CHR exists (retail phase 0x13, `DataReadEntry(0xc, 0xe, chr)`)
     pub bd_fx: Vec<bool>,
     /// engine-started effect programs requested by the battle (path, caster slot, target slot): `BD_%03d.EFD` when such a boss falls,
@@ -196,6 +201,7 @@ impl BtlHost {
             souls: vec![0; slots],
             fused: vec![-1; slots],
             se_bank: vec![0; slots],
+            chr_se: vec![(0, 0); slots],
             bd_fx: vec![false; slots],
             engine_fx: vec![],
             boss_parts: vec![],
@@ -372,7 +378,7 @@ impl BtlHost {
         } else {
             name
         };
-        Some(ActionInfo { actor, kind: cmd.p4c, id: cmd.p44, name, effect_id, target: cmd.p48.max(0) as usize, offensive })
+        Some(ActionInfo { actor, kind: cmd.p4c, id: cmd.p44, name, effect_id, target: cmd.p48.max(0) as usize, offensive, targets: vec![] })
     }
 
     /// The `FUSM` row fighter `actor` is fused into: the `fusion_changed` / plugin-synced value, else recognised by the fused name `Battle::set_fused` gives
@@ -383,6 +389,21 @@ impl BtlHost {
             return id;
         }
         self.tables.fusion_names.iter().position(|n| !n.is_empty() && *n == me.name).map(|p| p as i32).unwrap_or(-1)
+    }
+
+    /// `GetTargetList` for the command `cmd` of `actor` as `EffectFunc` builds it before the effect program starts (the program's per-target
+    /// loop: `FxEnv::targets`): the record's side class / shape / size around the chosen target `cmd.p48`, the chosen target first.  `pos` /
+    /// `radius` per fighter (floor plane = x / z).  Commands without a record (attacks, fusion, ...) reach the chosen target only.
+    pub fn action_targets(&self, actor: usize, cmd: &Command, f: &[Option<Fighter>], pos: &[[f32; 3]], radius: &[f32]) -> Vec<usize> {
+        let target = cmd.p48.max(0) as usize;
+        let Some(me) = f.get(actor).and_then(|x| x.as_ref()) else { return vec![target] };
+        let Some(rec) = self.record(actor, cmd, me) else { return vec![target] };
+        let list = crate::actions::target_list(f, pos, radius, actor, cmd.p48, rec.side_class(), rec.shape(), rec.size(), rec.revive, false);
+        if list.is_empty() {
+            vec![target]
+        } else {
+            list
+        }
     }
 
     fn record(&self, actor: usize, cmd: &Command, me: &Fighter) -> Option<ActionRec> {

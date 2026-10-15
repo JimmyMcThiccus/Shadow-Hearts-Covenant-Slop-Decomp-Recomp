@@ -145,6 +145,8 @@ pub struct RingRun {
     pub event_result: Option<JrResult>,
     /// round 6 BT: `HitArea` / `HitBar` events of the ring, drained like [`Self::mes`] into `HitFx::ring_area_flash`
     pub flashes: Vec<JrEvent>,
+    /// the ring's `HNMSnd::PlaySE(id)` (`true`) / `SetSEEnd(id)` (`false`) requests (global SYSREG / SYSBTL ids, always resident), drained by the owner
+    pub sounds: Vec<(u32, bool)>,
 }
 
 impl RingRun {
@@ -204,7 +206,7 @@ impl RingRun {
         r.ring_active(&mut rng);
         r.period = 1.6;
         r.events.clear();
-        RingRun { ring: r, rng, result: None, time: 0.0, mes: vec![], event_result: None, flashes: vec![] }
+        RingRun { ring: r, rng, result: None, time: 0.0, mes: vec![], event_result: None, flashes: vec![], sounds: vec![] }
     }
 
     fn start_areas_colored(areas: &[(i16, i16, i16)], period: f32, seed: u64, custom: Option<[u8; 20]>, special: bool) -> Self {
@@ -230,7 +232,7 @@ impl RingRun {
         r.ring_active(&mut rng);
         r.period = period;
         r.events.clear();
-        RingRun { ring: r, rng, result: None, time: 0.0, mes: vec![], event_result: None, flashes: vec![] }
+        RingRun { ring: r, rng, result: None, time: 0.0, mes: vec![], event_result: None, flashes: vec![], sounds: vec![] }
     }
 
     /// Round 6 BT (field ring, RG): an *event* ring -- one step area per `(start, width, tag)` (`AddStepArea(start, width, col, tag)`), one lap,
@@ -251,7 +253,7 @@ impl RingRun {
         r.ring_active(&mut rng);
         r.period = period;
         r.events.clear();
-        RingRun { ring: r, rng, result: None, time: 0.0, mes: vec![], event_result: None, flashes: vec![] }
+        RingRun { ring: r, rng, result: None, time: 0.0, mes: vec![], event_result: None, flashes: vec![], sounds: vec![] }
     }
 
     /// One 60 Hz tick with the face buttons pressed this tick; returns true when the ring has finished.
@@ -264,6 +266,8 @@ impl RingRun {
                 JrEvent::Callback { code: 0x80, result: Some(r) } => self.event_result = Some(r),
                 JrEvent::HitMes { area, variant } => self.mes.push((area, variant)),
                 e @ (JrEvent::HitArea { .. } | JrEvent::HitBar { .. }) => self.flashes.push(e),
+                JrEvent::Se(id) => self.sounds.push((id, true)),
+                JrEvent::SeEnd(id) => self.sounds.push((id, false)),
                 _ => {}
             }
         }
@@ -969,6 +973,13 @@ fn begin_action_fx(rt: &mut BattleRuntime, cx: &Cx) {
         rt.wait = 0.3;
         return;
     };
+    // round 6 BT (FX2 request): the effect program loops over every unit of the action (`GetTargetList`), not only the chosen one
+    let mut info = info;
+    {
+        let b = &rt.battle;
+        let radius: Vec<f32> = (0..b.fighters.len()).map(|i| b.ext.get(i).map(|e| e.radius).unwrap_or(3.0)).collect();
+        info.targets = b.host.action_targets(actor, &b.cmd, &b.fighters, &b.positions, &radius);
+    }
     rt.banner = Some((info.name.clone(), 2.2));
     // `SetBtlMessage(0x146, name)`: the action name in the top-right window, closed by the owner when the action is over (not for
     // plain weapon attacks: `AttackFunc` posts no name)
@@ -1004,7 +1015,7 @@ fn begin_action_fx(rt: &mut BattleRuntime, cx: &Cx) {
                     }
                 }
                 let p = |i: usize| rt.positions.get(i).copied().unwrap_or(Vec3::ZERO);
-                let ctx = FxContext { gen: vec![p(actor)], targets: vec![p(info.target)], height: 17.0 };
+                let ctx = FxContext { gen: vec![p(actor)], targets: fx_target_list(&info).into_iter().map(p).collect(), height: 17.0 };
                 match FxProgram::new(eid, bytes, ctx) {
                     Ok(mut prog) => {
                         // round 6 BT: program 080 (*Gathering*) asks the battle where each target goes (`btlGetWarpPos` -> `GetWarpPos`)
@@ -1056,7 +1067,7 @@ fn dev_fx_list(rt: &mut BattleRuntime, cx: &Cx) {
     };
     let actor = rt.battle.actor.unwrap_or(1);
     let target = (0..rt.battle.fighters.len()).find(|&i| rt.battle.fighters[i].as_ref().map(|f| f.is_enemy).unwrap_or(false)).unwrap_or(0);
-    let info = ActionInfo { actor, kind: 1, id, name: format!("fx {id}"), effect_id: id, target, offensive: true };
+    let info = ActionInfo { actor, kind: 1, id, name: format!("fx {id}"), effect_id: id, target, offensive: true, targets: vec![] };
     let env = fx_env(rt, &info);
     let ctx = FxContext { gen: vec![rt.positions.get(actor).copied().unwrap_or(Vec3::ZERO)], targets: vec![rt.positions.get(target).copied().unwrap_or(Vec3::ZERO)], height: 30.0 };
     match FxProgram::new(id, bytes, ctx) {
@@ -1109,7 +1120,16 @@ fn fx_env(rt: &BattleRuntime, info: &ActionInfo) -> FxEnv {
             FxActor::at(crate::effects_bridge::bevy_to_ps2(rt.positions.get(i).copied().unwrap_or(Vec3::ZERO)), h)
         })
     };
-    FxEnv { gen: vec![get(info.actor)], targets: vec![get(info.target)], scene_lights: rt.scene_lights.clone() }
+    FxEnv { gen: vec![get(info.actor)], targets: fx_target_list(info).into_iter().map(get).collect(), scene_lights: rt.scene_lights.clone() }
+}
+
+/// The units an effect program sees as its targets (side 1): the action's `GetTargetList`, the chosen target first.
+fn fx_target_list(info: &ActionInfo) -> Vec<usize> {
+    if info.targets.is_empty() {
+        vec![info.target]
+    } else {
+        info.targets.clone()
+    }
 }
 
 /// Drain `BtlHost::engine_fx` into the engine-program runner (`effects_bridge::ExtraFx`, FX X4).
@@ -1136,6 +1156,7 @@ fn step_fx(rt: &mut BattleRuntime, dt: f32) {
     let mut done = false;
     let env = rt.fx.as_ref().map(|f| fx_env(rt, &f.info));
     if let (Some(fx), Some(env)) = (rt.fx.as_mut(), env) {
+        let done_before = fx.prog.finished;
         fx.acc += dt;
         while fx.acc >= 1.0 / 30.0 && !fx.prog.finished {
             fx.acc -= 1.0 / 30.0;
@@ -1158,6 +1179,10 @@ fn step_fx(rt: &mut BattleRuntime, dt: f32) {
             }
         }
         rt.fx_cam = if rt.fx_cam_control { fx.prog.view().camera } else { None };
+        if fx.prog.finished && !done_before {
+            // `MAX_TICKS` = the program was cut (FX2: 096 / 131 / UNION wait on a memory-model motion)
+            log::info!("battle: effect {:03} ended after {} ticks{}", fx.prog.id, fx.prog.ticks, if fx.prog.ticks >= sh2_gfx::effects::program::MAX_TICKS { " (cut at MAX_TICKS)" } else { "" });
+        }
         done = fx.prog.finished;
         // a program that started its own music (`sbgCreate` / `sbgPlay`) has it faded by the effect's destructor (FX X5)
         if done && fx.prog.host.scene.stream.take().is_some() {
@@ -1787,7 +1812,13 @@ fn run_battle(rt: &mut BattleRuntime, pad: &GamePad, ring_view: &mut RingView, k
     if let Some(ring) = rt.ring.as_mut() {
         let done = ring.tick(pad.press());
         *ring_view = ring.view();
+        // the ring's sounds (`JRing::Update` -> `HNMSnd::PlaySE` / `SetSEEnd`: spin-in 0x2002, the turning loop 0x2001, hits 0x2004 / 0x2005, miss 0x2007 ..)
+        for (id, play) in ring.sounds.drain(..) {
+            sh2_audio::post(if play { sh2_audio::AudioRequest::PlayGlobalSe { id } } else { sh2_audio::AudioRequest::StopGlobalSe { id } });
+        }
         if done {
+            // a ring cut short (timeout) must not leave its loop running
+            sh2_audio::post(sh2_audio::AudioRequest::StopGlobalSe { id: jring::se::RING_LOOP });
             let mult = ring.result.as_ref().map(ring_multiplier).unwrap_or(0.0);
             rt.log.push(format!("ring: x{mult:.2}"));
             log::info!("battle: ring result x{mult:.2} ({} hits of {})", ring.result.as_ref().map(|r| r.hit_count).unwrap_or(0), ring.result.as_ref().map(|r| r.total).unwrap_or(0));
@@ -2502,8 +2533,10 @@ fn draw_battle_ui(rt: &mut BattleRuntime, canvas: &mut UiCanvas, cx: &Cx, hud: O
         if let (Some((name, _)), false) = (&rt.banner, use_hud) {
             ui::draw_banner(&mut g, name);
         }
-        // hit sparks: a bright core and eight rays that grow and fade (additive)
-        for sp in &rt.sparks {
+        // hit sparks: a bright core and eight rays that grow and fade (additive) -- the stand-in of the demo HUD only: with the retail HUD the
+        // weapon hit is the `EffMdl` burst of `BTL_001.BIN` (`effects_bridge::drive_effmdls`); this grey quad + rays showed above the damage
+        // numbers as a blocky "+" (FX2, `screens/r6_fx2/hm_zoom.png`)
+        for sp in rt.sparks.iter().filter(|_| !use_hud) {
             let p = rt.screen.get(sp.target).copied().unwrap_or(Vec2::new(256.0, 150.0)) + Vec2::new(0.0, 36.0);
             let k = (sp.t / 0.35).clamp(0.0, 1.0);
             let a = ((1.0 - k) * 128.0) as u8;

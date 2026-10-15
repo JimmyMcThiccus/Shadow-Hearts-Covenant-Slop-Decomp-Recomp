@@ -71,8 +71,33 @@ Aqua Raise).  Dev aid: `SH2_BATTLE_TARGET_ROW=<n>` walks target pages to row n.
   left; new `HitArea` / `HitBar` flashes (`HitFx::ring_area_flash`, drawn by `draw_ring_mes`; `RingRun::flashes`).
 * `sh2_battle::ring` facade for other screens (RingRun, RingDriver, RingArtPlugin, `start_event` / `event_result`).
 
+## 6. Resumed (2026-10-15, second half)
+Status: `cargo test -p sh2_battle` 251 green, `cargo check --workspace --all-targets` clean.  Sanity (`sh2_app --us --autoplay --boost 80`):
+battle command menu, ring, victory, field after battle, menu tour checked; dev drive `SH2_BATTLE_DEMO=2 SH2_BATTLE_CMDS=attack` weapon hit shot
+(no grey "+" any more).
+* **Character package sounds (CS2)**: `models::load_chr_se` / `chr_se_requests` make the BCM `ase` (SE set 0x6000) / `dse` (0x7000) banks resident
+  (`LoadSeData`, battle banks) and store the wave-bank ids in `BtlHost::chr_se`; `choreo::ChrSe` is queued by the state machine and played by
+  `drive_battle_models` as `(wave bank << 16) | local`:
+  * run loop `0x6000_2000` (`PlaySEHold` with `SetBtlMotion(4)` = `dsh`, `SetSEEnd` when the run stops; US ~1272 / ~1375),
+  * swing hit k -> `0x6000_1000 + k` (k = 1..4, JP `MotionEventCallBack` ~29904, the `+0x3c8` counter),
+  * reaction motion `blwa` / `flya` / `koda` (US 0x19..0x1b) -> `0x6000_1005..1007` (US ~7640),
+  * non-lethal hit -> `0x7000_0000 + rand() % 3` (US ~1690, state 0x18), death type 0 -> `0x7000_0003` (US ~1674), `dwn` -> `0x7000_0005`
+    (US ~4807); a lethal hit drops the reaction sounds queued in the same frame.
+  Not ported: `0x6000_300x` (PC + `CBattle+0x45d6` mode 3), `0x6000_1000` / `0x6000_1008..100a` (reaction motions 5 / 0x1f..0x21 in the same
+  US block -- names unknown), `0x9000_000x`.  Party packages have no `ase` (Karin: `dse` only).  Tests `the_choreography_queues_the_character_package_sounds`,
+  `character_package_banks_play_the_choreography_sounds` (US disc).
+* **Battle ring sounds**: `RingRun::sounds` collects `JrEvent::Se` / `SeEnd`, `run_battle` posts them (`PlayGlobalSe` / `StopGlobalSe`), and stops
+  the loop 0x2001 when a ring ends.
+* **Multi-target effects (FX2)**: `BtlHost::action_targets` (`GetTargetList` of the command's record) -> `ActionInfo::targets` -> `FxContext` /
+  `FxEnv::targets` (chosen target first).
+* **Grey "+" above damage numbers (FX2)**: the procedural `rt.sparks` burst; drawn with the demo HUD only now (retail: `EffMdl` weapon hit).
+* **Programs 096 / 131**: still cut at `MAX_TICKS` (750) in the app (new log line "effect NNN ended after N ticks"); `mdlCreateMemory`'s `clone_of`
+  is never resolved in sh2_gfx -- FX2 hook needed (requests.md).
+* RG ring intro: analysed, not changed (jring `seq_intro` type 5 starts tilted ~(15, 55) deg; needs a live read of `JRing+0x70`).
+* MN2 shortcut rules: the battle has no shortcut (`SetComboShortCutMenu`) handling yet; noted the retail item-row clearing (JP CBattle.c ~10917).
+
 ## Open (priority)
-1. Weapon / voice SE: the retail hit / swing code (US 0x4c6a40..0x4c9b40, JP CBattle.c ~15580 / ~29770) plays global ids `0x6000_1001..100a`,
+1. (mostly done, see 6) Weapon / voice SE: the retail hit / swing code (US 0x4c6a40..0x4c9b40, JP CBattle.c ~15580 / ~29770) plays global ids `0x6000_1001..100a`,
    `0x6000_3005..3007`, `0x7000_000x`, `0x9000_000x` through `HNMSnd::PlaySE` (SLUS 0x38a900, queued as is).  No SSE bank on the disc has wave
    bank 0x6000 / 0x7000 (`examples/bt_se_banks`: battle banks are 0x90xx M/W, 0x91xx C, 0x92xx.., system 0x0200), so these are class ids the
    sound driver maps -- asked CS2 (requests.md).
@@ -80,3 +105,4 @@ Aqua Raise).  Dev aid: `SH2_BATTLE_TARGET_ROW=<n>` walks target pages to row n.
 3. Panic beyond the x3 SP drain (not looked into); the AI's skill-block records, dispel test, Joachim filter.
 4. Tutorial pages (battle types 1 / 2).
 5. Last boss: where retail triggers the separation; the separated-core-death case live.
+6. Battle shortcut / combo-key menu (`SetComboShortCutMenu`), RG ring intro orientation (live `JRing+0x70`), the `0x6000_300x` / `1008..100a` ids.

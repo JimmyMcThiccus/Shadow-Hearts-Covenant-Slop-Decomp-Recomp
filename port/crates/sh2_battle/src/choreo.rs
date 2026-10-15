@@ -403,6 +403,23 @@ pub fn swing_plan(events: &[f32], cancels: &[f32], n: usize, duration: f32) -> (
     (hits, cut)
 }
 
+/// A sound of the fighter's own character package banks (`BTLDATA/CHR/%03d.BCM` entries `ase` = SE set 0x6000, `dse` = SE set 0x7000; retail
+/// `HNMSnd::PlaySE` with the fighter's `IOPEntry` handles `BtlChr+0x4b4` / `+0x4bc`).  Queued by the state machine, played by the owner
+/// (`models::drive_battle_models`) on the fighter's bank.  US BATTLE.BIN `BtlChrSequence` (decomp/I/us_battle_aiinit.c ~1272 / ~1674 / ~4807 /
+/// ~7640), JP `CBattle::MotionEventCallBack` (CBattle.c ~29900).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ChrSe {
+    /// `PlaySE(0x6000_xxxx)`
+    Ase(u16),
+    /// `PlaySEHold(0x6000_2000)`: the run loop while `dsh` plays (`SetBtlMotion(4)`), ended by [`ChrSe::AseEnd`] (`SetSEEnd`)
+    AseHold(u16),
+    AseEnd(u16),
+    /// `PlaySE(0x7000_xxxx)`
+    Dse(u16),
+    /// a hit that leaves the fighter alive: `0x7000_0000 + rand() % 3` (state 0x18)
+    Pain,
+}
+
 /// The choreography of one fighter.
 #[derive(Clone, Debug)]
 pub struct Choreo {
@@ -433,6 +450,8 @@ pub struct Choreo {
     pub stand_extra: f32,
     /// knock-back in progress (`MoveFunc`), see [`Push`]
     pub push: Option<Push>,
+    /// character package sounds requested since the owner last drained them, see [`ChrSe`]
+    pub sounds: Vec<ChrSe>,
 }
 
 impl Choreo {
@@ -458,6 +477,7 @@ impl Choreo {
             arena: None,
             stand_extra: 0.0,
             push: None,
+            sounds: vec![],
         }
     }
 
@@ -515,6 +535,28 @@ impl Choreo {
     }
 
     fn set(&mut self, act: Act) {
+        let running = |a: &Act| matches!(a, Act::Approach { .. } | Act::Walk { .. });
+        // the run loop: `PlaySEHold(0x6000_2000)` with `SetBtlMotion(4)` (`dsh`), `SetSEEnd` when the run stops
+        match (running(&self.act), running(&act)) {
+            (false, true) => self.sounds.push(ChrSe::AseHold(0x2000)),
+            (true, false) => self.sounds.push(ChrSe::AseEnd(0x2000)),
+            _ => {}
+        }
+        match &act {
+            // the hit reactions (US state 0x18 -> `SetNextBtlMotion(0x19 blwa / 0x1a flya / 0x1b koda)`, then `PlaySE(0x6000_1005 / 1006 / 1007)`
+            // by the motion; the `0x6000_300x` variants need `CBattle+0x45d6` mode 3, not ported)
+            Act::Hit { name } => match *name {
+                "blwa" => self.sounds.push(ChrSe::Ase(0x1005)),
+                "flya" => self.sounds.push(ChrSe::Ase(0x1006)),
+                "koda" => self.sounds.push(ChrSe::Ase(0x1007)),
+                _ => {}
+            },
+            // `SetNextBtlMotion(0x2c)` (`dwn`): `PlaySE(0x7000_0005)` (US ~4807)
+            Act::Down | Act::EnemyDown if !matches!(self.act, Act::Down | Act::EnemyDown) => self.sounds.push(ChrSe::Dse(5)),
+            // `DeathInit` of a death type 0 monster: `PlaySE(0x7000_0003)` (US ~1674)
+            Act::Dissolve if self.act != Act::Dissolve => self.sounds.push(ChrSe::Dse(3)),
+            _ => {}
+        }
         self.act = act;
         self.t = 0.0;
     }
@@ -555,6 +597,8 @@ impl Choreo {
             self.die(ms);
             return;
         }
+        // US `BtlChrSequence` ~1690: a hit that leaves HP sends the target to state 0x18 with `PlaySE(0x7000_0000 + rand() % 3)`
+        self.sounds.push(ChrSe::Pain);
         match self.act {
             Act::Guard | Act::GuardHit if ms.has(names::GUARD_HIT) => self.set(Act::GuardHit),
             Act::Idle | Act::Intro | Act::Hit { .. } | Act::Cast { .. } | Act::Guard | Act::Win | Act::Wake => {
@@ -582,6 +626,8 @@ impl Choreo {
             Act::Down
         };
         let _ = ms;
+        // a hit that kills plays the death sound only (the reaction of the same hit, queued this frame, is dropped)
+        self.sounds.retain(|s| !matches!(s, ChrSe::Pain | ChrSe::Ase(0x1005..=0x1007)));
         self.set(a);
     }
 
@@ -748,6 +794,8 @@ impl Choreo {
                 let mut done = hits_done;
                 while done < self.plan.0.len() && self.t >= self.plan.0[done] {
                     out.events.push(Ev::HitFrame(done));
+                    // `MotionEventCallBack` (JP CBattle.c ~29904): the swing's hit counter `+0x3c8` = k picks `PlaySE(0x6000_1000 + k)`, k = 1..4
+                    self.sounds.push(ChrSe::Ase(0x1001 + done.min(3) as u16));
                     done += 1;
                 }
                 self.act = Act::Strike { start, dir, hits_done: done };
@@ -1155,6 +1203,36 @@ pub mod tests {
         assert!((c.pos - start).length() > 30.0 && (c.pos - Vec3::new(20.0, 0.0, 30.0)).length() < 40.0, "pos {:?}", c.pos);
         assert!(!c.displaced(), "nothing sends it back");
         assert!(!c.holding_attack() && !c.busy());
+    }
+
+    #[test]
+    fn the_choreography_queues_the_character_package_sounds() {
+        let f = Fake::party();
+        let mut p = Player::new(&f);
+        let mut c = party();
+        c.n_hits = 3;
+        run(&mut c, &f, &mut p, 1.5, 1.0, false, false);
+        c.sounds.clear();
+        assert!(c.begin_attack(Vec3::new(20.0, 0.0, 30.0), 12.0, &f));
+        run(&mut c, &f, &mut p, 5.0, 1.0, false, false);
+        // the run loop starts with `dsh` and ends at the target; each hit of the swing plays `0x6000_1000 + k`
+        assert_eq!(c.sounds, vec![ChrSe::AseHold(0x2000), ChrSe::AseEnd(0x2000), ChrSe::Ase(0x1001), ChrSe::Ase(0x1002), ChrSe::Ase(0x1003)]);
+        // the struck side: a pain voice (`dse` 0..2) and the reaction's own sound (`blwa` -> 0x1005, `flya` -> 0x1006)
+        let mut t = enemy(0);
+        t.hit(false, false, &f);
+        assert_eq!(t.sounds, vec![ChrSe::Pain, ChrSe::Ase(0x1005)]);
+        t.sounds.clear();
+        t.set(Act::Idle);
+        t.hit(true, false, &f);
+        assert_eq!(t.sounds, vec![ChrSe::Pain, ChrSe::Ase(0x1006)]);
+        // death: type 0 monsters dissolve with `dse` 3, everyone falling down (`dwn`) plays `dse` 5, once
+        t.sounds.clear();
+        t.hit(false, true, &f);
+        assert_eq!(t.sounds, vec![ChrSe::Dse(3)]);
+        let mut d = enemy(1);
+        d.die(&f);
+        d.die(&f);
+        assert_eq!(d.sounds, vec![ChrSe::Dse(5)]);
     }
 
     #[test]

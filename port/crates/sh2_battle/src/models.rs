@@ -351,6 +351,8 @@ pub struct BattleModels {
     shot_clock: f32,
     pending_shot: Option<String>,
     field_light: Option<Sh2SceneLight>,
+    /// `rand()` of the pain voices (`0x7000_0000 + rand() % 3`)
+    se_rng: u32,
 }
 
 pub use crate::choreo::yaw_towards;
@@ -413,6 +415,12 @@ pub fn spawn_battle_models(
         chr_nos[i] = chr_no;
         if let Some(n) = chr_no {
             boxes[i] = read_box(&disc, n);
+            if let Ok(bytes) = disc.read(&chr_files(n)[0]) {
+                let se = load_chr_se(&bytes, n);
+                if let Some(slot) = rt.battle.host.chr_se.get_mut(i) {
+                    *slot = se;
+                }
+            }
         }
     }
     let arena = rt.stage_info.as_ref().map(|s| [s.dims[0], s.dims[2]]).unwrap_or([200.0, 200.0]);
@@ -678,6 +686,61 @@ pub fn read_box(disc: &Sh2Disc, chr_no: u32) -> Option<crate::formation::ChrBox>
     let secs = crate::stage::sections(&bytes);
     let bbx = secs.iter().find(|s| s.0 == "bbx")?;
     crate::formation::ChrBox::parse(bbx.1)
+}
+
+/// The character package's own SE banks (`BTLDATA/CHR/%03d.BCM` entries `ase` -> SE set 0x6000, `dse` -> SE set 0x7000; retail
+/// `HNMSnd::IOPEntry(BtlChr+0x4b0 / +0x4b8)`): makes them resident for the battle (`AudioRequest::LoadSeData`, dropped by
+/// `UnloadBattleBanks`) and returns their wave-bank ids (`0x6000 | BCD(chr)` / `0x7000 | ..`; 0 = none), which address this fighter's bank
+/// when several fighters' banks share the SE set (`Synth::find_se_bank` falls back to the wave-bank id).
+pub fn load_chr_se(bytes: &[u8], chr_no: u32) -> (u32, u32) {
+    let (ids, reqs) = chr_se_requests(bytes, chr_no);
+    for r in reqs {
+        sh2_audio::post(r);
+    }
+    ids
+}
+
+/// [`load_chr_se`] without posting: the wave-bank ids and the `LoadSeData` requests.
+pub fn chr_se_requests(bytes: &[u8], chr_no: u32) -> ((u32, u32), Vec<sh2_audio::AudioRequest>) {
+    let mut out = (0, 0);
+    let mut reqs = vec![];
+    for (tag, data) in crate::stage::sections(bytes) {
+        let slot = match tag.as_str() {
+            "ase" => &mut out.0,
+            "dse" => &mut out.1,
+            _ => continue,
+        };
+        let Some(at) = data.windows(4).take(64).position(|w| w == b"SDRH") else { continue };
+        let data = &data[at..];
+        let Ok(bank) = sh2_audio::sdh::Bank::parse_opts(data, false) else { continue };
+        *slot = bank.bank_id as u32;
+        reqs.push(sh2_audio::AudioRequest::LoadSeData { key: format!("BTLCHR/{chr_no:03}/{tag}"), data: Arc::new(data.to_vec()), battle: true });
+    }
+    (out, reqs)
+}
+
+/// Plays the queued [`crate::choreo::ChrSe`] of fighter `chr` on its own `ase` / `dse` bank (`(wave bank << 16) | local`).
+fn play_chr_sounds(ch: &mut Choreo, banks: (u32, u32), chr: usize, rng: &mut u32) {
+    use crate::choreo::ChrSe;
+    for s in std::mem::take(&mut ch.sounds) {
+        let (bank, local) = match s {
+            ChrSe::Ase(l) | ChrSe::AseHold(l) | ChrSe::AseEnd(l) => (banks.0, l),
+            ChrSe::Dse(l) => (banks.1, l),
+            ChrSe::Pain => {
+                *rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
+                (banks.1, ((*rng >> 16) % 3) as u16)
+            }
+        };
+        if bank == 0 {
+            continue;
+        }
+        let id = (bank << 16) | local as u32;
+        log::debug!("battle: fighter {chr} chr SE {s:?} -> {id:#010x}");
+        sh2_audio::post(match s {
+            ChrSe::AseEnd(_) => sh2_audio::AudioRequest::StopGlobalSe { id },
+            _ => sh2_audio::AudioRequest::PlayGlobalSe { id },
+        });
+    }
 }
 
 /// Horizontal unit direction fighter `i` looks along when standing at its slot: **towards the nearest opponent** (live US, round 5b LV: at
@@ -957,6 +1020,8 @@ pub fn drive_battle_models(
         let casting = casting_phase && actor == Some(m.chr);
         let anim = AnimState { current: am.current.clone(), time: am.inst.time(), finished: am.inst.motion_finished(), root_fwd: -am.inst.root_offset.z };
         let fr = m.ch.update(&World { dt, hp_frac, dead, casting }, &*asset, &anim);
+        let banks = rt.battle.host.chr_se.get(m.chr).copied().unwrap_or((0, 0));
+        play_chr_sounds(&mut m.ch, banks, m.chr, &mut st.se_rng);
         if let Some(req) = &fr.motion {
             let ok = if req.restart || am.current.as_deref() != Some(req.name.as_str()) {
                 if req.blend > 0.0 {
@@ -1359,5 +1424,37 @@ mod tests {
         assert!(energy(&mut rt, 1.5) > 0.002, "result fanfare is silent");
         rt.handle(&sh2_audio::AudioRequest::UnloadBattleBanks);
         rt.handle(&sh2_audio::AudioRequest::StopBattleBgm);
+    }
+
+    /// Round 6 BT (CS2): the `ase` / `dse` banks of the character packages load from the BCM and the choreography's ids are audible on
+    /// one fighter's bank addressed by its wave-bank id (Karin 005, the Revenant-like CHR 418); after `UnloadBattleBanks` they are gone.
+    #[test]
+    fn character_package_banks_play_the_choreography_sounds() {
+        let Some(dir) = std::env::var_os("SH2_US_DISC_DIR") else { return };
+        let Ok(d) = sh2_core::fileio::Disc::open(&dir) else { return };
+        let files: Vec<(u32, Vec<u8>)> = [5u32, 418].iter().filter_map(|&n| d.read(&chr_files_for(true, n)[0]).ok().map(|b| (n, b))).collect();
+        let mut rt = sh2_audio::AudioRuntime::new(sh2_audio::AudioEngine::new(sh2_audio::OutputKind::Null), Some(d));
+        let energy = |rt: &mut sh2_audio::AudioRuntime, secs: f32| {
+            let mut buf = vec![0.0f32; (secs * 48000.0) as usize * 2];
+            rt.engine.synth().render(&mut buf);
+            (buf.iter().map(|s| s * s).sum::<f32>() / buf.len() as f32).sqrt()
+        };
+        let mut banks = vec![];
+        for (n, b) in &files {
+            let (ids, reqs) = chr_se_requests(b, *n);
+            // Karin's package has no `ase` (her `+0x4b4` handle stays -1: no swing / reaction voices), CHR 418 has both
+            assert!(ids.1 != 0 && (ids.0 != 0) == (*n == 418), "CHR {n:03} ase / dse {ids:x?}");
+            for r in &reqs {
+                rt.handle(r);
+            }
+            banks.push(ids);
+        }
+        assert_eq!(banks, vec![(0, 0x7005), (0x6418, 0x7418)]);
+        // ids the banks hold (418: `ase` 6 / 0x1006 / 0x2000, `dse` 0 / 4; ids a bank lacks play nothing, like `FindSE`)
+        for id in [0x7005u32 << 16, 0x7005 << 16 | 3, 0x7005 << 16 | 5, 0x6418 << 16 | 0x1006, 0x7418 << 16] {
+            rt.handle(&sh2_audio::AudioRequest::PlayGlobalSe { id });
+            assert!(energy(&mut rt, 0.4) > 0.0005, "SE {id:#x} is silent");
+        }
+        rt.handle(&sh2_audio::AudioRequest::UnloadBattleBanks);
     }
 }

@@ -927,3 +927,25 @@ Edits outside my files: `sh2_gfx/src/effects/scene.rs` `FxScene::lsd_names()` (r
    compositing / absolute brightness veil?  Worth one live comparison.
 5. **Everyone (tests)**: `sh2_app` `headless_game_over_returns_to_title` / `headless_continue_loads_the_save` failed when run beside the US
    story test (process-wide retail flag / env): they now take the same `SERIAL` lock.  Workspace tests otherwise green (843 passed).
+
+## Round 6 BT (resumed, 2026-10-15)
+* **CS2, thanks (request 1 done)**: `sh2_battle::models::load_chr_se` posts `LoadSeData { key: "BTLCHR/<chr>/ase|dse", battle: true }` at fighter load
+  and keeps the wave-bank ids per fighter (`BtlHost::chr_se`); `choreo::ChrSe` sounds play as `(wave bank << 16) | local` (run loop 0x2000 held /
+  `StopGlobalSe`, hits 0x1001..0x1004, reactions 0x1005..0x1007, `dse` pain 0..2 / death 3 / down 5).  Party packages have no `ase` (Karin 005: only
+  `dse`), which matches retail's `+0x4b4 == -1` guard.  Not ported: the `0x6000_300x` variants (`CBattle+0x45d6` mode 3), `0x6000_1000` and
+  `0x6000_1008..100a` (motions 0x1f..0x21 / JP 0x13..0x15, names unknown), `0x9000_000x` item / projectile hits.  Test
+  `character_package_banks_play_the_choreography_sounds` (US disc).  The battle Judgement Ring now posts its `JrEvent::Se` / `SeEnd` ids too.
+* **FX2**: (1) multi-target env done: `begin_action_fx` fills `ActionInfo::targets` from `BtlHost::action_targets` (`GetTargetList` of the
+  command's record) and `FxContext::targets` / `FxEnv::targets` carry every unit, chosen target first.  (2) the grey "+" was the battle's own
+  procedural hit spark (plugin.rs `rt.sparks`); it is now drawn with the demo HUD only.  (3) **096 / 131 still hit `MAX_TICKS` in the app**
+  (`SH2_BATTLE_DEMO=2 SH2_BATTLE_FXLIST=96,131`: "effect 096 ended after 750 ticks (cut at MAX_TICKS)", same for 131; new log line in
+  `step_fx`).  `FxScene` `mdlCreateMemory` only sets `clone_of` and nothing resolves it (no instance, no motions), so the battle cannot help
+  through the current `FxEnv`; if you add a hook (e.g. the caster's motion names / lengths on `FxActor`, or a callback), BT will fill it from
+  the fighter's `CharacterAsset`.
+* **MN2**: noted.  The port's battle has no shortcut handling yet: retail uses the rows in `BtlMenu::SetComboShortCutMenu` /
+  `SetComboShortCutSettingMenu` (JP BtlMenu.c 13257 / 14876) and clears item rows (`kind 1`, id = the item) whose last item is used
+  (JP CBattle.c ~10917: `kind = -1, b1 = 0xff, id = 0xffff`).  When ported they will follow `ConvertComboKeyDefault` and the style mask.
+* **RG**: ring intro not changed.  The intro is `jring.rs` (sh2_gfx) `seq_intro` type 5: `anim_a = -5.497`, `anim_b = 2*pi` decaying by 1/7 per
+  frame from `home_rot = (-30 deg, 55 deg, 0)`; the first drawn frame is therefore tilted ~(15 deg, 55 deg), not face-on.  A face-on start
+  needs the retail matrix order / wrap of `JRing+0x70` during state 3 -- a live read of `JRing+0x70..0x7c` on the first intro frames would
+  settle it.  `hud_hits::draw_ring` only applies `r.rot` (Y * X * Z).
