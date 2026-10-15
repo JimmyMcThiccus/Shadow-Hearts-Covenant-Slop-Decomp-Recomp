@@ -118,7 +118,7 @@ fn main() {
         .add_plugins(autoplay::AutoplayPlugin::from_args())
         .add_plugins(RetailOnly(region.is_retail()))
         .add_plugins(sh2_audio::AudioPlugin::default()) // Sdrv / CSe / CMusic / StreamBGM replacement (SH2_AUDIO=null|wav:<path> overrides the device)
-        .add_systems(Startup, init_instance)
+        .add_systems(Startup, (init_instance, limit_catch_up))
         .add_systems(
             Update,
             (
@@ -171,6 +171,15 @@ fn max_seconds(at: Res<MaxSecondsAt>, mut exit: MessageWriter<AppExit>) {
         log::warn!("SH2_MAX_SECONDS: {} s reached, exiting", at.1);
         exit.write(AppExit::from_code(124));
     }
+}
+
+/// Cap the 60 Hz logic catch-up of a slow frame (round 6 PF).  Bevy's default `Time<Virtual>` max delta (250 ms) lets one slow frame run up to
+/// 15 `FixedUpdate` ticks, which makes the next frame slower still (main thread and render thread then compete for the CPU and the UI
+/// falls behind: measured 15 ticks / frame and 250-600 ms frames in AP_02_U under load).  With 100 ms at most 6 ticks run per frame; the game
+/// slows down instead of spiralling, like the PS2 under load.  `SH2_MAX_CATCHUP_MS=<ms>` overrides (250 = Bevy's default).
+fn limit_catch_up(mut time: ResMut<Time<Virtual>>) {
+    let ms = std::env::var("SH2_MAX_CATCHUP_MS").ok().and_then(|v| v.parse::<u64>().ok()).filter(|v| *v >= 17).unwrap_or(100);
+    time.set_max_delta(std::time::Duration::from_millis(ms));
 }
 
 /// `CApp::InitInstance` — JP 0x003d76d0: `m_pPause = new CPause; InitMain();`

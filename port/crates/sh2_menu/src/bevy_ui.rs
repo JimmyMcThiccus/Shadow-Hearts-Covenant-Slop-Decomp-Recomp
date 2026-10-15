@@ -63,6 +63,8 @@ pub mod layer {
 struct Layer {
     cmds: Vec<DrawCmd>,
     stamp: f32,
+    /// [`UiCanvas::frame`] when the layer was last written
+    frame: u64,
 }
 
 /// The per-layer command lists plus the sound requests that the toolkit emitted.
@@ -74,17 +76,28 @@ pub struct UiCanvas {
     pub fonts: Option<std::sync::Arc<FontBank>>,
     /// wall clock (seconds); layers not refreshed within [`UiCanvas::TTL`] disappear
     pub now: f32,
+    /// rendered frames so far ([`render_canvas`] counts them; 0 in headless runs)
+    pub frame: u64,
 }
 
 impl UiCanvas {
     pub const TTL: f32 = 0.12;
 
+    /// A layer is alive while it was refreshed within [`Self::TTL`] of wall clock *or* during the previous / current rendered frame.
+    /// The frame rule matters when a frame takes longer than the TTL (heavy scenes, debug builds): the producers redraw their layer
+    /// every logic tick, but `now - stamp` is then already a whole frame (> 0.12 s), and the wall-clock rule alone hid every UI layer
+    /// (round 6 PF: "the in-game menu / battle HUD draws nothing" at 250-400 ms frames).
+    fn alive(&self, l: &Layer) -> bool {
+        self.now - l.stamp <= Self::TTL || (self.frame > 0 && self.frame - l.frame.min(self.frame) <= 1)
+    }
+
     /// Start (replace) the contents of `layer`.
     pub fn begin(&mut self, layer: u8) -> LayerGfx<'_> {
-        let now = self.now;
-        let l = self.layers.entry(layer).or_insert_with(|| Layer { cmds: Vec::new(), stamp: now });
+        let (now, frame) = (self.now, self.frame);
+        let l = self.layers.entry(layer).or_insert_with(|| Layer { cmds: Vec::new(), stamp: now, frame });
         l.cmds.clear();
         l.stamp = now;
+        l.frame = frame;
         LayerGfx { cmds: &mut l.cmds, ses: &mut self.ses, fonts: if layer >= layer::SPRITE_BASE { self.fonts.clone() } else { None } }
     }
     /// Remove a layer immediately.
@@ -93,11 +106,11 @@ impl UiCanvas {
     }
     /// Number of draw commands of a layer that are still alive (tests).
     pub fn live_commands(&self, layer: u8) -> usize {
-        self.layers.get(&layer).filter(|l| self.now - l.stamp <= Self::TTL).map(|l| l.cmds.len()).unwrap_or(0)
+        self.layers.get(&layer).filter(|l| self.alive(l)).map(|l| l.cmds.len()).unwrap_or(0)
     }
-    /// Commands of a layer that is still alive (refreshed within [`UiCanvas::TTL`]).
+    /// Commands of a layer that is still alive (see [`Self::alive`]).
     pub fn alive_commands(&self, layer: u8) -> Option<&[DrawCmd]> {
-        self.layers.get(&layer).filter(|l| self.now - l.stamp <= Self::TTL).map(|l| l.cmds.as_slice())
+        self.layers.get(&layer).filter(|l| self.alive(l)).map(|l| l.cmds.as_slice())
     }
     pub fn commands(&self, layer: u8) -> &[DrawCmd] {
         self.layers.get(&layer).map(|l| l.cmds.as_slice()).unwrap_or(&[])
@@ -297,6 +310,33 @@ fn quad_bounds(v: &[crate::gfx::Vertex; 4]) -> (f32, f32, f32, f32, Rgba) {
     (x0, y0, x1 - x0, y1 - y0, Rgba::new((r / 4) as u8, (g / 4) as u8, (b / 4) as u8, (a / 4) as u8))
 }
 
+/// Show a pooled rect node at this position / size, touching the `Node` only when something differs (change detection).
+fn set_node_rect(n: &mut Mut<Node>, left: Val, top: Val, width: Val, height: Val) {
+    if n.display != Display::Flex || n.left != left || n.top != top || n.width != width || n.height != height {
+        let n = n.as_mut();
+        n.display = Display::Flex;
+        n.left = left;
+        n.top = top;
+        n.width = width;
+        n.height = height;
+    }
+}
+
+/// Size / font of a pooled text entity, written only when it differs (a changed `TextFont` re-shapes the text).
+fn set_text_font(tf: &mut Mut<TextFont>, px_size: f32, font: &UiFont, ascii: bool) {
+    let size = FontSize::Px(px_size);
+    if tf.font_size != size {
+        tf.font_size = size;
+    }
+    let want: FontSource = match (&font.handle, ascii) {
+        (Some(h), false) => h.clone().into(),
+        _ => FontSource::default(),
+    };
+    if tf.font != want {
+        tf.font = want;
+    }
+}
+
 /// Mirror the canvas layers into Bevy UI nodes.
 #[allow(clippy::too_many_arguments)]
 pub fn render_canvas(
@@ -306,11 +346,13 @@ pub fn render_canvas(
     mut pool: ResMut<CanvasPool>,
     font: Res<UiFont>,
     textures: Res<UiTextures>,
-    mut rects: Query<(&mut Node, &mut BackgroundColor, &mut ZIndex), (With<CanvasRect>, Without<CanvasText>)>,
+    mut rects: Query<(&mut Node, &mut BackgroundColor, &mut ZIndex, Option<&mut ImageNode>), (With<CanvasRect>, Without<CanvasText>)>,
     mut texts: Query<(&mut Node, &mut Text, &mut TextColor, &mut TextFont, &mut ZIndex, &mut TextShadow), (With<CanvasText>, Without<CanvasRect>)>,
 ) {
+    // Every write below goes through a compare first: a `Mut` deref marks the component changed, and changed `Node` / `Text*`
+    // components make Bevy UI re-run layout and text shaping for the whole tree every frame (round 6 PF).
     canvas.now = time.elapsed_secs();
-    let now = canvas.now;
+    canvas.frame += 1;
     let mut ids: Vec<u8> = canvas.layers.keys().copied().filter(|k| *k < layer::SPRITE_BASE).collect();
     for k in pool.layers.keys() {
         if !ids.contains(k) {
@@ -318,7 +360,7 @@ pub fn render_canvas(
         }
     }
     for id in ids {
-        let alive = canvas.layers.get(&id).map(|l| now - l.stamp <= UiCanvas::TTL).unwrap_or(false);
+        let alive = canvas.layers.get(&id).map(|l| canvas.alive(l)).unwrap_or(false);
         if !alive && !pool.layers.contains_key(&id) {
             canvas.layers.remove(&id);
             continue;
@@ -348,21 +390,32 @@ pub fn render_canvas(
                     }
                     let e = lp.rects[ri];
                     ri += 1;
-                    if let Ok((mut n, mut bg, mut z)) = rects.get_mut(e) {
-                        n.display = Display::Flex;
-                        n.left = px(x);
-                        n.top = px(y);
-                        n.width = px(w);
-                        n.height = px(h);
-                        z.0 = idx as i32;
+                    if let Ok((mut n, mut bg, mut z, img)) = rects.get_mut(e) {
+                        set_node_rect(&mut n, px(x), px(y), px(w), px(h));
+                        z.set_if_neq(ZIndex(idx as i32));
                         match tex.and_then(|t| textures.get(t)) {
                             Some(handle) => {
-                                bg.0 = Color::NONE;
-                                commands.entity(e).insert(ImageNode { image: handle.clone(), color: col(c, 1.0), ..default() });
+                                bg.set_if_neq(BackgroundColor(Color::NONE));
+                                let color = col(c, 1.0);
+                                match img {
+                                    Some(mut im) => {
+                                        if im.image != *handle {
+                                            im.image = handle.clone();
+                                        }
+                                        if im.color != color {
+                                            im.color = color;
+                                        }
+                                    }
+                                    None => {
+                                        commands.entity(e).insert(ImageNode { image: handle.clone(), color, ..default() });
+                                    }
+                                }
                             }
                             None => {
-                                bg.0 = col(c, 1.0);
-                                commands.entity(e).remove::<ImageNode>();
+                                bg.set_if_neq(BackgroundColor(col(c, 1.0)));
+                                if img.is_some() {
+                                    commands.entity(e).remove::<ImageNode>();
+                                }
                             }
                         }
                     }
@@ -387,32 +440,26 @@ pub fn render_canvas(
                     let e = lp.texts[ti];
                     ti += 1;
                     if let Ok((mut n, mut tx, mut tc, mut tf, mut z, mut sh)) = texts.get_mut(e) {
-                        n.display = Display::Flex;
-                        n.left = px(t.pos.x);
-                        n.top = px(t.pos.y);
-                        z.0 = idx as i32;
+                        if n.display != Display::Flex {
+                            n.display = Display::Flex;
+                        }
+                        if n.left != px(t.pos.x) || n.top != px(t.pos.y) {
+                            n.left = px(t.pos.x);
+                            n.top = px(t.pos.y);
+                        }
+                        z.set_if_neq(ZIndex(idx as i32));
                         let s = sjis::decode(&t.text);
                         let s = if t.visible == usize::MAX { s } else { s.chars().take(t.visible).collect() };
                         let s = sjis::strip_codes(&s);
                         if tx.0 != s {
                             tx.0 = s;
                         }
-                        tc.0 = col(t.color, 1.0);
-                        tf.font_size = FontSize::Px(font_px(t.font_number));
-                        tf.font = match (&font.handle, tx.0.is_ascii()) {
-                            (Some(h), false) => h.clone().into(),
-                            _ => FontSource::default(),
-                        };
-                        match t.shadow {
-                            Some((dx, dy)) => {
-                                sh.offset = Vec2::new(dx as f32, dy as f32);
-                                sh.color = Color::srgba(0.0, 0.0, 0.0, 0.85);
-                            }
-                            None => {
-                                sh.offset = Vec2::ZERO;
-                                sh.color = Color::NONE;
-                            }
-                        }
+                        tc.set_if_neq(TextColor(col(t.color, 1.0)));
+                        set_text_font(&mut tf, font_px(t.font_number), &font, tx.0.is_ascii());
+                        sh.set_if_neq(match t.shadow {
+                            Some((dx, dy)) => TextShadow { offset: Vec2::new(dx as f32, dy as f32), color: Color::srgba(0.0, 0.0, 0.0, 0.85) },
+                            None => TextShadow { offset: Vec2::ZERO, color: Color::NONE },
+                        });
                     }
                 }
                 DrawCmd::Clip(_) => {}
@@ -420,13 +467,17 @@ pub fn render_canvas(
         }
         // hide the unused tail
         for &e in &lp.rects[ri.min(lp.rects.len())..] {
-            if let Ok((mut n, _, _)) = rects.get_mut(e) {
-                n.display = Display::None;
+            if let Ok((mut n, ..)) = rects.get_mut(e) {
+                if n.display != Display::None {
+                    n.display = Display::None;
+                }
             }
         }
         for &e in &lp.texts[ti.min(lp.texts.len())..] {
-            if let Ok((mut n, _, _, _, _, _)) = texts.get_mut(e) {
-                n.display = Display::None;
+            if let Ok((mut n, ..)) = texts.get_mut(e) {
+                if n.display != Display::None {
+                    n.display = Display::None;
+                }
             }
         }
         if !alive {
@@ -497,8 +548,10 @@ pub fn fit_ui_scale(
         if id.0 == SELF_FIT_ROOT {
             continue;
         }
-        n.left = px(left);
-        n.top = px(0);
+        if n.left != px(left) || n.top != px(0) {
+            n.left = px(left);
+            n.top = px(0);
+        }
         if t.scale != want {
             t.scale = want;
         }
@@ -552,10 +605,12 @@ pub struct SpriteQuad;
 #[derive(Component)]
 pub struct SpriteText;
 
+/// One pooled `Mesh2d` entity: a *run* of consecutive quads of one layer that share a texture (round 6 PF: was one mesh + entity per quad,
+/// i.e. dozens of tiny mesh re-uploads and draws per frame; a run keeps the command order inside its mesh and takes the z of its first command).
 struct QuadEnt {
     e: Entity,
     mesh: Handle<Mesh>,
-    last: Option<(Option<TextureId>, [crate::gfx::Vertex; 4], (u32, u32))>,
+    last: Option<(Option<TextureId>, (u32, u32), Vec<[crate::gfx::Vertex; 4]>)>,
 }
 
 #[derive(Default)]
@@ -655,16 +710,28 @@ fn quad_mesh() -> Mesh {
     m
 }
 
-fn fill_quad_mesh(m: &mut Mesh, v: &[crate::gfx::Vertex; 4], tex_size: Option<(u32, u32)>) {
-    let pos: Vec<[f32; 3]> = v.iter().map(|p| [p.pos.x - VIRT_W * 0.5, VIRT_H * 0.5 - p.pos.y, 0.0]).collect();
-    // uv: texel units when any coordinate exceeds 1 (sprite / polygon records), else already normalised
-    let texel = v.iter().any(|p| p.uv.x.abs() > 1.0001 || p.uv.y.abs() > 1.0001);
+/// Fill a run mesh: per quad four vertices (strip order TL, BL, TR, BR) and the two triangles (0 1 2) (2 1 3), in command order.
+fn fill_quads_mesh(m: &mut Mesh, quads: &[[crate::gfx::Vertex; 4]], tex_size: Option<(u32, u32)>) {
     let (tw, th) = tex_size.map(|(w, h)| (w as f32, h as f32)).unwrap_or((1.0, 1.0));
-    let uv: Vec<[f32; 2]> = v.iter().map(|p| if texel { [p.uv.x / tw, p.uv.y / th] } else { [p.uv.x, p.uv.y] }).collect();
-    let col: Vec<[f32; 4]> = v.iter().map(|p| gs_to_linear(p.color)).collect();
+    let n = quads.len() * 4;
+    let (mut pos, mut uv, mut col) = (Vec::with_capacity(n), Vec::with_capacity(n), Vec::with_capacity(n));
+    for v in quads {
+        // uv: texel units when any coordinate of the quad exceeds 1 (sprite / polygon records), else already normalised
+        let texel = v.iter().any(|p| p.uv.x.abs() > 1.0001 || p.uv.y.abs() > 1.0001);
+        for p in v {
+            pos.push([p.pos.x - VIRT_W * 0.5, VIRT_H * 0.5 - p.pos.y, 0.0]);
+            uv.push(if texel { [p.uv.x / tw, p.uv.y / th] } else { [p.uv.x, p.uv.y] });
+            col.push(gs_to_linear(p.color));
+        }
+    }
     m.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
     m.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv);
     m.insert_attribute(Mesh::ATTRIBUTE_COLOR, col);
+    if n <= u16::MAX as usize {
+        m.insert_indices(Indices::U16((0..quads.len() as u16).flat_map(|q| [0, 1, 2, 2, 1, 3].map(|k| q * 4 + k)).collect()));
+    } else {
+        m.insert_indices(Indices::U32((0..quads.len() as u32).flat_map(|q| [0, 1, 2, 2, 1, 3].map(|k| q * 4 + k)).collect()));
+    }
 }
 
 /// Mirror the sprite layers ([`layer::SPRITE_BASE`] and up) into `Mesh2d` / `Text2d` entities.
@@ -717,11 +784,23 @@ pub fn render_sprite_layers(
         }
         let z0 = id as f32;
         let (mut qi, mut ti) = (0usize, 0usize);
-        for (idx, cmd) in cmds.iter().enumerate() {
+        let mut idx = 0usize;
+        while idx < cmds.len() {
+            let cmd = &cmds[idx];
             let z = z0 + idx as f32 * 0.001;
+            idx += 1;
             match cmd {
                 DrawCmd::Quad { tex, v, .. } => {
                     let tex_ok = tex.filter(|t| textures.get(*t).is_some());
+                    // the run: this quad and the following quads with the same texture
+                    let mut run = vec![*v];
+                    while let Some(DrawCmd::Quad { tex: t2, v: v2, .. }) = cmds.get(idx) {
+                        if t2.filter(|t| textures.get(*t).is_some()) != tex_ok {
+                            break;
+                        }
+                        run.push(*v2);
+                        idx += 1;
+                    }
                     let size = tex_ok.and_then(|t| textures.size(t)).unwrap_or((1, 1));
                     let mat = pools
                         .mats
@@ -732,22 +811,26 @@ pub fn render_sprite_layers(
                     if qi == pool.quads.len() {
                         let mesh = meshes.add(quad_mesh());
                         let e = commands
-                            .spawn((SpriteQuad, Mesh2d(mesh.clone()), MeshMaterial2d(mat.clone()), Transform::from_xyz(0.0, 0.0, z), Visibility::Hidden, rl.clone()))
+                            // spawned visible with its final material / z: a run that first appears this frame is drawn this frame
+                            .spawn((SpriteQuad, Mesh2d(mesh.clone()), MeshMaterial2d(mat.clone()), Transform::from_xyz(0.0, 0.0, z), Visibility::Inherited, rl.clone()))
                             .id();
                         pool.quads.push(QuadEnt { e, mesh, last: None });
                     }
                     let q = &mut pool.quads[qi];
                     qi += 1;
-                    let key = (tex_ok, *v, size);
-                    if q.last.as_ref() != Some(&key) {
+                    let same = q.last.as_ref().is_some_and(|(t, sz, vs)| *t == tex_ok && *sz == size && *vs == run);
+                    if !same {
                         if let Some(mut m) = meshes.get_mut(&q.mesh) {
-                            fill_quad_mesh(&mut m, v, tex_ok.map(|_| size));
+                            fill_quads_mesh(&mut m, &run, tex_ok.map(|_| size));
                         }
-                        q.last = Some(key);
+                        q.last = Some((tex_ok, size, run));
                     }
                     if let Ok((mut tr, mut vis, mut mm)) = quads.get_mut(q.e) {
-                        tr.translation.z = z;
-                        *vis = Visibility::Inherited;
+                        // compare before writing: a changed Transform / Visibility re-propagates and re-extracts the quad
+                        if tr.translation.z != z {
+                            tr.translation.z = z;
+                        }
+                        vis.set_if_neq(Visibility::Inherited);
                         if mm.0 != mat {
                             mm.0 = mat;
                         }
@@ -782,22 +865,16 @@ pub fn render_sprite_layers(
                             tx.0 = s;
                         }
                         // rasterise at the window scale and shrink the entity back: crisp glyphs under the fixed-size projection
-                        tf.font_size = FontSize::Px(font_px(t.font_number) * win_scale);
-                        tf.font = match (&font.handle, tx.0.is_ascii()) {
-                            (Some(h), false) => h.clone().into(),
-                            _ => FontSource::default(),
+                        set_text_font(&mut tf, font_px(t.font_number) * win_scale, &font, tx.0.is_ascii());
+                        tc.set_if_neq(TextColor(col(t.color, 1.0)));
+                        let want = Transform { translation: Vec3::new(t.pos.x - VIRT_W * 0.5, VIRT_H * 0.5 - t.pos.y, z), scale: Vec3::splat(1.0 / win_scale), ..*tr };
+                        tr.set_if_neq(want);
+                        vis.set_if_neq(Visibility::Inherited);
+                        let shadow = match t.shadow {
+                            Some((dx, dy)) => bevy::sprite::Text2dShadow { offset: Vec2::new(dx.max(1) as f32 * win_scale, -(dy.max(1) as f32) * win_scale), color: Color::srgba(0.0, 0.0, 0.0, 0.85) },
+                            None => bevy::sprite::Text2dShadow { color: Color::NONE, ..*sh },
                         };
-                        tc.0 = col(t.color, 1.0);
-                        tr.translation = Vec3::new(t.pos.x - VIRT_W * 0.5, VIRT_H * 0.5 - t.pos.y, z);
-                        tr.scale = Vec3::splat(1.0 / win_scale);
-                        *vis = Visibility::Inherited;
-                        match t.shadow {
-                            Some((dx, dy)) => {
-                                sh.offset = Vec2::new(dx.max(1) as f32 * win_scale, -(dy.max(1) as f32) * win_scale);
-                                sh.color = Color::srgba(0.0, 0.0, 0.0, 0.85);
-                            }
-                            None => sh.color = Color::NONE,
-                        }
+                        sh.set_if_neq(shadow);
                     }
                 }
                 DrawCmd::Clip(_) => {}
@@ -806,12 +883,12 @@ pub fn render_sprite_layers(
         if let Some(pool) = pools.layers.get(&id) {
             for q in &pool.quads[qi.min(pool.quads.len())..] {
                 if let Ok((_, mut vis, _)) = quads.get_mut(q.e) {
-                    *vis = Visibility::Hidden;
+                    vis.set_if_neq(Visibility::Hidden);
                 }
             }
             for &e in &pool.texts[ti.min(pool.texts.len())..] {
                 if let Ok((_, mut vis, ..)) = texts.get_mut(e) {
-                    *vis = Visibility::Hidden;
+                    vis.set_if_neq(Visibility::Hidden);
                 }
             }
         }
@@ -842,6 +919,43 @@ impl Plugin for BevyUiPlugin {
             .init_resource::<UiFont>()
             .init_resource::<SpritePools>()
             .add_systems(Startup, pick_font)
-            .add_systems(Update, (ui_probe, render_canvas, fit_ui_scale, render_sprite_layers).chain());
+            // PostUpdate (was Update, round 6 PF): every producer -- FixedUpdate logic ticks and Update systems alike -- has written its
+            // layer by now, so the mirrored nodes / quads always show *this* frame's canvas (an Update producer ordered after the sync
+            // used to appear one frame late); before UI layout, transform propagation and the camera / visibility passes of this frame.
+            .add_systems(
+                PostUpdate,
+                (ui_probe, render_canvas, fit_ui_scale, render_sprite_layers)
+                    .chain()
+                    .before(bevy::ui::UiSystems::Prepare)
+                    .before(bevy::transform::TransformSystems::Propagate)
+                    .before(bevy::camera::CameraUpdateSystems)
+                    .before(bevy::camera::visibility::VisibilitySystems::CalculateBounds),
+            );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Round 6 PF: a layer written during the previous rendered frame stays alive even when that frame took longer than the TTL.
+    #[test]
+    fn layers_survive_slow_frames() {
+        let mut c = UiCanvas::default();
+        rect(&mut c.begin(layer::MENU), 0.0, 0.0, 1.0, 1.0, Rgba::new(0x80, 0x80, 0x80, 0x80));
+        // headless (no rendered frame yet): the wall-clock rule alone
+        c.now = 0.5;
+        assert_eq!(c.live_commands(layer::MENU), 0);
+        // a 500 ms frame was rendered since the layer was written: still alive
+        c.frame = 1;
+        assert_eq!(c.live_commands(layer::MENU), 1);
+        // not rewritten for a whole rendered frame more: gone
+        c.frame = 2;
+        assert_eq!(c.live_commands(layer::MENU), 0);
+        // fast frames: kept for the TTL even when the producer skips frames (60 Hz logic, faster display)
+        rect(&mut c.begin(layer::MENU), 0.0, 0.0, 1.0, 1.0, Rgba::new(0x80, 0x80, 0x80, 0x80));
+        c.frame = 5;
+        c.now = 0.55;
+        assert_eq!(c.live_commands(layer::MENU), 1);
     }
 }

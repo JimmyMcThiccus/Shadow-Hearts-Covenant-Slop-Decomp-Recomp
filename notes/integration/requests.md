@@ -641,6 +641,16 @@ Still open for others:
 * New background effect 204 (`FpTaki`, `effects/bgfx_taki.rs`) needs **no** new draw code: it yields ordinary `BgQuad`s (billboards, CMNEFF smoke texture,
   alpha blended) through the existing `BgFx::quads` -> `bgfx_render` path.  If GP changes `BgQuad` / the draw path, `bgfx_taki.rs` follows `bgfx_misc.rs`.
 
+## Round 6 GP (GPU offload, 2026-10-15)
+* **Menu / battle HUD draws nothing (MN2 report): not caused by GP.**  Autoplay runs of the current tree (`--us --autoplay --boost 80`) with the GPU paths
+  *and* with both CPU fallbacks (`SH2_CPU_SKIN=1 SH2_CPU_FX=1`) give the same picture: field / battle 3D fine, **no 2D UI at all** (title menu, in-game menu
+  tour `menu/*.png`, battle command menu / ring HUD all show only the 3D layer).  The UI goes through `sh2_menu::bevy_ui` (`Mesh2d` + `ColorMaterial`, 2D
+  cameras), which none of GP's edits touch (GP changed `Sh2Material`'s vertex stage, model skinning, mirror skins, effect quads; `setup_gamma_cameras` is
+  unchanged).  Suspects outside GP: the uncommitted `Cargo.toml` / `sh2_app/Cargo.toml` edits (PF) or anything that changed the 2D cameras / sprite layers.
+* New in GP's files (all behind env switches for A/B): `Sh2Material` has its own vertex shader `bevy/sh2_vertex.wgsl` (= Bevy's mesh vertex shader + PS2
+  one-matrix skinning); `bevy/fxquad.rs` (`Sh2FxMaterial`, GPU-expanded effect quads / ribbons); `bevy/perf.rs` (`SH2_NO_VSYNC`, `SH2_FRAMETIME`,
+  `SH2_FIXED_DT`).  `bevy/mod.rs` (FX2's): two `pub mod` lines.  `SH2_CPU_SKIN=1` / `SH2_CPU_FX=1` restore the old CPU paths.
+
 ## Round 6 RG (field Judgement Ring, 2026-10-14)
 Hooks in files I do not own (all small, additive; notes in `notes/integration/r6_rg.md`):
 * **FS2 `sh2_field/src/host.rs`**: `FieldRing` gained `arg` / `x` / `y` (`SetRing` args 2..4; `arg` = laps of a kind-1 ring, else the
@@ -667,3 +677,40 @@ Requests:
 2. **Audio owner (CS2)**: ring sound effects are not played anywhere in the port (battle or field): `JrEvent::Se(id)` / `SeEnd(id)`
    (`jring::se::*`: 0x2001 loop, 0x2002 show, 0x2004 / 0x2005 hit, 0x2007 miss, 0x300_0000 event loop ...).  If you add a consumer I will
    forward the field ring's events to it.
+
+## Round 6 PF (performance, 2026-10-15)
+Edits outside my own notes (all small; details and numbers in `notes/integration/r6_pf.md`):
+* **`sh2_menu::bevy_ui` (MN2's file) -- the "menu / battle HUD / title UI draws nothing" bug is a load bug, fixed.**  Canvas layers were alive only
+  while `now - stamp <= UiCanvas::TTL` (0.12 s of wall clock); `now` is set once per rendered frame, so any frame longer than 120 ms (dev profile
+  + a parallel build or a second game instance: measured 250-600 ms frames in AP_02_U) dropped **every** layer before it was mirrored.  A layer
+  now also stays alive when it was written during the current / previous rendered frame (`UiCanvas::frame`).  The sync systems
+  (`ui_probe, render_canvas, fit_ui_scale, render_sprite_layers`) moved from `Update` to `PostUpdate` (before UI layout / transform propagation /
+  camera + visibility), so no producer can land after the sync.  All per-frame writes there compare first (no `Changed<Node>` / `TextFont` /
+  `Transform` / `Visibility` churn -> no full UI layout + text re-shape every frame); sprite layers draw one `Mesh2d` per *run* of quads sharing a
+  texture instead of one mesh + entity per quad.  MN2: please keep these when you resume (API unchanged).
+* `sh2_field::navimap_plugin` (FS2's): the 108 x 108 floor picture is only re-rasterised / re-uploaded when the player position / heading / shown
+  meshes / tints change.
+* `sh2_app` (QA2's): `perf.rs` (`SH2_PERF=<file>` per-scene profile; `--features profile` = per-system spans), `limit_catch_up` (at most 6 logic
+  ticks per frame instead of 15: `Time<Virtual>` max delta 100 ms, `SH2_MAX_CATCHUP_MS`).
+* `port/Cargo.toml`: new `[profile.play]` (release-optimised + incremental), used by `run-us.bat` / `run-us.sh`.
+
+Requests for **GP** (your files; measured in AP_02_U / battle, dev profile, see r6_pf.md):
+1. `model.rs` `animate_models`: **15 ms / frame** of the 23 ms main-thread frame in AP_02_U (dev profile, quiet machine) -- the single biggest
+   main-thread cost.  Part of it: for every part with an `own_material` the loop calls `materials.get_mut(own)` and assigns `tint` / `blend` /
+   `params.w` **every frame** even when unchanged -> `AssetEvent::Modified` -> the render world re-prepares the material (new bind group) and
+   re-specialises / re-bins the entity: **48-240 `Sh2Material` Modified per frame** in the field, **150-180** in battle;
+   `prepare_erased_assets<Sh2Material>` measured up to 110-150 ms / frame under load.  Please compare before writing (`AssetMut` only marks the
+   asset changed on `DerefMut`: `if m.tint != t { m.tint = t }`), same in `apply_model_light_overrides` (and make sure the stage does not
+   re-insert / deref-mut `ModelLightOverride` every frame when the lights did not move).
+2. `shadow.rs`: every actor re-rasterises + blurs its 128 x 128 silhouette and rebuilds its receiver mesh every frame: ~10 image uploads
+   (`image 128x128`) + ~6 mesh uploads per frame in AP_02_U.  Skip when the caster pose / position / light did not change (or render the
+   silhouette on the GPU).
+3. Per-frame CPU geometry: the remaining tiny-mesh uploads are yours: `save_point_0_1` (24 / frame) and `save_point_0_2` (14 / frame) children
+   in AP_02_U (CPU billboards of the save point model?), battle `effmdl_*_bef_*` / `fx_model_26x` (1-4 / frame each).  Save points also cast
+   shadows (`save_point_0_*/shadow_surface`, see 2) -- intended?  (`SH2_PERF` prints `mesh <=4 verts [3d <parent>/<name>] n` per frame.)
+4. In the play profile the fusion / magic battle demo is the one scene that misses 60 fps: `animate_models` **18.9 ms / frame** of 24.9 ms main.
+   Pose evaluation looks parallelisable (`par_iter_mut` over `AnimatedModel`, then a short serial pass for the asset writes).
+5. (late, 2026-10-15) With your current `shadow.rs` (per-caster `ShadowCamera`s) the render thread runs **9 camera passes** per frame in AP_02_U
+   (was 3; `camera_schedule` 3.5 -> 10 ms, `RenderContextState::apply` 68 -> 335 per frame) and the play build drops from 17.6 to 23.7 ms
+   frames there on a quiet machine.  One atlas target (all casters in one pass, viewport per caster) or rendering only casters that moved
+   would keep the GPU shadows from costing ~1 ms of render-thread CPU per actor.

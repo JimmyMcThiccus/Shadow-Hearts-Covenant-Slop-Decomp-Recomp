@@ -20,5 +20,5 @@ sh2_audio = { workspace = true, features = ["bevy", "playback"] }
 tracing = "0.1"
 
 [features]
-# per-system spans for the SH2_PERF report (bevy/trace).  Off by default: costs a little per system run.
-profile = ["bevy/trace"]
+# per-system spans for the SH2_PERF report (bevy/trace; bevy/debug = real system names).  Off by default: costs a little per system run.
+profile = ["bevy/trace", "bevy/debug"]

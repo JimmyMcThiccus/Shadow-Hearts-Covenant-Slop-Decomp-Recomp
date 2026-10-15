@@ -55,6 +55,8 @@ struct NaviArtRes(Option<NaviArt>);
 #[derive(Resource, Default)]
 struct NaviGfx {
     floor: Option<TextureId>,
+    /// inputs of the floor picture last rasterised (round 6 PF: the 108 x 108 software render + texture upload only runs when they change)
+    floor_key: Option<(usize, [u32; 4], Vec<bool>, [u8; 12])>,
     ring: Option<TextureId>,
     icons: Option<TextureId>,
 }
@@ -151,28 +153,38 @@ fn draw_navi(
     let p = rt.sim.field.player_pos;
     let view = NaviView { player: [p[0], p[1], p[2]], heading: rt.sim.field.ctrl_rot_y };
     let o = Orient::default();
-    let floor = navi.render_floor(o, &view);
-    let mut rgba = vec![0u8; WIN_W * WIN_H * 4];
-    for y in 0..WIN_H {
-        for x in 0..WIN_W {
-            let (sx, sy) = (WIN_POS[0] + x as f32 + 0.5, WIN_POS[1] + y as f32 + 0.5);
-            let (dx, dy) = ((sx - CENTRE[0]).abs(), (sy - CENTRE[1]).abs());
-            let cov = if dx > 59.0 || dy > 60.0 { 0.0 } else { art.mask_at(0.5 + (59.0 - dx) / 59.0 * 61.5, 0.5 + (60.0 - dy) / 60.0 * 61.5) };
-            let f = floor.rgb[y * WIN_W + x];
-            let i = (y * WIN_W + x) * 4;
-            rgba[i] = f[0].clamp(0.0, 255.0) as u8;
-            rgba[i + 1] = f[1].clamp(0.0, 255.0) as u8;
-            rgba[i + 2] = f[2].clamp(0.0, 255.0) as u8;
-            rgba[i + 3] = (COPY_ALPHA * cov * 255.0).clamp(0.0, 255.0) as u8;
-        }
-    }
-    match gfx.floor.and_then(|t| textures.get(t).cloned()) {
-        Some(h) => {
-            if let Some(mut img) = images.get_mut(&h) {
-                img.data = Some(rgba);
+    let key = (
+        navi as *const _ as usize,
+        [view.player[0].to_bits(), view.player[1].to_bits(), view.player[2].to_bits(), view.heading.to_bits()],
+        navi.meshes.iter().map(|m| m.shown).collect::<Vec<_>>(),
+        [navi.tint[0], navi.tint[1], navi.tint[2]].concat().try_into().unwrap_or([0; 12]),
+    );
+    let floor_ok = gfx.floor.is_some_and(|t| textures.get(t).is_some());
+    if !floor_ok || gfx.floor_key.as_ref() != Some(&key) {
+        gfx.floor_key = Some(key);
+        let floor = navi.render_floor(o, &view);
+        let mut rgba = vec![0u8; WIN_W * WIN_H * 4];
+        for y in 0..WIN_H {
+            for x in 0..WIN_W {
+                let (sx, sy) = (WIN_POS[0] + x as f32 + 0.5, WIN_POS[1] + y as f32 + 0.5);
+                let (dx, dy) = ((sx - CENTRE[0]).abs(), (sy - CENTRE[1]).abs());
+                let cov = if dx > 59.0 || dy > 60.0 { 0.0 } else { art.mask_at(0.5 + (59.0 - dx) / 59.0 * 61.5, 0.5 + (60.0 - dy) / 60.0 * 61.5) };
+                let f = floor.rgb[y * WIN_W + x];
+                let i = (y * WIN_W + x) * 4;
+                rgba[i] = f[0].clamp(0.0, 255.0) as u8;
+                rgba[i + 1] = f[1].clamp(0.0, 255.0) as u8;
+                rgba[i + 2] = f[2].clamp(0.0, 255.0) as u8;
+                rgba[i + 3] = (COPY_ALPHA * cov * 255.0).clamp(0.0, 255.0) as u8;
             }
         }
-        None => gfx.floor = Some(textures.add(&mut images, WIN_W as u32, WIN_H as u32, rgba)),
+        match gfx.floor.and_then(|t| textures.get(t).cloned()) {
+            Some(h) => {
+                if let Some(mut img) = images.get_mut(&h) {
+                    img.data = Some(rgba);
+                }
+            }
+            None => gfx.floor = Some(textures.add(&mut images, WIN_W as u32, WIN_H as u32, rgba)),
+        }
     }
 
     let mut g = canvas.begin(NAVI_LAYER);

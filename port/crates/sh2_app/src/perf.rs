@@ -135,6 +135,7 @@ struct Segment {
     mat_mod: u64,
     entities_max: u32,
     first_seen: f64,
+    uploads: HashMap<String, u64>,
 }
 
 #[derive(Resource)]
@@ -181,13 +182,16 @@ fn segment_key(world: &World) -> String {
     k
 }
 
-fn count<A: Asset>(world: &mut World, cursor: &mut Option<bevy::ecs::message::MessageCursor<AssetEvent<A>>>) -> (u64, u64) {
+fn count<A: Asset>(world: &mut World, cursor: &mut Option<bevy::ecs::message::MessageCursor<AssetEvent<A>>>, ids: &mut Vec<AssetId<A>>) -> (u64, u64) {
     let Some(msgs) = world.get_resource::<Messages<AssetEvent<A>>>() else { return (0, 0) };
     let cur = cursor.get_or_insert_with(|| msgs.get_cursor_current());
     let (mut m, mut a) = (0, 0);
     for e in cur.read(msgs) {
         match e {
-            AssetEvent::Modified { .. } => m += 1,
+            AssetEvent::Modified { id } => {
+                m += 1;
+                ids.push(*id);
+            }
             AssetEvent::Added { .. } => a += 1,
             _ => {}
         }
@@ -205,11 +209,49 @@ struct Cursors {
 
 fn perf_frame(world: &mut World, mut cur: Local<Cursors>) {
     let key = segment_key(world);
-    let (im, ia) = count(world, &mut cur.img);
-    let (mm, ma) = count(world, &mut cur.mesh);
-    let (cm, _) = count(world, &mut cur.cmat);
-    let (sm, _) = count(world, &mut cur.smat);
-    let entities = world.entities().len();
+    let (mut iids, mut mids) = (Vec::new(), Vec::new());
+    let (im, ia) = count(world, &mut cur.img, &mut iids);
+    let (mm, ma) = count(world, &mut cur.mesh, &mut mids);
+    let (cm, _) = count(world, &mut cur.cmat, &mut Vec::new());
+    let (sm, _) = count(world, &mut cur.smat, &mut Vec::new());
+    // what is being re-uploaded: modified images by size, modified meshes by vertex count
+    let mut kinds: Vec<String> = Vec::new();
+    if let Some(imgs) = world.get_resource::<Assets<Image>>() {
+        for id in &iids {
+            if let Some(i) = imgs.get(*id) {
+                kinds.push(format!("image {}x{}", i.width(), i.height()));
+            }
+        }
+    }
+    // which kind of entity draws each modified mesh (2d = sprite layers / Mesh2d, 3d = Mesh3d, with the entity's Name when it has one)
+    let mut owner: HashMap<AssetId<Mesh>, String> = HashMap::new();
+    if !mids.is_empty() {
+        let mut q2 = world.query::<(&bevy::mesh::Mesh2d, Option<&Name>)>();
+        for (m, n) in q2.iter(world) {
+            owner.insert(m.0.id(), format!("2d {}", n.map(|n| n.as_str()).unwrap_or("")));
+        }
+        let mut q3 = world.query::<(&bevy::mesh::Mesh3d, Option<&Name>, Option<&ChildOf>)>();
+        let mut found = Vec::new();
+        for (m, n, p) in q3.iter(world) {
+            if mids.contains(&m.0.id()) {
+                found.push((m.0.id(), n.map(|n| n.as_str().to_string()), p.map(|p| p.parent())));
+            }
+        }
+        for (id, n, p) in found {
+            let pn = p.and_then(|p| world.get::<Name>(p)).map(|n| n.as_str().to_string());
+            owner.insert(id, format!("3d {}/{}", pn.unwrap_or_default(), n.unwrap_or_default()));
+        }
+    }
+    if let Some(ms) = world.get_resource::<Assets<Mesh>>() {
+        for id in &mids {
+            if let Some(m) = ms.get(*id) {
+                let v = m.count_vertices();
+                let b = if v <= 4 { "<=4".to_string() } else if v <= 64 { "5..64".into() } else if v <= 1024 { "65..1024".into() } else { ">1024".into() };
+                kinds.push(format!("mesh {b} verts [{}]", owner.get(id).map(String::as_str).unwrap_or("?")));
+            }
+        }
+    }
+    let entities = world.query::<()>().iter(world).count() as u32;
     let spans = std::mem::take(&mut agg().lock().unwrap().frame);
     let mut st = world.resource_mut::<PerfState>();
     let now = Instant::now();
@@ -235,6 +277,9 @@ fn perf_frame(world: &mut World, mut cur: Local<Cursors>) {
     seg.mesh_add += ma;
     seg.mat_mod += cm + sm;
     seg.entities_max = seg.entities_max.max(entities);
+    for k in kinds {
+        *seg.uploads.entry(k).or_default() += 1;
+    }
     let exiting = world.get_resource::<Messages<AppExit>>().map(|m| !m.is_empty()).unwrap_or(false);
     let mut st = world.resource_mut::<PerfState>();
     if exiting || (now - st.last_write).as_secs_f32() > 5.0 {
@@ -283,6 +328,9 @@ fn write_report(st: &PerfState) {
             seg.mat_mod as f64 / n,
             seg.entities_max,
         );
+        let mut up: Vec<_> = seg.uploads.iter().collect();
+        up.sort_by(|a, b| b.1.cmp(a.1));
+        let _ = writeln!(s, "  uploads/frame: {}", up.iter().take(12).map(|(k, v)| format!("{k} {:.2}", **v as f64 / n)).collect::<Vec<_>>().join(", "));
         let mut top: Vec<_> = seg
             .spans
             .iter()
