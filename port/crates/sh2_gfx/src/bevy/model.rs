@@ -69,6 +69,11 @@ pub struct ModelMaterials {
     pub images: Vec<Handle<Image>>,
     unlit: Vec<Handle<Sh2Material>>,
     lit: Vec<Handle<Sh2Material>>,
+    /// `unlit` / `lit` for an atomic with PRIM.ABE whose texture header names no `ALPHA_1` (`alpha_bits == 0`): the register default
+    /// `0x44` (alpha blend) instead of opaque.  Used by the billboards, which take the texture-header state (round 6 GPA: the save
+    /// point sparkles `P_S*` drew as opaque grey quads).
+    abe_unlit: Vec<Handle<Sh2Material>>,
+    abe_lit: Vec<Handle<Sh2Material>>,
     fallback_unlit: Handle<Sh2Material>,
     fallback_lit: Handle<Sh2Material>,
     /// Texture headers and texel-alpha census (`plan_draws` input: the GS alpha state of an atomic depends on its PRIM bits and its texture).
@@ -86,13 +91,24 @@ impl ModelMaterials {
         let images: Vec<Handle<Image>> = textures.iter().map(|t| gpu.images.add(texture_def_image(t, gpu.filter))).collect();
         let mut unlit = Vec::new();
         let mut lit = Vec::new();
+        let (mut abe_unlit, mut abe_lit) = (Vec::new(), Vec::new());
         for (t, img) in textures.iter().zip(&images) {
             let (blend, fix) = texture_blend(t.alpha_bits);
             // changeGSTest(t, 1, 5 /*GEQUAL*/, ref, fail & 3 ...) when the header's reference is non-zero
             let aref = (t.alpha_ref != 0 && t.flags & 3 != 3).then_some(t.alpha_ref as f32);
             let base = Sh2Material::textured(Some(img.clone())).with_blend(blend, fix).with_alpha_ref(aref);
-            unlit.push(gpu.materials.add(base.clone().with_lit(false)));
-            lit.push(gpu.materials.add(base.with_lit(true)));
+            let u = gpu.materials.add(base.clone().with_lit(false));
+            let l = gpu.materials.add(base.clone().with_lit(true));
+            if blend == Sh2Blend::Opaque {
+                let normal = base.with_blend(Sh2Blend::Normal, None);
+                abe_unlit.push(gpu.materials.add(normal.clone().with_lit(false)));
+                abe_lit.push(gpu.materials.add(normal.with_lit(true)));
+            } else {
+                abe_unlit.push(u.clone());
+                abe_lit.push(l.clone());
+            }
+            unlit.push(u);
+            lit.push(l);
         }
         let fb = Sh2Material::textured(None);
         let census = textures
@@ -108,6 +124,8 @@ impl ModelMaterials {
             images,
             unlit,
             lit,
+            abe_unlit,
+            abe_lit,
             fallback_unlit: gpu.materials.add(fb.clone().with_lit(false)),
             fallback_lit: gpu.materials.add(fb.with_lit(true)),
         }
@@ -143,6 +161,17 @@ impl ModelMaterials {
             m = m.with_sort_bias(sort);
         }
         m
+    }
+
+    /// [`Self::material`] for an atomic with PRIM bits `flags`: with ABE (`0x40`) a texture without its own `ALPHA_1` blends with the
+    /// register default `0x44` instead of drawing opaque.
+    pub fn material_for(&self, texture: u8, lit: bool, flags: u16) -> Handle<Sh2Material> {
+        if flags & 0x40 != 0 {
+            if let Some(h) = (if lit { &self.abe_lit } else { &self.abe_unlit }).get(texture as usize) {
+                return h.clone();
+            }
+        }
+        self.material(texture, lit)
     }
 
     pub fn material(&self, texture: u8, lit: bool) -> Handle<Sh2Material> {
@@ -540,7 +569,7 @@ pub fn spawn_animated_model_ex(
             // billboards keep the texture-header state (additive glows)
             let mat = match own_tex.get(&a.texture) {
                 Some((_, u, l)) => if lit { l.clone() } else { u.clone() },
-                None => mats.material(a.texture, lit),
+                None => mats.material_for(a.texture, lit, a.flags),
             };
             let child = commands.spawn((Mesh3d(mesh.clone()), MeshMaterial3d(mat), Transform::default(), Visibility::default(), NoFrustumCulling)).id();
             commands.entity(holder).add_child(child);

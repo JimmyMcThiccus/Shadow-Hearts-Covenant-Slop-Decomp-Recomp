@@ -119,6 +119,9 @@ struct Visual {
     /// last state pushed to the motions
     on: bool,
     fx: u8,
+    /// idle motions (part index, name) still to start: the parts are spawned through `Commands`, so their `AnimatedModel` exists only from
+    /// the next frame on (a `play` right after the spawn found nothing, and the ring stayed in its uncoloured bind state)
+    idle: Vec<(usize, &'static str)>,
 }
 
 #[derive(Resource, Default)]
@@ -146,7 +149,20 @@ fn spawn_visual(commands: &mut Commands, gpu: &mut CharacterGpu, assets: &[Arc<C
         commands.entity(part).insert(sh2_gfx::bevy::model::NoDropShadow);
         parts.push(part);
     }
-    Visual { root, parts, pos, kind, on: false, fx: 0 }
+    Visual { root, parts, pos, kind, on: false, fx: 0, idle: Vec::new() }
+}
+
+/// Start the idle motions of a visual whose models exist by now.
+fn start_idle(models: &mut Query<&mut AnimatedModel>, v: &mut Visual) {
+    let parts = v.parts.clone();
+    v.idle.retain(|&(k, name)| match parts.get(k) {
+        Some(&e) if models.get(e).is_ok() => {
+            play(models, e, name);
+            false
+        }
+        Some(_) => true,
+        None => false,
+    });
 }
 
 fn play(models: &mut Query<&mut AnimatedModel>, e: Entity, name: &str) {
@@ -193,15 +209,16 @@ pub fn sync_points(
                 if assets.is_empty() {
                     continue;
                 }
-                let v = spawn_visual(&mut commands, &mut gpu, &assets, pos, &format!("save_point_{i}"), 0);
-                // the ring idles (`save_00`), the column and glow wait for the player
-                play(&mut models, v.parts[0], "save_00");
+                let mut v = spawn_visual(&mut commands, &mut gpu, &assets, pos, &format!("save_point_{i}"), 0);
+                // the ring idles (`save_00`, its `PolCol*` tracks give the cyan colour), the column and glow wait for the player
+                v.idle.push((0, "save_00"));
                 vis.save[i] = Some(v);
             }
             _ => {}
         }
         let on = rt.st.on_save_point == Some(i);
         if let Some(v) = vis.save[i].as_mut() {
+            start_idle(&mut models, v);
             if v.on != on {
                 v.on = on;
                 // on the point: the column rises (`save_01`) and the glow loops (`save_02`)
@@ -250,20 +267,18 @@ pub fn sync_points(
                 if assets.is_empty() {
                     continue;
                 }
-                let v = spawn_visual(&mut commands, &mut gpu, &assets, pos, &format!("warp_point_{i}"), kind);
-                for (k, e) in v.parts.iter().enumerate() {
-                    // the pad idles (`warp_00`), kind 1 has the Apoina pad model (`apwp_00`) as a fourth part
-                    if k == 0 {
-                        play(&mut models, *e, "warp_00");
-                    } else if k == 3 {
-                        play(&mut models, *e, "apwp_00");
-                    }
+                let mut v = spawn_visual(&mut commands, &mut gpu, &assets, pos, &format!("warp_point_{i}"), kind);
+                // the pad idles (`warp_00`), kind 1 has the Apoina pad model (`apwp_00`) as a fourth part
+                v.idle.push((0, "warp_00"));
+                if v.parts.len() > 3 {
+                    v.idle.push((3, "apwp_00"));
                 }
                 vis.warp[i] = Some(v);
             }
             _ => {}
         }
         if let Some(v) = vis.warp[i].as_mut() {
+            start_idle(&mut models, v);
             if v.fx != fx {
                 v.fx = fx;
                 // `WarpOut` / `WarpIn`: the out column (`warp_01`) / the in column (`warp_02`) play once

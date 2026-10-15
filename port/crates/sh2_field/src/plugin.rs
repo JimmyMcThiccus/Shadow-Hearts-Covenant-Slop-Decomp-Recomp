@@ -1092,7 +1092,11 @@ fn sync_render(
 /// Debug overlay (F3): event boxes, floor under the player, save / warp points.
 fn debug_gizmos(rt: Option<Res<FieldRuntime>>, mut gizmos: Gizmos) {
     let Some(rt) = rt else { return };
-    // save points (green ring) and warp points (violet ring) are always visible
+    if !rt.debug {
+        return;
+    }
+    // save points (green ring) and warp points (violet ring); debug overlay only (they used to be drawn always: the green line over the
+    // retail cyan save point ring, round 6 GPA)
     for sp in rt.st.save_points.iter().flatten().filter(|p| p.shown) {
         let c = b(sp.pos);
         gizmos.circle(Isometry3d::new(c + Vec3::Y * 1.0, Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)), 7.0, Color::srgb(0.3, 1.0, 0.5));
@@ -1100,9 +1104,6 @@ fn debug_gizmos(rt: Option<Res<FieldRuntime>>, mut gizmos: Gizmos) {
     for wp in rt.st.warp_points.iter().flatten().filter(|p| p.shown) {
         let c = b(wp.pos);
         gizmos.circle(Isometry3d::new(c + Vec3::Y * 1.0, Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)), 7.0, Color::srgb(0.8, 0.4, 1.0));
-    }
-    if !rt.debug {
-        return;
     }
     if let Some(ev) = &rt.sim.field.event_boxes {
         for (i, bx) in ev.boxes.iter().enumerate() {

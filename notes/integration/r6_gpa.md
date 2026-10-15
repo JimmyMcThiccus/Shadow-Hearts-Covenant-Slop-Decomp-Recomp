@@ -96,12 +96,31 @@ ring over the target, the same construction as the port's hit spark; frame timin
   0xc73a40 / 0xc80f90 / 0xcc5900, all `+0x48c = 0`, while three other live models **are** registered casters (`+0x48c = 1` and referenced from
   a `ShadowControl` node's `+0x2b0`: 0x1015aec / 0x1312920 (vtable 0x438100) and 0xc6c3b0 (0x439640), i.e. the party / actors).  The picture
   agrees: no shadow under the ring (`retail_ap02_save_point.png`, `save_point_retail_vs_port.png`).
-  Side finding (not fixed here): the retail ring glows **cyan**, the port's is **green** (same crop).
+  Side finding: the retail ring glows **cyan**, the port's was **green** (same crop) -- fixed, see "Save point ring" below.
 * Port: new `sh2_gfx::bevy::model::NoDropShadow` marker + `drop_unwanted_shadows` (removes the shadow geometry, frees the atlas tile);
   `sh2_field::points::spawn_visual` puts it on every save point / warp pad model.  This also removes PF's `save_point_0_*/shadow_surface`
   uploads.
 
+## 4. Save point ring colour, sparkles, texture filtering (follow-ups)
+
+The SVP textures and vertex colours are grey; the colour comes from the `save_00` motion's `PolColR/G/B/A` tracks per atomic (ring
+`CIRC01`, `UG01`: R 0..25, G 128, B 128..100 = cyan).  Three port bugs made it green / boxy:
+* **The idle motion never started** (`sh2_field::points`): `play("save_00")` ran right after `spawn_visual`, but the parts are spawned
+  through `Commands`, so their `AnimatedModel` did not exist yet and the request was dropped (`current = None` for the whole visit).  The
+  visuals now keep their idle motions (`Visual::idle`) and start them once the model exists; warp pads (`warp_00`, `apwp_00`) had the same bug.
+* **A debug gizmo drew a green circle over every save point** (and a violet one over every warp pad) "always visible"
+  (`sh2_field::plugin::debug_gizmos`): now only with the F3 debug overlay like the rest of that system.
+* **The sparkle billboards (`P_S*`, texture 3, `alpha_bits = 0`) drew as opaque grey quads**: billboards take the texture-header blend, and
+  0 there means "register default" `ALPHA_1 = 0x44` when the atomic has PRIM.ABE -- `ModelMaterials::material_for` now gives those an
+  alpha-blend material (the regular atomics already did this through `plan_draws`).
+* **Texture filtering:** the game app sampled every model / map texture with *nearest* (`Sh2RenderSettings` default), although the game's
+  `TEX1` is bilinear; only the stand-alone viewers had `--linear`.  The default is now bilinear (`SH2_TEX_FILTER=nearest` for the old look).
+
+Result (AP_02_U, autoplay, brightest 15 % of the ring area): before (113, 153, 106) green, after (109, 171, 151) cyan; retail (124, 219, 213).
+The port still shows a taller flame skirt (`Clo01/02`, bones 5 / 6 `ScaleY` 2..3.5 in the data) than the retail capture, whose camera is
+farther and lower; not changed.
+
 ## Open
-* Save point ring colour: retail cyan, port green (live AP_02_U).
+* Save point flame skirt height vs retail (same camera needed).
 * Ring gizmo fallback (`sh2_battle::plugin::RingGizmos`, only without `JRING.BIN`) is drawn by Bevy's gizmo pipeline, which has no sRGB
   compositing: it now comes out darker.  Unused with the US / JP discs.
