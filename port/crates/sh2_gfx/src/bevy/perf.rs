@@ -5,7 +5,7 @@
 //! | `SH2_NO_VSYNC=1` | primary window `PresentMode::AutoNoVsync` (frame time = real work, not the display refresh); `=immediate` / `=mailbox` force that mode |
 //! | `SH2_FRAMETIME=<label>` | log frame-time statistics (`label window scene frames mean p50 p95 p99 max` ms, then `cpu=` process CPU ms per frame over all threads, then `system=ms per frame` of the [`Scope`]-instrumented systems) every 5 s of wall clock, and append them to `SH2_FRAMETIME_OUT` (a TSV file) when set |
 //! | `SH2_FIXED_DT=<fps>` | every frame advances `Time` by exactly `1 / fps` s (`TimeUpdateStrategy::ManualDuration`, `Time<Real>` included) and the main schedules run on the single-threaded executor (the multithreaded one orders the hundreds of unordered system pairs differently each run): runs become frame-deterministic, so two runs (CPU vs GPU path) photograph the same simulation frame (round 6 GPA: battle demo shots identical over 5 runs) |
-| `SH2_AMBIGUITY=1` | log the system pairs of the main schedules that touch the same data without an order (schedule build warnings) |
+//! | `SH2_AMBIGUITY=1` | log the system pairs of the main schedules that touch the same data without an order (schedule build warnings) |
 
 use ::bevy::prelude::*;
 use ::bevy::time::TimeUpdateStrategy;
