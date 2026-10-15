@@ -4,7 +4,8 @@ VK = {"K":0x4B,"L":0x4C,"I":0x49,"J":0x4A,"Return":0x0D,"Up":0x26,"Down":0x28,"L
       # Select, L1 / R1, L2 / R2, L3 / R3, right stick (PCSX2.ini [Pad1])
       "Backspace":0x08,"Q":0x51,"E":0x45,"1":0x31,"3":0x33,"2":0x32,"4":0x34,"T":0x54,"H":0x48,"G":0x47,"F":0x46}
 def _hwnd():
-    pid = int(subprocess.check_output(["powershell","-NoProfile","-Command","(Get-Process pcsx2-qt).Id"]).split()[0])
+    import inst
+    pid = inst.pid()  # SH2_PCSX2_INST picks the instance (inst.py); several pcsx2-qt windows share one title
     out = []
     EP = ctypes.WINFUNCTYPE(ctypes.c_bool, wt.HWND, wt.LPARAM)
     def cb(h, l):

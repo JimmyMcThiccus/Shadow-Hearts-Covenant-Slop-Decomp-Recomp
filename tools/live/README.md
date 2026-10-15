@@ -4,7 +4,7 @@ Written 2026-10-13 against the PCSX2 build with the DebugServer (port 21512, new
 
 * `dbg.py`  - second DebugServer client (the pcsx2 MCP keeps PINE, but the DebugServer accepts extra clients): `Dbg().mem(addr, n)` ~0.08 ms per read, so a whole `BtlChr` (0x510 bytes) can be sampled several times per 30 Hz game frame.
 * `keys.py` - posts WM_KEYDOWN/UP to the PCSX2 window (works unfocused). Pad = keyboard: K cross, L circle, I triangle, J square, Return start, WASD left stick, arrows d-pad. **Hold >= 0.12 s**: the game reads the pad once per 30 Hz frame and a 60 ms tap is missed.
-* `grab.py` - PrintWindow screenshot of the emulator window (25 ms per frame after the first). Needs per-process DPI awareness (`SetProcessDpiAwarenessContext(-4)`) or only the upper-left corner is captured.
+* `grab.py` - PrintWindow screenshot of the emulator window (25 ms per frame after the first). Needs per-process DPI awareness (`SetProcessDpiAwarenessContext(-4)`) or only the upper-left corner is captured. `python grab.py [out.png]` (default `g.png` in the cwd).
 * `rec3.py` - example recorder: loads nothing, taps Attack/target, then a Judgement Ring bot reads the live pointer angle and presses Cross inside each area, sampling `CBattle`, `BtlChr` 1 and 2, the ring and the game timer into a pickle (+ frames). Addresses are for save slot 7 of the 2026-10-13 session (CBattle 0xAFFA20, ring 0x11718b0); re-derive them after any other state.
 * `fight.py <seconds>` - plays a whole battle: taps Attack + target at each command menu, finds the ring through `[CBattle+0x45d0]` and presses inside every area, clicks through the result screens (`CBattle*` is read from `[0x440000]`).  Does not answer tutorial prompts ("Battle Basics", "Combos": Down + Cross = Skip).
 * `watch.py <seconds>` - passive: logs `SSHSys` request / next-map / monset changes with a screenshot (a field door does not touch them).
@@ -23,3 +23,12 @@ fast reopen).  Do not force those three entries; unlock them the game's way (deb
   items; any phase) is handed to the game's own autoplayer the moment it starts (abnormal flags +0x50c/+0x50d cleared, signed period +0xbc
   made positive, `auto_mode` +0x58c = 1): grade 2 every time, also under the reverse / fast ring statuses that defeat `fight.py`'s timed
   presses.  Logs each ring and its result flags (+0x512).
+
+## Several PCSX2 instances (2026-10-14)
+
+`SH2_PCSX2_INST=main|2|3|4` picks the instance for `keys.py`, `grab.py`, `dbg.Dbg()` and every script built on them (`inst.py`).
+main = the user's PCSX2 (DebugServer 21512 + PINE 28011, the pcsx2 MCP talks only to this one); 2 / 3 = portable copies on US
+disc 1 booted into their own slot-1 debug map (PINE 28012 / 28013); 4 = US disc 2 (PINE 28014).  The copies have no DebugServer:
+`dbg.Dbg()` falls back to PINE with read_memory / write_memory / status only (no registers, disasm, breakpoints, and no state
+load / save).  One lock per instance: `notes/integration/locks/pcsx2-<inst>.lock` (the old `pcsx2.lock` = main).  Copies live in
+`Shadow Hearts 2 Decomp\pcsx2-instances` (`launch-instances.bat`); state loads there are still the user's to do.

@@ -18,4 +18,8 @@ def grab():
     im = Image.frombuffer("RGBA", (w, ht), buf, "raw", "BGRA", 0, 1).convert("RGB")
     return im.crop((12, 90, w-12, ht-48))
 if __name__ == "__main__":
-    t=time.perf_counter(); im=grab(); print(im.size, time.perf_counter()-t); im.save("g.png")
+    # usage: python grab.py [out.png]   (default g.png in the cwd; parent dirs are created)
+    import os, sys
+    out = sys.argv[1] if len(sys.argv) > 1 else "g.png"
+    if os.path.dirname(out): os.makedirs(os.path.dirname(out), exist_ok=True)
+    t=time.perf_counter(); im=grab(); print(im.size, time.perf_counter()-t, out); im.save(out)
