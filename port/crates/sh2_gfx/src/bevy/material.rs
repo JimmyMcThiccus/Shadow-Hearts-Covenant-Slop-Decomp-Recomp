@@ -41,6 +41,8 @@ use crate::gs::{Alpha, BlendKind};
 
 pub const SH2_SHADER: Handle<Shader> = uuid_handle!("5a3f6b0e-2d1c-4e7a-9f55-0b6c8d3e1a42");
 pub const SH2_DECODE_SHADER: Handle<Shader> = uuid_handle!("7c1e44a0-96d2-4f3b-8a17-3d52c0e9b6f1");
+/// Vertex stage of [`Sh2Material`] (`sh2_vertex.wgsl`: Bevy's mesh vertex shader + the PS2 one-matrix-per-vertex GPU skinning).
+pub const SH2_VERTEX_SHADER: Handle<Shader> = uuid_handle!("b3f0c9e2-4d71-4a8e-9c06-2e5f7a1d8b34");
 
 /// Colour-space mode of the renderer (see the module docs).  `SH2_LINEAR_BLEND=1` in the environment starts with `gamma = false`.
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
@@ -175,7 +177,7 @@ pub struct Sh2Material {
     pub fog: Vec4,
     #[uniform(0)]
     pub fog_color: Vec4,
-    /// (test_mode 0/1/2, gamma_space, 0, 0)
+    /// (test_mode 0/1/2, gamma_space, atlas tile + 1 (0 = off), atlas tiles per row): the shadow receivers sample one tile of the silhouette atlas
     #[uniform(0)]
     pub extra: Vec4,
     #[texture(1)]
@@ -270,15 +272,43 @@ impl Sh2Material {
 pub struct Sh2MaterialKey {
     pub blend: Sh2Blend,
     pub ztest_off: bool,
+    /// material-type specific variant (0 for [`Sh2Material`]; `Sh2FxMaterial`: 1 = ribbon)
+    pub variant: u8,
 }
 
 impl From<&Sh2Material> for Sh2MaterialKey {
     fn from(m: &Sh2Material) -> Self {
-        Sh2MaterialKey { blend: m.blend, ztest_off: m.ztest_off }
+        Sh2MaterialKey { blend: m.blend, ztest_off: m.ztest_off, variant: 0 }
+    }
+}
+
+/// The GS state of [`Sh2Material`] (and `Sh2FxMaterial`): no culling, `ZTST = ALWAYS`, the three `ALPHA_1` blend equations.
+pub fn sh2_specialize(descriptor: &mut RenderPipelineDescriptor, key: Sh2MaterialKey) {
+    descriptor.primitive.cull_mode = None;
+    if key.ztest_off {
+        if let Some(ds) = descriptor.depth_stencil.as_mut() {
+            ds.depth_compare = Some(::bevy::render::render_resource::CompareFunction::Always);
+        }
+    }
+    let color = match key.blend {
+        Sh2Blend::Opaque => None,
+        Sh2Blend::Normal => Some(BlendComponent { src_factor: BlendFactor::SrcAlpha, dst_factor: BlendFactor::OneMinusSrcAlpha, operation: BlendOperation::Add }),
+        Sh2Blend::Add => Some(BlendComponent { src_factor: BlendFactor::SrcAlpha, dst_factor: BlendFactor::One, operation: BlendOperation::Add }),
+        // wgpu ReverseSubtract: dst*dst_factor - src*src_factor
+        Sh2Blend::Sub => Some(BlendComponent { src_factor: BlendFactor::SrcAlpha, dst_factor: BlendFactor::One, operation: BlendOperation::ReverseSubtract }),
+    };
+    if let Some(fragment) = descriptor.fragment.as_mut() {
+        for target in fragment.targets.iter_mut().flatten() {
+            target.blend = color.map(|c| BlendState { color: c, alpha: BlendComponent::OVER });
+        }
     }
 }
 
 impl Material for Sh2Material {
+    fn vertex_shader() -> ShaderRef {
+        ShaderRef::Handle(SH2_VERTEX_SHADER)
+    }
+
     fn fragment_shader() -> ShaderRef {
         ShaderRef::Handle(SH2_SHADER)
     }
@@ -308,24 +338,7 @@ impl Material for Sh2Material {
         _layout: &MeshVertexBufferLayoutRef,
         key: MaterialPipelineKey<Self>,
     ) -> Result<(), SpecializedMeshPipelineError> {
-        descriptor.primitive.cull_mode = None;
-        if key.bind_group_data.ztest_off {
-            if let Some(ds) = descriptor.depth_stencil.as_mut() {
-                ds.depth_compare = Some(::bevy::render::render_resource::CompareFunction::Always);
-            }
-        }
-        let color = match key.bind_group_data.blend {
-            Sh2Blend::Opaque => None,
-            Sh2Blend::Normal => Some(BlendComponent { src_factor: BlendFactor::SrcAlpha, dst_factor: BlendFactor::OneMinusSrcAlpha, operation: BlendOperation::Add }),
-            Sh2Blend::Add => Some(BlendComponent { src_factor: BlendFactor::SrcAlpha, dst_factor: BlendFactor::One, operation: BlendOperation::Add }),
-            // wgpu ReverseSubtract: dst*dst_factor - src*src_factor
-            Sh2Blend::Sub => Some(BlendComponent { src_factor: BlendFactor::SrcAlpha, dst_factor: BlendFactor::One, operation: BlendOperation::ReverseSubtract }),
-        };
-        if let Some(fragment) = descriptor.fragment.as_mut() {
-            for target in fragment.targets.iter_mut().flatten() {
-                target.blend = color.map(|c| BlendState { color: c, alpha: BlendComponent::OVER });
-            }
-        }
+        sh2_specialize(descriptor, key.bind_group_data);
         Ok(())
     }
 }
@@ -356,7 +369,7 @@ impl FullscreenMaterial for Sh2GammaDecode {
 pub fn setup_gamma_cameras(
     settings: Res<Sh2ColorSpace>,
     mut commands: Commands,
-    cams: Query<(Entity, Option<&Sh2GammaDecode>, Has<Camera3d>, Has<::bevy::camera::Hdr>, Has<super::screen::NativeTarget>), With<Camera>>,
+    cams: Query<(Entity, Option<&Sh2GammaDecode>, Has<Camera3d>, Has<::bevy::camera::Hdr>, Has<super::screen::NativeTarget>), (With<Camera>, Without<super::shadow::ShadowCamera>)>,
 ) {
     for (e, has, is_3d, hdr, native) in &cams {
         if native && settings.gamma {
@@ -407,24 +420,35 @@ pub fn sync_material_globals(
     let (d0, c0) = l(0);
     let (d1, c1) = l(1);
     let (d2, c2) = l(2);
-    for (_, m) in materials.iter_mut() {
+    let fog_w = if fog.enabled { 1.0 } else { 0.0 };
+    let lit = (amb, d0, c0, d1, c1, d2, c2);
+    let apply = |m: &mut Sh2Material| {
         m.fog.x = fogv.x;
         m.fog.y = fogv.y;
-        if !fog.enabled {
-            m.fog.w = 0.0;
-        } else {
-            m.fog.w = 1.0;
-        }
+        m.fog.w = fog_w;
         m.fog_color = fogc;
         m.extra.y = gamma;
         if m.params.z > 0.5 && !m.own_light {
-            m.ambient = amb;
-            m.light_dir = d0;
-            m.light_color = c0;
-            m.light_dir1 = d1;
-            m.light_color1 = c1;
-            m.light_dir2 = d2;
-            m.light_color2 = c2;
+            (m.ambient, m.light_dir, m.light_color, m.light_dir1, m.light_color1, m.light_dir2, m.light_color2) = lit;
+        }
+    };
+    // only the materials that differ are written: `iter_mut` / `get_mut` mark an asset modified, and every modified material is re-prepared
+    // (new bind group) and its entities re-specialised in the render world -- writing all of them whenever one material was added (effects,
+    // per-instance copies) re-uploaded hundreds of materials in one frame
+    let stale: Vec<AssetId<Sh2Material>> = materials
+        .iter()
+        .filter(|(_, m)| {
+            let mut c = (*m).clone();
+            apply(&mut c);
+            c.fog != m.fog || c.fog_color != m.fog_color || c.extra != m.extra || c.ambient != m.ambient || c.light_dir != m.light_dir
+                || c.light_color != m.light_color || c.light_dir1 != m.light_dir1 || c.light_color1 != m.light_color1 || c.light_dir2 != m.light_dir2
+                || c.light_color2 != m.light_color2
+        })
+        .map(|(id, _)| id)
+        .collect();
+    for id in stale {
+        if let Some(mut m) = materials.get_mut(id) {
+            apply(&mut *m);
         }
     }
 }
@@ -436,12 +460,15 @@ impl Plugin for Sh2MaterialPlugin {
     fn build(&self, app: &mut App) {
         load_internal_asset!(app, SH2_SHADER, "sh2.wgsl", Shader::from_wgsl);
         load_internal_asset!(app, SH2_DECODE_SHADER, "sh2_decode.wgsl", Shader::from_wgsl);
+        load_internal_asset!(app, SH2_VERTEX_SHADER, "sh2_vertex.wgsl", Shader::from_wgsl);
         app.init_resource::<Sh2Fog>()
             .init_resource::<Sh2SceneLight>()
             .init_resource::<Sh2ColorSpace>()
             .add_plugins(MaterialPlugin::<Sh2Material>::default())
             .add_plugins(FullscreenMaterialPlugin::<Sh2GammaDecode>::default())
-            .add_systems(PostUpdate, (setup_gamma_cameras, sync_material_globals));
+            .add_systems(PostUpdate, (setup_gamma_cameras, sync_material_globals))
+            .add_systems(Startup, super::model::spawn_skin_joint)
+            .add_plugins((super::fxquad::Sh2FxQuadPlugin, super::perf::Sh2PerfPlugin, super::shadow::Sh2ShadowPlugin));
     }
 }
 

@@ -651,6 +651,20 @@ Still open for others:
   one-matrix skinning); `bevy/fxquad.rs` (`Sh2FxMaterial`, GPU-expanded effect quads / ribbons); `bevy/perf.rs` (`SH2_NO_VSYNC`, `SH2_FRAMETIME`,
   `SH2_FIXED_DT`).  `bevy/mod.rs` (FX2's): two `pub mod` lines.  `SH2_CPU_SKIN=1` / `SH2_CPU_FX=1` restore the old CPU paths.
 
+* (GP, 2026-10-15, answers to "## Round 6 PF") all five done: skinning / effect quads / shadow silhouettes on the GPU, one shared silhouette
+  atlas pass (no per-caster cameras), `animate_models` pose evaluation in parallel (0.3 ms / frame left), compare-before-write for `own_material`,
+  `apply_model_light_overrides`, effect overlays and -- the biggest one -- `sync_material_globals`, which rewrote *every* `Sh2Material` each time
+  the material count changed.  Billboards / receiver meshes re-upload only on change.  Numbers in `notes/integration/r6_gp.md` section 2
+  (fusion battle demo: 26.5 -> 16.7 ms, process CPU 60.7 -> 27.8 ms / frame; materials Modified 127 -> 5.5 / frame).  Save points still cast
+  shadows (unchanged; whether the retail save point casts one is not checked yet).
+* **To FX2 (renderer.rs) / BT**: `animate_models` is not ordered against the effect drivers (`effects::render::sync_fx`,
+  `sh2_battle::effects_bridge::drive_effmdls` / `effmdl_battle_hooks`): which one runs first varies between builds / runs, so an effect model can be
+  a frame early / late (seen as two alternating pictures of the weapon-hit burst under `SH2_FIXED_DT`).  Suggest `drive_effmdls.before(animate_models)`
+  and `sync_fx.before(animate_models)` (the drivers set the motion / alpha, then the pose is evaluated in the same frame).
+* `Sh2Material` gained a vertex shader (`sh2_vertex.wgsl`) and uses `extra.z / extra.w` (shadow atlas tile); `Sh2MaterialKey` has a `variant`
+  field (0 for `Sh2Material`).  New 3D camera: the shadow atlas camera (`shadow::ShadowCamera`, order -50, render layer 40, `ScreenExempt`) --
+  code that looks for "the" 3D camera should filter `Without<ShadowCamera>` (GP's own queries do).
+
 ## Round 6 RG (field Judgement Ring, 2026-10-14)
 Hooks in files I do not own (all small, additive; notes in `notes/integration/r6_rg.md`):
 * **FS2 `sh2_field/src/host.rs`**: `FieldRing` gained `arg` / `x` / `y` (`SetRing` args 2..4; `arg` = laps of a kind-1 ring, else the

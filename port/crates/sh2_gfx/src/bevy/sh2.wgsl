@@ -30,7 +30,8 @@ struct Sh2Material {
     // x near, y far, z = PRIM.FGE of this surface, w = scene fog enabled
     fog: vec4<f32>,
     fog_color: vec4<f32>,
-    // x: test mode (0 plain discard below ref, 1 cut-in = keep A >= ref, 2 low = keep A < ref), y: gamma-space output
+    // x: test mode (0 plain discard below ref, 1 cut-in = keep A >= ref, 2 low = keep A < ref), y: gamma-space output,
+    // z: shadow atlas tile + 1 (0 = off), w: atlas tiles per row
     extra: vec4<f32>,
 };
 
@@ -46,7 +47,17 @@ fn srgb_to_linear(c: vec3<f32>) -> vec3<f32> {
 
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
-    let tex = textureSample(base_texture, base_sampler, in.uv);
+    var uv = in.uv;
+    if (material.extra.z > 0.5) {
+        // shadow receivers: UV inside one tile of the silhouette atlas (`shadow.rs`), clamped half a texel inside it (the original clamps
+        // its 128 x 128 silhouette texture, `CLAMP_2 = clamp`)
+        let n = material.extra.w;
+        let t = material.extra.z - 1.0;
+        let tile = vec2<f32>(t - n * floor(t / n), floor(t / n));
+        let h = 0.5 / 128.0;
+        uv = (tile + clamp(uv, vec2<f32>(h), vec2<f32>(1.0 - h))) / n;
+    }
+    let tex = textureSample(base_texture, base_sampler, uv);
     var vtx = vec4<f32>(1.0);
 #ifdef VERTEX_COLORS
     vtx = in.color;

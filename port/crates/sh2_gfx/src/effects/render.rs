@@ -17,6 +17,7 @@ use sh2_formats::model::Model;
 
 use super::scene::{FxQuadView, FxRibbonView, FxView};
 use super::screenfx::{Sh2BlurFx, Sh2ShatterFx, Sh2SwirlFx};
+use crate::bevy::fxquad::{gpu_fx, pack_quads, pack_ribbon, FxCamBasis, FxGpuAssets, FxGpuGroup, FxTemplates, QuadMode, QuadRec, RibbonPoint, Sh2FxMaterial};
 use crate::bevy::image::decoded_image;
 use crate::bevy::model::{spawn_animated_model_ex, AnimatedModel, GpuCtx, ModelMaterials};
 use crate::bevy::{Sh2Blend, Sh2Material, Sh2SceneLight};
@@ -31,10 +32,12 @@ pub struct FxLive(pub Option<FxView>);
 #[derive(Component)]
 pub struct FxRoot;
 
+/// One drawn group: `entity` is the CPU mesh entity or the GPU group's entity (`gpu`).
 #[derive(Default)]
 struct Pooled {
     entity: Option<Entity>,
     mesh: Handle<Mesh>,
+    gpu: Option<FxGpuGroup>,
 }
 
 fn blend_of(b: BlendKind) -> Sh2Blend {
@@ -82,6 +85,35 @@ pub fn ribbon_mesh(r: &FxRibbonView, mesh: &mut Mesh) {
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv);
     mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, col);
     mesh.insert_indices(Indices::U32(idx));
+}
+
+/// The ribbon's points as GPU records (colour scaled like [`ribbon_mesh`]).
+pub fn ribbon_points(r: &FxRibbonView) -> Vec<RibbonPoint> {
+    r.points
+        .iter()
+        .map(|(p, d, c, st)| {
+            let s = if c.max_element() > 1.5 { 1.0 / 128.0 } else { 1.0 };
+            RibbonPoint { pos: *p, dir: *d, color: *c * s, st: *st }
+        })
+        .collect()
+}
+
+/// `pgr*` / `pol*` quads as GPU records (the corners of [`quads_mesh`]: `world * (+-w/2, +-h/2, 0)`).
+pub fn quad_recs(quads: &[&FxQuadView]) -> Vec<QuadRec> {
+    quads
+        .iter()
+        .map(|q| {
+            let (hx, hy) = (q.size[0] * 0.5, q.size[1] * 0.5);
+            QuadRec {
+                center: q.world.w_axis.truncate(),
+                mode: QuadMode::Axes { ax: q.world.x_axis.truncate(), ay: q.world.y_axis.truncate() },
+                pull: 0.0,
+                offs: [Vec2::new(-hx, -hy), Vec2::new(hx, -hy), Vec2::new(-hx, hy), Vec2::new(hx, hy)],
+                uv: q.st.map(Vec2::from),
+                color: q.color,
+            }
+        })
+        .collect()
 }
 
 /// PS2 camera space (x right, y down, z forward) -> PS2 world direction, for a Bevy camera rotation `q`: `flip(q * flip(v))` with `flip(x, y, z) = (x, -y, -z)`.
@@ -195,13 +227,19 @@ fn sync_fx(
     mut mats: ResMut<Assets<Sh2Material>>,
     mut light: Option<ResMut<Sh2SceneLight>>,
     mut anims: Query<&mut AnimatedModel>,
-    cams: Query<(Entity, &Camera, &Projection), With<Camera3d>>,
-    cam_tf: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
+    cams: Query<(Entity, &Camera, &Projection), (With<Camera3d>, Without<crate::bevy::shadow::ShadowCamera>)>,
+    cam_tf: Query<(&Camera, &GlobalTransform), (With<Camera3d>, Without<crate::bevy::shadow::ShadowCamera>)>,
     mut fog: Option<ResMut<crate::bevy::Sh2Fog>>,
     mut clear: Option<ResMut<ClearColor>>,
     cmn: Option<Res<super::bgfx_render::CmnEffTextures>>,
+    (mut buffers, mut fx_mats, mut templates): (Option<ResMut<Assets<::bevy::render::storage::ShaderBuffer>>>, Option<ResMut<Assets<Sh2FxMaterial>>>, Option<ResMut<FxTemplates>>),
 ) {
+    let _scope = crate::bevy::perf::Scope::new("sync_fx");
     let Some(settings) = settings else { return };
+    let mut ga = match (buffers.as_deref_mut(), fx_mats.as_deref_mut(), templates.as_deref_mut()) {
+        (Some(buffers), Some(materials), Some(templates)) if gpu_fx() => Some(FxGpuAssets { buffers, materials, templates }),
+        _ => None,
+    };
     // ---- camera fog / clear colour overrides (`camSetFogColor` / `camSetFogParam` / `shrSetBackColor`), restored when no effect sets them
     {
         let views: Vec<&FxView> = live.0.iter().chain(set.as_ref().map(|s| s.0.iter()).into_iter().flatten()).collect();
@@ -274,8 +312,8 @@ fn sync_fx(
     for view in &views {
         let slot = st.slots.entry(view.assets.id).or_default();
         slot.seen = true;
-        sync_view(&mut commands, view, slot, &settings, &mut meshes, &mut images, &mut mats, &mut anims, cam, cam_rot, &overlay_mesh);
-        sync_fparticles(&mut commands, view, slot, &settings, &mut meshes, &mut images, &mut mats, cam, cam_rot, cam_pos, cmn.as_ref());
+        sync_view(&mut commands, view, slot, &settings, &mut meshes, &mut images, &mut mats, &mut anims, cam, cam_rot, &overlay_mesh, ga.as_mut());
+        sync_fparticles(&mut commands, view, slot, &settings, &mut meshes, &mut images, &mut mats, cam, cam_rot, cam_pos, cmn.as_ref(), ga.as_mut());
     }
     let gone: Vec<i32> = st.slots.iter().filter(|(_, s)| !s.seen).map(|(k, _)| *k).collect();
     for k in gone {
@@ -362,6 +400,7 @@ fn sync_fparticles(
     cam_rot: Quat,
     cam_pos: Vec3,
     cmn: Option<&Arc<Vec<super::bgfx_render::CmnTex>>>,
+    mut ga: Option<&mut FxGpuAssets>,
 ) {
     let Some(root) = ents.root else { return };
     let mut by_key: HashMap<(u8, bool, bool), Vec<&super::bgfx::BgQuad>> = HashMap::new();
@@ -399,6 +438,18 @@ fn sync_fparticles(
                 h
             }
         };
+        if let Some(ga) = ga.as_deref_mut() {
+            let batch = pack_quads(&super::bgfx_render::bg_quad_recs(&list, true, &sv), &FxCamBasis::from_rot_pos(cam_rot, cam_pos));
+            match ents.fp_groups.get_mut(&key).and_then(|p| p.gpu.as_mut()) {
+                Some(g) => g.update(commands, meshes, ga, &batch),
+                None => {
+                    let base = Sh2Material::textured(Some(img)).with_blend(if additive { Sh2Blend::Add } else { Sh2Blend::Normal }, None).with_fog(false).with_ztest_off(!ztest);
+                    let g = FxGpuGroup::spawn(commands, meshes, ga, &base, &batch, false, "fx_fparticles");
+                    ents.fp_groups.insert(key, Pooled { entity: Some(g.entity), mesh: Handle::default(), gpu: Some(g) });
+                }
+            }
+            continue;
+        }
         match ents.fp_groups.get(&key) {
             Some(p) => {
                 if let Some(mut m) = meshes.get_mut(&p.mesh) {
@@ -411,7 +462,7 @@ fn sync_fparticles(
                 super::bgfx_render::quads_to_mesh(&list, cam_rot, cam_pos, &mut mesh, true, &sv);
                 let mh = meshes.add(mesh);
                 let e = commands.spawn((Name::new("fx_fparticles"), Mesh3d(mh.clone()), MeshMaterial3d(mat), Transform::default(), Visibility::default(), ::bevy::camera::visibility::NoFrustumCulling)).id();
-                ents.fp_groups.insert(key, Pooled { entity: Some(e), mesh: mh });
+                ents.fp_groups.insert(key, Pooled { entity: Some(e), mesh: mh, gpu: None });
             }
         }
     }
@@ -430,6 +481,7 @@ fn sync_view(
     cam: Option<(Entity, &Camera, &Projection)>,
     cam_rot: Quat,
     overlay_mesh: &Handle<Mesh>,
+    mut ga: Option<&mut FxGpuAssets>,
 ) {
     let root = match ents.root {
         Some(r) => r,
@@ -509,15 +561,24 @@ fn sync_view(
                 ents.tex_cache.insert(key, h.clone());
                 Some(h)
             });
-            let mat = mats.add(Sh2Material::textured(tex).with_blend(blend_of(r.blend), None).with_fog(false));
+            let base = Sh2Material::textured(tex).with_blend(blend_of(r.blend), None).with_fog(false);
+            if let Some(ga) = ga.as_deref_mut() {
+                let g = FxGpuGroup::spawn(commands, meshes, ga, &base, &pack_ribbon(&ribbon_points(r)), true, "fx_ribbon");
+                commands.entity(root).add_child(g.entity);
+                ents.ribbons.insert(r.handle, Pooled { entity: Some(g.entity), mesh: Handle::default(), gpu: Some(g) });
+                continue;
+            }
+            let mat = mats.add(base);
             let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
             ribbon_mesh(r, &mut mesh);
             let mh = meshes.add(mesh);
             let e = commands.spawn((Mesh3d(mh.clone()), MeshMaterial3d(mat), Transform::default(), Visibility::default(), ::bevy::camera::visibility::NoFrustumCulling)).id();
             commands.entity(root).add_child(e);
-            ents.ribbons.insert(r.handle, Pooled { entity: Some(e), mesh: mh });
-        } else if let Some(p) = ents.ribbons.get(&r.handle) {
-            if let Some(mut m) = meshes.get_mut(&p.mesh) {
+            ents.ribbons.insert(r.handle, Pooled { entity: Some(e), mesh: mh, gpu: None });
+        } else if let Some(p) = ents.ribbons.get_mut(&r.handle) {
+            if let (Some(g), Some(ga)) = (p.gpu.as_mut(), ga.as_deref_mut()) {
+                g.update(commands, meshes, ga, &pack_ribbon(&ribbon_points(r)));
+            } else if let Some(mut m) = meshes.get_mut(&p.mesh) {
                 ribbon_mesh(r, &mut m);
             }
         }
@@ -530,6 +591,20 @@ fn sync_view(
         if qs.is_empty() {
             if let Some(e) = slot.entity.take() {
                 commands.entity(e).despawn();
+            }
+            continue;
+        }
+        if let Some(ga) = ga.as_deref_mut() {
+            let batch = pack_quads(&quad_recs(&qs), &FxCamBasis::default());
+            match slot.gpu.as_mut() {
+                Some(g) if slot.entity == Some(g.entity) => g.update(commands, meshes, ga, &batch),
+                _ => {
+                    let base = Sh2Material::textured(None).with_blend(if add { Sh2Blend::Add } else { Sh2Blend::Normal }, None).with_fog(false);
+                    let g = FxGpuGroup::spawn(commands, meshes, ga, &base, &batch, false, "fx_quads");
+                    commands.entity(root).add_child(g.entity);
+                    slot.entity = Some(g.entity);
+                    slot.gpu = Some(g);
+                }
             }
             continue;
         }
@@ -560,7 +635,7 @@ fn sync_view(
         let mh = meshes.add(mesh);
         let e = commands.spawn((Mesh3d(mh.clone()), MeshMaterial3d(mat), Transform::default(), Visibility::default(), ::bevy::camera::visibility::NoFrustumCulling)).id();
         commands.entity(root).add_child(e);
-        ents.lines = Pooled { entity: Some(e), mesh: mh };
+        ents.lines = Pooled { entity: Some(e), mesh: mh, gpu: None };
     } else if let Some(mut m) = meshes.get_mut(&ents.lines.mesh) {
         lines_mesh(&view.lines, cam_rot, &mut m);
     }
@@ -608,8 +683,11 @@ fn sync_view(
             match ents.overlays.get(&key) {
                 Some((e, mh)) => {
                     commands.entity(*e).insert(tf);
-                    if let Some(mut m) = mats.get_mut(mh) {
-                        m.tint = c;
+                    // compare first (a modified material is re-prepared in the render world)
+                    if mats.get(mh).map(|m| m.tint != c).unwrap_or(false) {
+                        if let Some(mut m) = mats.get_mut(mh) {
+                            m.tint = c;
+                        }
                     }
                 }
                 None => {

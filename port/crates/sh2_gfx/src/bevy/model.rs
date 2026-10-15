@@ -2,16 +2,24 @@
 //!
 //! ## Skinning decision
 //!
-//! Characters are **CPU skinned**: [`crate::model::ModelInstance`] evaluates the skeleton (`Frame::calcMatrix`) and this
-//! module applies one palette matrix per vertex (the `SkinAtomicPack2` VU1 microcode never blends, see
-//! `notes/C/model_format.md`), then re-uploads positions + normals into the atomic's `Mesh` every frame.  Reasons: the PS2
-//! matrix palette (3 frames per chunk, 0xff = unused, extra script-driven frames) does not map 1:1 onto Bevy's `SkinnedMesh`, the
-//! vertex counts are small (a few thousand per character), and the same path serves `MirrorModel`/dynamics later.
+//! [`crate::model::ModelInstance`] evaluates the skeleton on the CPU (`Frame::calcMatrix`, hair / cloth chains, `WFRH` virtual frames, lip-sync
+//! `extraMat`, `Scale*` events: small and script driven).  The per-vertex transform runs on the **GPU** (default since round 6, see
+//! `notes/integration/r6_gp.md`): the `SkinAtomicPack2` VU1 microcode applies exactly one palette matrix per vertex (never blends), so every atomic
+//! gets a static `JOINT_INDEX` attribute (one *local* joint per vertex, weight 1) at its first frame, and every frame only the atomic's palette
+//! (the evaluated `Frame` matrices it references, model space) is written into a `SkinnedMeshInverseBindposes` asset whose joint entity is
+//! the identity ([`Sh2SkinJoint`]).  Bevy's skin extraction therefore uploads exactly the palette into its joint storage buffer, and
+//! `sh2_vertex.wgsl` (the vertex stage of [`Sh2Material`]) computes `world_from_local * (P * v)` and `normalize(P * n)`: the same arithmetic as the
+//! old CPU path (`skin`), which stays available with `SH2_CPU_SKIN=1` (A/B comparisons).  Blend-shape atomics upload their morphed bind geometry
+//! only when it changes; water atomics their UVs; billboards are still built on the CPU ([`billboard_vertices`]).  The drop shadow's
+//! silhouette is rendered on the GPU too (`shadow.rs`: the caster's atomics join its shadow camera's render layer); the CPU only walks the
+//! posed positions once per atomic (no normals, nothing uploaded) for the blended-draw sort key and the shadow rectangle.
 //! Rigid (Pack1/Pack2) atomics of a *static* model (field backgrounds) are merged per texture into one mesh and never touched again.
 //!
 //! All entities are parented to a [`Ps2Root`] (180 degree rotation about X: PS2 y-down/z-forward -> Bevy y-up/z-toward-viewer).
 
 use ::bevy::camera::visibility::NoFrustumCulling;
+use ::bevy::mesh::skinning::{SkinnedMesh, SkinnedMeshInverseBindposes};
+use ::bevy::mesh::VertexAttributeValues;
 use ::bevy::prelude::*;
 use sh2_formats::math::FVector;
 use sh2_formats::model::{AtomicDef, Model};
@@ -21,7 +29,8 @@ use std::sync::Arc;
 
 use super::bgmotion::apply_texanim_frame;
 use super::billboard::{billboard_indices, billboard_vertices, is_billboard};
-use super::shadow::{shadow_light_dir, spawn_shadow_quad, ShadowSettings};
+use super::shadow::{shadow_light_dir, spawn_shadow_quad, tile_clip, Sh2ShadowMaterial, ShadowAtlas, ShadowCamera, ShadowCaster, ShadowExtents, ShadowSettings, ShadowSilhouette, SHADOW_LAYER};
+use ::bevy::camera::visibility::RenderLayers;
 use super::image::{texture_def_image, TexFilter};
 use super::map::{alpha_census, plan_draws, AlphaCensus, DrawPlan, DrawState};
 use super::material::{texture_blend, Sh2Blend, Sh2Material, TestMode, DEFAULT_ALPHA_REF};
@@ -198,10 +207,126 @@ struct Part {
     bones: Vec<(u8, u8, u8)>,
     skinned: bool,
     lit: bool,
-    /// triangle list of the atomic (shadow silhouette)
-    tris: Vec<[u32; 3]>,
     /// `BAtomic` billboard (rebuilt every frame facing the camera)
     billboard: bool,
+    /// GPU skinning state (`None` = CPU skinned: `SH2_CPU_SKIN=1`, billboards)
+    gpu: Option<GpuSkin>,
+    /// this frame: the CPU skin (`SH2_CPU_SKIN=1`) and whether the atomic casts a shadow (set in phase A of [`animate_models`])
+    pending_cpu: Option<(Vec<[f32; 3]>, Option<Vec<[f32; 3]>>)>,
+    caster: bool,
+    /// billboard geometry uploaded last
+    billboard_last: Option<(Vec<[f32; 3]>, Vec<[f32; 2]>, Vec<[f32; 4]>)>,
+    /// the atomic's draw on the shadow layer (casters only, see `shadow.rs`)
+    silhouette: Option<Entity>,
+}
+
+/// GPU skinning of one atomic (see the module docs).
+struct GpuSkin {
+    /// pose index (`ModelInstance::pose`) of every local joint
+    palette: Vec<u8>,
+    /// local joint of every vertex
+    local: Vec<u16>,
+    /// palette asset shared by the draws of this atomic (and their mirror copies); `None` until the first frame
+    bindposes: Option<Handle<SkinnedMeshInverseBindposes>>,
+    /// [`Sh2SkinJoint::generation`] the `SkinnedMesh` components were inserted for
+    joint_gen: u32,
+    /// blend-shape slot of this atomic and the morphed positions uploaded last
+    shape: Option<usize>,
+    uploaded_shape: Option<Vec<[f32; 3]>>,
+    /// AABB centre of the positions in the mesh (`Mesh::compute_aabb`): Bevy sorts blended draws by `world_from_local * centre`
+    bind_center: Vec3,
+    /// this frame's palette (sort offset applied) and the offset, from phase A of [`animate_models`]; the morph needs uploading
+    pending: Option<(Vec<Mat4>, Vec3)>,
+    upload_shape: bool,
+}
+
+/// `Mesh::compute_aabb` centre of a position list (zero when empty).
+fn aabb_center(pos: impl Iterator<Item = Vec3>) -> Vec3 {
+    let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
+    let mut any = false;
+    for p in pos {
+        lo = lo.min(p);
+        hi = hi.max(p);
+        any = true;
+    }
+    if any {
+        0.5 * (hi + lo)
+    } else {
+        Vec3::ZERO
+    }
+}
+
+impl GpuSkin {
+    fn new(inst: &ModelInstance, atomic: usize, bones: &[(u8, u8, u8)], nverts: usize) -> GpuSkin {
+        let (palette, local) = local_palette(bones, nverts);
+        let shape = inst.model.blend_shapes.iter().position(|b| b.atomic == atomic);
+        let bind_center = aabb_center(inst.model.atomics[atomic].geometry.positions.iter().map(|p| Vec3::from(*p)));
+        GpuSkin { palette, local, bindposes: None, joint_gen: u32::MAX, shape, uploaded_shape: None, bind_center, pending: None, upload_shape: false }
+    }
+
+    /// The palette matrices of the current pose.
+    fn matrices(&self, inst: &ModelInstance) -> Vec<Mat4> {
+        self.palette.iter().map(|&b| palette_matrix(inst.pose.get(b as usize))).collect()
+    }
+}
+
+/// Distinct pose indices of an atomic (its local palette) and the local joint of every vertex.  Vertices past the bone table use entry
+/// 0xff like `skin` (no matrix = file position).
+fn local_palette(bones: &[(u8, u8, u8)], nverts: usize) -> (Vec<u8>, Vec<u16>) {
+    let mut palette: Vec<u8> = Vec::new();
+    let mut local = Vec::with_capacity(nverts);
+    for i in 0..nverts {
+        let b = bones.get(i).map(|b| b.0).unwrap_or(0xff);
+        let l = match palette.iter().position(|&p| p == b) {
+            Some(l) => l,
+            None => {
+                palette.push(b);
+                palette.len() - 1
+            }
+        };
+        local.push(l as u16);
+    }
+    if palette.is_empty() {
+        palette.push(0xff);
+    }
+    (palette, local)
+}
+
+/// One palette matrix (model space).  The bottom row is forced to `(0, 0, 0, 1)`: the CPU path drops `w`.  A missing frame = identity
+/// (the CPU path keeps the file position).
+fn palette_matrix(m: Option<&sh2_formats::math::Matrix>) -> Mat4 {
+    let Some(m) = m else { return Mat4::IDENTITY };
+    let mut g = m.to_glam();
+    g.x_axis.w = 0.0;
+    g.y_axis.w = 0.0;
+    g.z_axis.w = 0.0;
+    g.w_axis.w = 1.0;
+    g
+}
+
+/// `SH2_CPU_SKIN=1`: skin on the CPU and re-upload the meshes every frame (the pre-round-6 path, for A/B comparisons).
+pub fn gpu_skinning() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("SH2_CPU_SKIN").is_none())
+}
+
+/// The joint entity of every GPU-skinned atomic: a bare `GlobalTransform::IDENTITY` (no `Transform`, so propagation never touches it), so
+/// that Bevy's joint matrix `joint.affine() * inverse_bindpose` is the palette matrix itself and the mesh entity's own transform places the
+/// model (mirror copies share the skin and only differ in that transform).  `generation` changes when it had to be respawned.
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct Sh2SkinJoint {
+    pub entity: Entity,
+    pub generation: u32,
+}
+
+/// Marker of the [`Sh2SkinJoint`] entity.
+#[derive(Component)]
+pub struct Sh2SkinJointMarker;
+
+/// Startup: spawn the [`Sh2SkinJoint`].
+pub fn spawn_skin_joint(mut commands: Commands) {
+    let entity = commands.spawn((Name::new("sh2_skin_joint"), Sh2SkinJointMarker, GlobalTransform::IDENTITY)).id();
+    commands.insert_resource(Sh2SkinJoint { entity, generation: 0 });
 }
 
 struct PartDraw {
@@ -239,12 +364,19 @@ pub fn apply_model_light_overrides(
                     }
                 }
                 let Some(own) = pd.own_material.clone() else { continue };
-                if let Some(mut m) = materials.get_mut(&own) {
-                    m.own_light = true;
-                    m.ambient = amb;
-                    (m.light_dir, m.light_color) = d(0);
-                    (m.light_dir1, m.light_color1) = d(1);
-                    (m.light_dir2, m.light_color2) = d(2);
+                // compare first: every `get_mut` re-prepares the material in the render world
+                let (want0, want1, want2) = (d(0), d(1), d(2));
+                let same = materials.get(&own).map(|m| {
+                    m.own_light && m.ambient == amb && (m.light_dir, m.light_color) == want0 && (m.light_dir1, m.light_color1) == want1 && (m.light_dir2, m.light_color2) == want2
+                });
+                if same == Some(false) {
+                    if let Some(mut m) = materials.get_mut(&own) {
+                        m.own_light = true;
+                        m.ambient = amb;
+                        (m.light_dir, m.light_color) = want0;
+                        (m.light_dir1, m.light_color1) = want1;
+                        (m.light_dir2, m.light_color2) = want2;
+                    }
                 }
             }
         }
@@ -271,6 +403,8 @@ pub struct AnimatedModel {
     last_world: Option<Vec3>,
     /// Shadow caster state (see [`super::shadow`]).
     pub shadow: Option<super::shadow::ShadowCaster>,
+    /// phase A -> phase B hand-over of [`animate_models`]
+    frame: Option<FrameWork>,
 }
 
 impl AnimatedModel {
@@ -397,10 +531,12 @@ pub fn spawn_animated_model_ex(
                 draws.push(PartDraw { entity: child, own_material: None, base_blend });
             }
         }
-        parts.push(Part { atomic: i, draws, mesh, bones: primary_bones(a, inst_total), skinned: true, lit, tris: a.triangles(), billboard });
+        let bones = primary_bones(a, inst_total);
+        let gpu_skin = (!billboard && gpu_skinning()).then(|| GpuSkin::new(&inst, i, &bones, a.geometry.positions.len()));
+        parts.push(Part { atomic: i, draws, mesh, bones, skinned: true, lit, billboard, gpu: gpu_skin, pending_cpu: None, caster: false, billboard_last: None, silhouette: None });
     }
     let shadow = if (in_place || std::env::var_os("SH2_DEBUG_CHAR").is_some()) && ShadowSettings::default().enabled {
-        Some(spawn_shadow_quad(commands, holder, gpu.meshes, gpu.images, gpu.materials))
+        spawn_shadow_quad(commands, holder, gpu.meshes, gpu.images, gpu.materials)
     } else {
         None
     };
@@ -417,17 +553,129 @@ pub fn spawn_animated_model_ex(
         tex_images,
         last_world: None,
         shadow,
+        frame: None,
     });
     holder
 }
 
-/// Per frame: advance the motion clock, re-evaluate the skeleton (+ hair / cloth chains), re-skin and upload; push `TXA*` / blink texture
-/// frames, `Visible ` / alpha / colour events into the render assets.
+/// What phase A of [`animate_models`] (parallel, per model) hands to phase B (serial asset writes) for one frame.
+struct FrameWork {
+    /// model -> PS2 world
+    w: Mat4,
+    /// camera right / down in model space (billboards)
+    cam_axes: Option<(Vec3, Vec3)>,
+    /// the shadow light (towards the light, model space, clamped) and the silhouette extents of the caster atomics
+    sl: Vec3,
+    ext: ShadowExtents,
+}
+
+/// Phase A for one model: advance the clock, evaluate the skeleton (+ hair / cloth chains, `WFRH`, lips ...) and prepare the per-atomic GPU palettes
+/// (or the CPU skin with `SH2_CPU_SKIN=1`), the sort offsets and the shadow extents.  Touches nothing but the model itself, so it runs in parallel.
+fn advance_model(am: &mut AnimatedModel, gt: &GlobalTransform, dt: f32, gpu_on: bool, shadows_on: bool, light_world: Vec3, cam_t: Option<GlobalTransform>) {
+    // model -> PS2 world (the dynamics solver works in y-down world axes; the holder sits under a PS2 -> Bevy flip)
+    let flip = Mat4::from_rotation_x(std::f32::consts::PI);
+    let w = flip * gt.to_matrix();
+    let wpos = w.w_axis.truncate();
+    if let Some(prev) = am.last_world {
+        if (prev - wpos).length() > 25.0 {
+            if let Some(d) = &mut am.inst.dynamics {
+                d.reset_pending = true;
+            }
+        }
+    }
+    am.last_world = Some(wpos);
+    am.inst.set_world(sh2_formats::math::Matrix::from_glam(w));
+    if !am.paused {
+        let dt = dt * am.speed;
+        if am.current.is_some() && am.inst.motion_finished() && am.auto_restart {
+            if let Some(n) = am.current.clone() {
+                am.inst.set_motion(&n);
+            }
+        }
+        am.inst.add_time(dt);
+        am.dirty = true;
+    }
+    am.frame = None;
+    if !am.dirty {
+        return;
+    }
+    let inv = gt.to_matrix().inverse();
+    // camera right / down (view space x, y of the PS2 camera) in this model's space, for the billboards
+    let cam_axes = cam_t.map(|ct| (inv.transform_vector3(ct.right().as_vec3()).normalize_or_zero(), inv.transform_vector3(ct.down().as_vec3()).normalize_or_zero()));
+    let want_shadow = shadows_on && am.shadow.is_some();
+    // the shadow light in model space (rotation part of the holder's global transform) and its light-plane basis
+    let (sl, su, sv) = ShadowCaster::light_frame(inv.transform_vector3(light_world));
+    let mut ext = ShadowExtents::new();
+    let inst = &am.inst;
+    for part in am.parts.iter_mut() {
+        part.pending_cpu = None;
+        let alpha = inst.model_alpha * inst.atomic_alpha.get(part.atomic).copied().unwrap_or(1.0);
+        part.caster = want_shadow && !part.billboard && alpha > 0.4 && inst.visible.get(part.atomic).copied().unwrap_or(true);
+        if part.billboard {
+            continue;
+        }
+        let a = &inst.model.atomics[part.atomic];
+        match part.gpu.as_mut().filter(|_| gpu_on) {
+            Some(gs) => {
+                let g = &a.geometry;
+                let mut bind: &[[f32; 3]] = &g.positions;
+                gs.upload_shape = false;
+                if let Some(si) = gs.shape {
+                    if let Some((sp, _)) = inst.shape_geometry.get(si).filter(|s| s.0.len() == g.positions.len()) {
+                        bind = sp;
+                        if gs.uploaded_shape.as_ref() != Some(sp) {
+                            gs.upload_shape = true;
+                            gs.bind_center = aabb_center(sp.iter().map(|p| Vec3::from(*p)));
+                        }
+                    }
+                }
+                let mut mats = gs.matrices(inst);
+                // Posed positions (positions only, nothing stored): their AABB centre keeps Bevy's blended-draw sort key equal to the CPU path's
+                // (the mesh holds the bind pose, so the draw entity is offset by `posed - bind` centre and the palette by the inverse), and the
+                // shadow casters' extents fit the silhouette camera.
+                let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
+                for (i, p) in bind.iter().enumerate() {
+                    let m = &mats[gs.local.get(i).copied().unwrap_or(0) as usize];
+                    let q = m.transform_point3(Vec3::from(*p));
+                    lo = lo.min(q);
+                    hi = hi.max(q);
+                    if part.caster {
+                        ext.add(q, su, sv, sl);
+                    }
+                }
+                let offset = if bind.is_empty() { Vec3::ZERO } else { 0.5 * (hi + lo) - gs.bind_center };
+                if offset != Vec3::ZERO {
+                    let back = Mat4::from_translation(-offset);
+                    for m in mats.iter_mut() {
+                        *m = back * *m;
+                    }
+                }
+                gs.pending = Some((mats, offset));
+            }
+            None => {
+                let (pos, nrm) = skin(inst, part.atomic, a, &part.bones, part.skinned, part.lit);
+                if part.caster {
+                    for p in &pos {
+                        ext.add(Vec3::from(*p), su, sv, sl);
+                    }
+                }
+                part.pending_cpu = Some((pos, nrm));
+            }
+        }
+    }
+    am.frame = Some(FrameWork { w, cam_axes, sl, ext });
+}
+
+/// Per frame: advance the motion clock, re-evaluate the skeleton (+ hair / cloth chains) and the palettes ([`advance_model`], in parallel over the
+/// models), then upload: palettes into the GPU skins, `TXA*` / blink texture frames, `Visible ` / alpha / colour events into the render assets, the
+/// shadow cameras (serial: these touch shared assets).
 #[allow(clippy::too_many_arguments)]
 pub fn animate_models(
     time: Res<Time>,
-    mut q: Query<(&mut AnimatedModel, &GlobalTransform)>,
+    mut commands: Commands,
+    mut q: Query<(Entity, &mut AnimatedModel, &GlobalTransform)>,
     mut meshes: ResMut<Assets<Mesh>>,
+    (mut bindposes, mut joint, joint_alive): (Option<ResMut<Assets<SkinnedMeshInverseBindposes>>>, Option<ResMut<Sh2SkinJoint>>, Query<(), With<Sh2SkinJointMarker>>),
     mut vis: Query<&mut Visibility>,
     mut materials: ResMut<Assets<Sh2Material>>,
     mut images: ResMut<Assets<Image>>,
@@ -436,40 +684,44 @@ pub fn animate_models(
     light: Res<super::material::Sh2SceneLight>,
     shadow_settings: Option<Res<ShadowSettings>>,
     shadow_floor: Option<Res<super::shadow::ShadowFloor>>,
-    cameras: Query<(&GlobalTransform, &Camera), With<Camera3d>>,
+    (cameras, mut shadow_cams, atlas, mut shadow_mats, mut buffers, mut atlas_clips): (
+        Query<(&GlobalTransform, &Camera), (With<Camera3d>, Without<ShadowCamera>)>,
+        Query<&mut Camera, With<ShadowCamera>>,
+        Option<Res<ShadowAtlas>>,
+        Option<ResMut<Assets<Sh2ShadowMaterial>>>,
+        Option<ResMut<Assets<::bevy::render::storage::ShaderBuffer>>>,
+        Local<Vec<Mat4>>,
+    ),
 ) {
+    let _scope = crate::bevy::perf::Scope::new("animate_models");
     let cam_t = cameras.iter().filter(|(_, c)| c.is_active).map(|(t, _)| *t).next();
     let shadow_settings = shadow_settings.map(|s| *s).unwrap_or_default();
-    for (mut am, gt) in &mut q {
+    // the identity joint of the GPU skins (respawned if a scene teardown despawned it: every skin is then re-pointed at the new one).
+    // Without the render assets (headless apps) the CPU path runs.
+    let joint = match joint.as_mut() {
+        Some(j) if bindposes.is_some() && gpu_skinning() => {
+            if !joint_alive.contains(j.entity) {
+                j.entity = commands.spawn((Name::new("sh2_skin_joint"), Sh2SkinJointMarker, GlobalTransform::IDENTITY)).id();
+                j.generation = j.generation.wrapping_add(1);
+            }
+            Some(**j)
+        }
+        _ => None,
+    };
+    // ---- phase A: per model, in parallel
+    {
+        let _a = crate::bevy::perf::Scope::new("animate_models.pose");
+        let dt = time.delta_secs();
+        let gpu_on = joint.is_some();
+        let shadows_on = shadow_settings.enabled;
+        let light_world = shadow_light_dir(&light);
+        q.par_iter_mut().for_each(|(_, mut am, gt)| advance_model(&mut am, gt, dt, gpu_on, shadows_on, light_world, cam_t));
+    }
+    // ---- phase B: asset writes
+    let shadows_gpu = atlas.is_some() && shadow_mats.is_some() && buffers.is_some();
+    let mut clips_dirty = false;
+    for (holder, mut am, gt) in &mut q {
         let am = &mut *am;
-        // model -> PS2 world (the dynamics solver works in y-down world axes; the holder sits under a PS2 -> Bevy flip)
-        let flip = Mat4::from_rotation_x(std::f32::consts::PI);
-        let w = flip * gt.to_matrix();
-        let wpos = w.w_axis.truncate();
-        // camera right / down (view space x, y of the PS2 camera) in this model's space, for the billboards
-        let cam_axes = cam_t.map(|ct| {
-            let inv = gt.to_matrix().inverse();
-            (inv.transform_vector3(ct.right().as_vec3()).normalize_or_zero(), inv.transform_vector3(ct.down().as_vec3()).normalize_or_zero())
-        });
-        if let Some(prev) = am.last_world {
-            if (prev - wpos).length() > 25.0 {
-                if let Some(d) = &mut am.inst.dynamics {
-                    d.reset_pending = true;
-                }
-            }
-        }
-        am.last_world = Some(wpos);
-        am.inst.set_world(sh2_formats::math::Matrix::from_glam(w));
-        if !am.paused {
-            let dt = time.delta_secs() * am.speed;
-            if am.current.is_some() && am.inst.motion_finished() && am.auto_restart {
-                if let Some(n) = am.current.clone() {
-                    am.inst.set_motion(&n);
-                }
-            }
-            am.inst.add_time(dt);
-            am.dirty = true;
-        }
         // texture animation frames
         if am.inst.texanim_dirty {
             am.inst.texanim_dirty = false;
@@ -483,12 +735,21 @@ pub fn animate_models(
                 }
             }
         }
-        if !am.dirty {
-            continue;
-        }
+        let Some(fw) = am.frame.take() else { continue };
         am.dirty = false;
-        let mut casters: Vec<(Vec<[f32; 3]>, Vec<[u32; 3]>)> = Vec::new();
-        let want_shadow = shadow_settings.enabled && am.shadow.is_some();
+        // the caster's silhouette material (+ the receivers' atlas texture) on its first frame
+        let shadow_mat = match (am.shadow.as_mut(), atlas.as_ref(), shadow_mats.as_mut()) {
+            (Some(sh), Some(at), Some(sm)) if shadow_settings.enabled => {
+                if sh.material.is_none() {
+                    sh.material = Some(sm.add(Sh2ShadowMaterial { index: Vec4::new(sh.tile as f32, 0.0, 0.0, 0.0), clips: at.clips.clone() }));
+                    if let Some(mut m) = materials.get_mut(&sh.receiver_material) {
+                        m.texture = Some(at.image.clone());
+                    }
+                }
+                sh.material.clone()
+            }
+            _ => None,
+        };
         for part in am.parts.iter_mut() {
             // `Visible ` motion events (hand pose variants, weapons ...) and `MdlAlpha` / `ACR` fades
             let alpha = am.inst.model_alpha * am.inst.atomic_alpha.get(part.atomic).copied().unwrap_or(1.0);
@@ -517,41 +778,107 @@ pub fn animate_models(
                         }
                     }
                     if let Some(own) = &pd.own_material {
-                        if let Some(mut m) = materials.get_mut(own) {
-                            m.tint = if billboard { Vec4::new(1.0, 1.0, 1.0, alpha) } else { Vec4::new(col[0], col[1], col[2], alpha) };
-                            if alpha < 1.0 {
-                                if m.blend == Sh2Blend::Opaque {
-                                    m.blend = Sh2Blend::Normal;
-                                }
-                                m.params.w = 1.0;
+                        // compare first: a `get_mut` marks the material modified, and the render world then re-prepares its bind group and
+                        // re-specialises every entity using it (PF: 48-240 per frame when written blindly)
+                        let tint = if billboard { Vec4::new(1.0, 1.0, 1.0, alpha) } else { Vec4::new(col[0], col[1], col[2], alpha) };
+                        if let Some(cur) = materials.get(own) {
+                            let (blend, pw) = if alpha < 1.0 {
+                                (if cur.blend == Sh2Blend::Opaque { Sh2Blend::Normal } else { cur.blend }, 1.0)
                             } else {
-                                m.blend = pd.base_blend;
-                                m.params.w = if pd.base_blend == Sh2Blend::Opaque { 0.0 } else { 1.0 };
+                                (pd.base_blend, if pd.base_blend == Sh2Blend::Opaque { 0.0 } else { 1.0 })
+                            };
+                            if cur.tint != tint || cur.blend != blend || cur.params.w != pw {
+                                if let Some(mut m) = materials.get_mut(own) {
+                                    m.tint = tint;
+                                    m.blend = blend;
+                                    m.params.w = pw;
+                                }
                             }
                         }
                     }
                 }
             }
-            let Some(mut mesh) = meshes.get_mut(&part.mesh) else { continue };
             let a = &am.inst.model.atomics[part.atomic];
+            if let (Some(gs), Some(j), Some(bp)) = (part.gpu.as_mut(), joint, bindposes.as_mut()) {
+                let Some((mats, offset)) = gs.pending.take() else { continue };
+                // GPU skinning: only the palette (and morphed / wobbling vertex data when it changed) goes to the GPU
+                if gs.upload_shape {
+                    gs.upload_shape = false;
+                    let g = &a.geometry;
+                    if let Some((sp, sn)) = gs.shape.and_then(|si| am.inst.shape_geometry.get(si)).filter(|s| s.0.len() == g.positions.len()) {
+                        if let Some(mut mesh) = meshes.get_mut(&part.mesh) {
+                            mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, sp.clone());
+                            if !g.normals.is_empty() && sn.len() == g.normals.len() && mesh.attribute(Mesh::ATTRIBUTE_NORMAL).is_some() {
+                                mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, sn.clone());
+                            }
+                        }
+                        gs.uploaded_shape = Some(sp.clone());
+                    }
+                }
+                for pd in &part.draws {
+                    if let Ok(mut t) = tfs.get_mut(pd.entity) {
+                        if t.translation != offset {
+                            t.translation = offset;
+                        }
+                    }
+                }
+                let have = gs.bindposes.as_ref().map(|h| bp.contains(h)).unwrap_or(false);
+                if have {
+                    if let Some(mut asset) = gs.bindposes.as_ref().and_then(|h| bp.get_mut(h)) {
+                        *asset = SkinnedMeshInverseBindposes::from(mats);
+                    }
+                } else {
+                    if let Some(mut mesh) = meshes.get_mut(&part.mesh) {
+                        let n = mesh.count_vertices();
+                        let idx: Vec<[u16; 4]> = (0..n).map(|i| [gs.local.get(i).copied().unwrap_or(0), 0, 0, 0]).collect();
+                        mesh.insert_attribute(Mesh::ATTRIBUTE_JOINT_INDEX, VertexAttributeValues::Uint16x4(idx));
+                        mesh.insert_attribute(Mesh::ATTRIBUTE_JOINT_WEIGHT, vec![[1.0f32, 0.0, 0.0, 0.0]; n]);
+                    }
+                    gs.bindposes = Some(bp.add(SkinnedMeshInverseBindposes::from(mats)));
+                    gs.joint_gen = u32::MAX;
+                }
+                let part_reskin = gs.joint_gen != j.generation;
+                if gs.joint_gen != j.generation {
+                    gs.joint_gen = j.generation;
+                    if let Some(h) = gs.bindposes.clone() {
+                        for pd in &part.draws {
+                            commands.entity(pd.entity).try_insert(SkinnedMesh { inverse_bindposes: h.clone(), joints: vec![j.entity; gs.palette.len()] });
+                        }
+                    }
+                }
+                let sk = gs.bindposes.clone().map(|h| (h, j.entity, gs.palette.len()));
+                silhouette(&mut commands, holder, part_reskin, part, shadow_mat.as_ref(), Some(offset), &mut tfs, &mut vis, sk);
+                if let Some(Some(uv)) = am.inst.water_uvs.get(part.atomic) {
+                    if let Some(mut mesh) = meshes.get_mut(&part.mesh) {
+                        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv.clone());
+                    }
+                }
+                continue;
+            }
             if part.billboard {
-                if let Some((right, down)) = cam_axes {
+                if let Some((right, down)) = fw.cam_axes {
                     let bone = a.chunks.first().and_then(|c| am.inst.pose.get(c.bones[0] as usize)).copied().unwrap_or(sh2_formats::math::Matrix::IDENTITY);
                     let color0 = tinted.then(|| {
                         let base = a.geometry.colors.first().map(|c| c.map(|v| v as f32 / 128.0)).unwrap_or([1.0; 4]);
                         [base[0] * col[0], base[1] * col[1], base[2] * col[2], base[3]]
                     });
                     let (p, uv, c) = billboard_vertices(a, &am.inst.billboard[part.atomic], &bone, right, down, color0);
-                    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, p);
-                    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv);
-                    mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, c);
+                    // a billboard whose camera / bone / params did not move keeps its mesh (no re-upload: save points are 38 of them)
+                    let key = (p, uv, c);
+                    if part.billboard_last.as_ref() != Some(&key) {
+                        if let Some(mut mesh) = meshes.get_mut(&part.mesh) {
+                            mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, key.0.clone());
+                            mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, key.1.clone());
+                            mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, key.2.clone());
+                        }
+                        part.billboard_last = Some(key);
+                    }
                 }
                 continue;
             }
-            let (pos, nrm) = skin(&am.inst, part.atomic, a, &part.bones, part.skinned, part.lit);
-            if want_shadow && alpha > 0.4 && am.inst.visible.get(part.atomic).copied().unwrap_or(true) {
-                casters.push((pos.clone(), part.tris.clone()));
-            }
+            let Some((pos, nrm)) = part.pending_cpu.take() else { continue };
+            silhouette(&mut commands, holder, false, part, shadow_mat.as_ref(), None, &mut tfs, &mut vis, None);
+            let Some(mut mesh) = meshes.get_mut(&part.mesh) else { continue };
             update_geometry(&mut *mesh, pos, nrm);
             if let Some(Some(uv)) = am.inst.water_uvs.get(part.atomic) {
                 // `WaterAtomicP1::addTime`: the surface wobbles in U
@@ -559,17 +886,101 @@ pub fn animate_models(
             }
         }
         if let Some(sh) = am.shadow.as_mut() {
-            if !shadow_settings.enabled {
-                if let Ok(mut v) = vis.get_mut(sh.quad) {
+            if !shadow_settings.enabled || !shadows_gpu {
+                sh.hide(&mut vis);
+            } else {
+                let world_to_model = fw.w.inverse();
+                let _shadow_scope = super::perf::Scope::new("shadow");
+                let clip = sh.update(&fw.ext, fw.sl, shadow_floor.as_deref(), &world_to_model, &mut meshes, &mut tfs, &mut vis);
+                // Bevy world -> this caster's tile: tile * (model -> tile clip) * (world -> model)
+                let m = clip.map(|c| tile_clip(sh.tile) * c * gt.to_matrix().inverse()).unwrap_or(Mat4::ZERO);
+                if atlas_clips.len() <= sh.tile {
+                    atlas_clips.resize(sh.tile + 1, Mat4::ZERO);
+                }
+                if atlas_clips[sh.tile] != m {
+                    atlas_clips[sh.tile] = m;
+                    clips_dirty = true;
+                }
+            }
+        }
+    }
+    // one buffer write per frame for all casters (slots of casters that did not move keep last frame's matrix)
+    if let (true, Some(at), Some(bufs)) = (clips_dirty, atlas.as_ref(), buffers.as_mut()) {
+        if let Some(mut b) = bufs.get_mut(&at.clips) {
+            b.data = Some(super::shadow::atlas_clip_bytes(&atlas_clips));
+        }
+    }
+    // the atlas pass runs only while some caster draws
+    if let (Some(at), true) = (atlas.as_ref(), shadows_gpu) {
+        let any = q.iter().any(|(_, am, _)| am.shadow.is_some()) && shadow_settings.enabled;
+        if let Ok(mut c) = shadow_cams.get_mut(at.camera) {
+            if c.is_active != any {
+                c.is_active = any;
+            }
+        }
+    }
+}
+
+/// Keep the atomic's silhouette twin (its draw on the shadow layer, see `shadow.rs`) in sync: spawned on first use (same mesh, same GPU skin,
+/// the caster's silhouette material), shown only while the atomic casts, with the draw's sort offset.
+fn silhouette(
+    commands: &mut Commands,
+    holder: Entity,
+    reskin: bool,
+    part: &mut Part,
+    mat: Option<&Handle<Sh2ShadowMaterial>>,
+    offset: Option<Vec3>,
+    tfs: &mut Query<&mut Transform, Without<AnimatedModel>>,
+    vis: &mut Query<&mut Visibility>,
+    skin: Option<(Handle<SkinnedMeshInverseBindposes>, Entity, usize)>,
+) {
+    let Some(mat) = mat else {
+        if let Some(e) = part.silhouette {
+            if let Ok(mut v) = vis.get_mut(e) {
+                if *v != Visibility::Hidden {
                     *v = Visibility::Hidden;
                 }
-            } else {
-                // direction towards the light: Bevy world -> model space (rotation part of the holder's global transform)
-                let l_world = shadow_light_dir(&light);
-                let rot = gt.to_matrix().inverse();
-                let l_model = rot.transform_vector3(l_world);
-                let world_to_model = w.inverse();
-                sh.update(&casters, l_model, shadow_settings.strength, shadow_floor.as_deref(), &world_to_model, &mut images, &mut meshes, &mut tfs, &mut vis);
+            }
+        }
+        return;
+    };
+    let cast = part.caster && part.draws.first().and_then(|d| vis.get(d.entity).ok()).map(|v| *v != Visibility::Hidden).unwrap_or(false);
+    let (e, fresh) = match part.silhouette {
+        Some(e) => (e, false),
+        None => {
+            if !cast {
+                return;
+            }
+            let e = commands
+                .spawn((
+                    Name::new("shadow_silhouette"),
+                    ShadowSilhouette,
+                    Mesh3d(part.mesh.clone()),
+                    MeshMaterial3d(mat.clone()),
+                    Transform::from_translation(offset.unwrap_or(Vec3::ZERO)),
+                    Visibility::Inherited,
+                    RenderLayers::layer(SHADOW_LAYER),
+                    NoFrustumCulling,
+                ))
+                .id();
+            commands.entity(holder).add_child(e);
+            part.silhouette = Some(e);
+            (e, true)
+        }
+    };
+    if let (Some((h, joint, n)), true) = (skin, fresh || reskin) {
+        commands.entity(e).try_insert(SkinnedMesh { inverse_bindposes: h, joints: vec![joint; n] });
+    }
+    if let Ok(mut v) = vis.get_mut(e) {
+        let want = if cast { Visibility::Inherited } else { Visibility::Hidden };
+        if *v != want {
+            *v = want;
+        }
+    }
+    if let Some(o) = offset {
+        if let Ok(mut t) = tfs.get_mut(e) {
+            if t.translation != o {
+                t.translation = o;
             }
         }
     }
@@ -645,5 +1056,69 @@ mod alpha_plan_tests {
         let plan = plan_draws(0x5c & 0xf0, Some(&t), AlphaCensus { any_below: false, any_at_or_above: true });
         assert_eq!(plan.draws.len(), 1);
         assert_eq!(plan.draws[0].test, TestMode::Off);
+    }
+}
+
+/// The GPU skinning inputs (local palette + per-vertex joint) reproduce the CPU skin exactly (US / JP disc characters, a frame of a real motion).
+#[cfg(test)]
+mod gpu_skin_tests {
+    use super::*;
+
+    fn instance(files: &[&str]) -> Option<ModelInstance> {
+        let dir = std::env::var_os("SH2_DISC_DIR")?;
+        let d = sh2_core::fileio::Disc::open(std::path::PathBuf::from(&dir)).map_err(|e| eprintln!("disc {dir:?}: {e:?}")).ok()?;
+        let blobs: Vec<Vec<u8>> = files.iter().map(|f| d.read(f).map_err(|e| eprintln!("{f}: {e:?}")).ok()).collect::<Option<_>>()?;
+        let refs: Vec<&[u8]> = blobs.iter().map(|b| b.as_slice()).collect();
+        let Some((model, motions)) = super::super::character::parse_character(&refs) else {
+            eprintln!("{files:?}: not a character");
+            return None;
+        };
+        let mut inst = ModelInstance::new(Arc::new(model));
+        for m in motions {
+            inst.add_motion(Arc::new(m));
+        }
+        Some(inst)
+    }
+
+    fn check(inst: &ModelInstance) -> usize {
+        let mut n = 0;
+        for (ai, a) in inst.model.atomics.iter().enumerate().filter(|(_, a)| drawable(a)) {
+            let bones = primary_bones(a, inst.pose.len());
+            let (palette, local) = local_palette(&bones, a.geometry.positions.len());
+            assert!(palette.len() <= 256);
+            let mats: Vec<Mat4> = palette.iter().map(|&b| palette_matrix(inst.pose.get(b as usize))).collect();
+            let lit = !a.geometry.normals.is_empty();
+            let (cpu, cpu_n) = skin(inst, ai, a, &bones, true, lit);
+            for (i, p) in a.geometry.positions.iter().enumerate() {
+                let m = mats[local[i] as usize];
+                let g = (m * Vec3::from(*p).extend(1.0)).truncate();
+                let c = Vec3::from(cpu[i]);
+                assert!((g - c).length() <= 1e-4 * c.length().max(1.0), "{} v{i}: gpu {g:?} cpu {c:?}", a.name);
+                if let (Some(cn), Some(nn)) = (cpu_n.as_ref(), a.geometry.normals.get(i)) {
+                    let pn = (m * Vec3::from(*nn).extend(0.0)).truncate();
+                    let gn = pn / pn.length().max(1e-6);
+                    assert!((gn - Vec3::from(cn[i])).length() < 1e-4, "{} n{i}", a.name);
+                }
+                n += 1;
+            }
+        }
+        n
+    }
+
+    #[test]
+    fn palette_skinning_matches_the_cpu_skin() {
+        let Some(mut inst) = instance(&["FIELD/MODEL/005.SET"]) else { return };
+        assert!(inst.set_motion("walk"));
+        inst.add_time(0.37);
+        let n = check(&inst);
+        eprintln!("gpu skin parity: {n} vertices");
+        assert!(n > 500);
+        let us = std::env::var("SH2_DISC_DIR").map(|d| d.contains("US")).unwrap_or(false);
+        let anm = if us { "BTLDATA/CHRANM/005.ANM" } else { "BTLDATA/CHR/005.ANM" };
+        if let Some(mut b) = instance(&["BTLDATA/CHR/005.BCM", anm]) {
+            assert!(b.set_motion("idla"));
+            b.add_time(0.81);
+            assert!(check(&b) > 500);
+        }
     }
 }

@@ -5,7 +5,8 @@
 //! 2 = 4 bit), u16 clut entry size (0 = 16 bit, 1 = 32 bit), u16 clut entries, u16 }`, the CLUT at +0x10 and the (linear) pixels after the CLUT rounded up to 16.
 //! The glow / flame textures are grey ramps used as intensity masks, so they are drawn additively; the smoke texture (`SetWhiteTex`) is white with the ramp as alpha.
 //!
-//! Bevy side: one mesh per (texture, blend) pair, rebuilt each frame in Bevy world space (the billboard axes are the camera's).
+//! Bevy side: one draw per (texture, blend, depth test) group.  Default (round 6): the quads go to the GPU as records and the vertex stage expands
+//! them ([`crate::bevy::fxquad`], [`bg_quad_recs`]); `SH2_CPU_FX=1`: one mesh per group rebuilt each frame in Bevy world space ([`quads_to_mesh`]).
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -15,6 +16,7 @@ use ::bevy::mesh::{Indices, PrimitiveTopology};
 use ::bevy::prelude::*;
 
 use super::bgfx::{BgCamera, BgFx, BgFxRecord, BgQuad};
+use crate::bevy::fxquad::{gpu_fx, FxCamBasis, FxGpuAssets, FxGpuGroup, FxTemplates, QuadMode, QuadRec, Sh2FxMaterial};
 use crate::bevy::image::rgba_image;
 use crate::bevy::{Sh2Blend, Sh2Disc, Sh2Material, TexFilter};
 
@@ -103,6 +105,8 @@ pub struct BgFxInstance {
     pub cmn: Arc<Vec<CmnTex>>,
     pub filter: TexFilter,
     groups: HashMap<(u8, bool, bool), (Entity, Handle<Mesh>)>,
+    /// the same groups on the GPU path
+    gpu_groups: HashMap<(u8, bool, bool), FxGpuGroup>,
     images: HashMap<(u8, bool), Handle<Image>>,
     /// leftover fraction of a 30 Hz tick
     acc: f32,
@@ -119,6 +123,7 @@ impl BgFxInstance {
             cmn,
             filter,
             groups: HashMap::new(),
+            gpu_groups: HashMap::new(),
             images: HashMap::new(),
             acc: 0.0,
             paused: false,
@@ -225,17 +230,41 @@ pub fn quads_to_mesh(quads: &[&BgQuad], cam_rot: Quat, cam_pos: Vec3, mesh: &mut
     mesh.insert_indices(Indices::U32(idx));
 }
 
+/// The quads of one group as GPU records: the same corners as [`quads_to_mesh`] (Bevy world space; `pulls` = pull flares towards the camera).
+pub fn bg_quad_recs(quads: &[&BgQuad], pulls: bool, view: &ScreenView) -> Vec<QuadRec> {
+    quads
+        .iter()
+        .map(|q| {
+            let color = Vec4::new(q.rgba.x / 128.0, q.rgba.y / 128.0, q.rgba.z / 128.0, q.rgba.w / 128.0);
+            let (center, mode, pull) = if q.screen {
+                (Vec3::new(q.center.x, q.center.y, 0.0), QuadMode::Screen { kx: view.depth / view.focal.x, ky: view.depth / view.focal.y, depth: view.depth }, 0.0)
+            } else if q.billboard {
+                (p2b(q.center), QuadMode::Billboard, if pulls { q.pull } else { 0.0 })
+            } else {
+                (p2b(q.center), QuadMode::Axes { ax: Vec3::X, ay: Vec3::NEG_Y }, if pulls { q.pull } else { 0.0 })
+            };
+            QuadRec { center, mode, pull, offs: q.offs, uv: q.uv, color: [color; 4] }
+        })
+        .collect()
+}
+
 #[allow(clippy::too_many_arguments)]
 fn draw_bg_fx(
     mut commands: Commands,
     time: Res<Time>,
     mut q: Query<(Entity, &mut BgFxInstance)>,
-    cams: Query<(&Camera, &GlobalTransform, Option<&Projection>), With<Camera3d>>,
+    cams: Query<(&Camera, &GlobalTransform, Option<&Projection>), (With<Camera3d>, Without<crate::bevy::shadow::ShadowCamera>)>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut images: ResMut<Assets<Image>>,
     mut mats: ResMut<Assets<Sh2Material>>,
+    (mut buffers, mut fx_mats, mut templates): (Option<ResMut<Assets<::bevy::render::storage::ShaderBuffer>>>, Option<ResMut<Assets<Sh2FxMaterial>>>, Option<ResMut<FxTemplates>>),
 ) {
+    let _scope = crate::bevy::perf::Scope::new("draw_bg_fx");
     let Some((_, ct, proj)) = cams.iter().filter(|(c, _, _)| c.is_active).min_by_key(|(c, _, _)| c.order) else { return };
+    let mut ga = match (buffers.as_deref_mut(), fx_mats.as_deref_mut(), templates.as_deref_mut()) {
+        (Some(buffers), Some(materials), Some(templates)) if gpu_fx() => Some(FxGpuAssets { buffers, materials, templates }),
+        _ => None,
+    };
     let (cam_rot, cam_pos) = (ct.rotation(), ct.translation());
     let cam_ps2 = Vec3::new(cam_pos.x, -cam_pos.y, -cam_pos.z);
     let fwd = ct.forward().as_vec3();
@@ -297,6 +326,12 @@ fn draw_bg_fx(
                 commands.entity(ent).despawn();
             }
         }
+        let gone: Vec<(u8, bool, bool)> = inst.gpu_groups.keys().copied().filter(|k| !by_key.contains_key(k)).collect();
+        for k in gone {
+            if let Some(g) = inst.gpu_groups.remove(&k) {
+                commands.entity(g.entity).despawn();
+            }
+        }
         for (key, list) in by_key {
             let (tex, additive, ztest) = key;
             let ct = if tex == super::rain206::TEX_WHITE {
@@ -314,6 +349,18 @@ fn draw_bg_fx(
                     h
                 }
             };
+            if let Some(ga) = ga.as_mut() {
+                let batch = crate::bevy::fxquad::pack_quads(&bg_quad_recs(&list, true, &view), &FxCamBasis::from_rot_pos(cam_rot, cam_pos));
+                if let Some(g) = inst.gpu_groups.get_mut(&key) {
+                    g.update(&mut commands, &mut meshes, ga, &batch);
+                } else {
+                    let base = Sh2Material::textured(Some(img)).with_blend(if additive { Sh2Blend::Add } else { Sh2Blend::Normal }, None).with_fog(false).with_ztest_off(!ztest);
+                    let g = FxGpuGroup::spawn(&mut commands, &mut meshes, ga, &base, &batch, false, "bg_fx_quads");
+                    commands.entity(e).add_child(g.entity);
+                    inst.gpu_groups.insert(key, g);
+                }
+                continue;
+            }
             if let Some((_, mh)) = inst.groups.get(&key) {
                 if let Some(mut m) = meshes.get_mut(mh) {
                     quads_to_mesh(&list, cam_rot, cam_pos, &mut m, true, &view);

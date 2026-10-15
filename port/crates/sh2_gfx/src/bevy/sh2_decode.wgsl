@@ -23,5 +23,7 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
     if (settings.enabled < 0.5) {
         return c;
     }
-    return vec4<f32>(srgb_to_linear(clamp(c.rgb, vec3<f32>(0.0), vec3<f32>(1.0))), 1.0);
+    // alpha passes through (an opaque window ignores it; the menu model view, `sh2_field::menu_model`, renders into an image over the
+    // menu backdrop and needs its cleared background to stay transparent; round 6 MN2)
+    return vec4<f32>(srgb_to_linear(clamp(c.rgb, vec3<f32>(0.0), vec3<f32>(1.0))), clamp(c.a, 0.0, 1.0));
 }

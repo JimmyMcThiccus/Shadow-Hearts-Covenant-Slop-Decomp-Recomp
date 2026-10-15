@@ -4,10 +4,12 @@
 //! camera currently *sees* the mirror (camera in front of the plane, `at . -normal >= -0.8`, inside the rectangle's extent +-10) and, if so,
 //! `MirrorModel` draws a **reflected copy of every character model** (`Matrix` with one axis negated + `setOffset(plane position)`).
 //! Here the reflection is exact for arbitrary planes: every [`AnimatedModel`] gets a sibling holder whose transform is `R * source` and whose
-//! children share the source's `Mesh` / material handles, so CPU skinning updates both for free.
+//! children share the source's `Mesh` / material handles, so CPU skinning updates both for free.  GPU-skinned parts also share the source's
+//! `SkinnedMesh` (palette asset + identity joint, see `model.rs`): the palette is in model space, so the copy only differs in its transform.
 //!
 //! The reflection of the *background* is part of the map data (the mirror rooms contain a mirrored copy of the room), so nothing else is needed.
 
+use ::bevy::mesh::skinning::SkinnedMesh;
 use ::bevy::prelude::*;
 
 use super::material::Sh2Material;
@@ -151,6 +153,12 @@ pub struct MirrorCopy {
     pub source: Entity,
 }
 
+/// A part of a [`MirrorCopy`]: the source part it mirrors (its `SkinnedMesh` is shared once the source has one).
+#[derive(Component)]
+pub struct MirrorPart {
+    pub source: Entity,
+}
+
 /// Marker on a source model whose copy already exists.
 #[derive(Component)]
 pub struct HasMirror;
@@ -171,7 +179,7 @@ pub fn spawn_mirror_copies(
         for c in children.iter() {
             if let Ok((m, mat)) = parts.get(c) {
                 let child = commands
-                    .spawn((m.clone(), mat.clone(), Transform::default(), Visibility::default(), ::bevy::camera::visibility::NoFrustumCulling))
+                    .spawn((m.clone(), mat.clone(), MirrorPart { source: c }, Transform::default(), Visibility::default(), ::bevy::camera::visibility::NoFrustumCulling))
                     .id();
                 commands.entity(holder).add_child(child);
             }
@@ -184,7 +192,7 @@ pub fn spawn_mirror_copies(
 /// of the map for which the camera test and the extent test pass (at the model's position) selects the reflection; none = no copy.
 pub fn update_mirror_copies(
     mirrors: Res<Sh2Mirrors>,
-    cams: Query<&GlobalTransform, With<Camera3d>>,
+    cams: Query<&GlobalTransform, (With<Camera3d>, Without<super::shadow::ShadowCamera>)>,
     sources: Query<(&Transform, &GlobalTransform), Without<MirrorCopy>>,
     mut copies: Query<(&MirrorCopy, &mut Transform, &mut Visibility)>,
     mut commands: Commands,
@@ -215,11 +223,29 @@ pub fn update_mirror_copies(
     }
 }
 
+/// Give mirror parts the GPU skin of their source part (the source gets it on its first animated frame, possibly after the copy was made).
+pub fn sync_mirror_skins(
+    mut commands: Commands,
+    mut parts: Query<(Entity, &MirrorPart, Option<&SkinnedMesh>, &mut Transform)>,
+    sources: Query<(&SkinnedMesh, &Transform), Without<MirrorPart>>,
+) {
+    for (e, mp, have, mut tf) in &mut parts {
+        let Ok((src, stf)) = sources.get(mp.source) else { continue };
+        // GPU skins offset the draw entity (sort key, see `model.rs`): the copy follows
+        if *tf != *stf {
+            *tf = *stf;
+        }
+        if have.map(|h| h.inverse_bindposes != src.inverse_bindposes || h.joints != src.joints).unwrap_or(true) {
+            commands.entity(e).try_insert(src.clone());
+        }
+    }
+}
+
 pub struct MirrorPlugin;
 
 impl Plugin for MirrorPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<Sh2Mirrors>().add_systems(PostUpdate, (spawn_mirror_copies, update_mirror_copies).chain().before(TransformSystems::Propagate));
+        app.init_resource::<Sh2Mirrors>().add_systems(PostUpdate, (spawn_mirror_copies, update_mirror_copies, sync_mirror_skins).chain().before(TransformSystems::Propagate));
     }
 }
 

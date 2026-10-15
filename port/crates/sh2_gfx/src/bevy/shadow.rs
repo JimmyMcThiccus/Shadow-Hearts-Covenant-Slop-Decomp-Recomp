@@ -23,9 +23,14 @@
 //!   stairs and slopes it falls on every surface the light ray meets.
 //!
 //! ## What this port does
-//! * The silhouette is rasterised on the CPU into a [`SHADOW_RES`] x [`SHADOW_RES`] (128 x 128 like the original) alpha texture in the plane
-//!   perpendicular to the light, scaled to the caster's extent x 1.3 (orthographic: the 200 unit perspective is nearly parallel for
-//!   an actor-sized object).
+//! * The silhouette is **rendered on the GPU** (round 6, like the GS caster pass): every caster gets a [`SHADOW_RES`] x [`SHADOW_RES`] tile (128 x 128
+//!   like the original) of one silhouette atlas ([`ShadowAtlas`], `SHADOW_TILES` x `SHADOW_TILES` tiles) that a single camera renders in one pass:
+//!   every caster atomic has a twin draw on [`SHADOW_LAYER`] ([`ShadowSilhouette`], same mesh / GPU skin, [`Sh2ShadowMaterial`]) whose vertex stage
+//!   projects the posed vertex with the caster's own orthographic clip along the light (fitted to the caster's extent x 1.3; the 200 unit
+//!   perspective of the original is nearly parallel for an actor-sized object) into its tile.  The atlas is cleared to alpha 0, the silhouette
+//!   writes alpha 1, the receivers sample their tile bilinearly (`TEX1` bilinear like the original; clamped inside the tile by `sh2.wgsl`).
+//!   No CPU raster, no texture upload: the CPU only computes the rectangle (extents of the posed vertices, gathered while the palette is built)
+//!   and the receiver triangles (re-uploaded only when they change).
 //! * **Receivers = the collision floor** (`VERTEX` / `TRIANGLE` chunks of the MPS, handed over in the [`ShadowFloor`] resource, see
 //!   [`collect_shadow_floor`]).  The upward-facing floor triangles near the caster get the same light-plane UVs and are drawn black with the
 //!   standard alpha blend `(0 - Cd) * As + Cd`, `As =` [`ShadowSettings::strength`] x texel, lifted [`SHADOW_LIFT`] above the surface.
@@ -35,7 +40,7 @@ use ::bevy::asset::RenderAssetUsages;
 use ::bevy::image::{ImageAddressMode, ImageFilterMode, ImageSampler, ImageSamplerDescriptor};
 use ::bevy::mesh::{Indices, PrimitiveTopology};
 use ::bevy::prelude::*;
-use ::bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
+use ::bevy::render::render_resource::TextureFormat;
 
 use super::material::{Sh2Blend, Sh2Material, Sh2SceneLight};
 
@@ -137,26 +142,110 @@ pub fn collect_shadow_floor(
     }
 }
 
-/// The quad that shows the silhouette (child of the model's holder entity, model-space plane `y = 0`).
-pub struct ShadowCaster {
-    pub quad: Entity,
-    /// Shadow geometry conforming to the receiver floor (child of the holder, positions in model space).
-    pub surface: Entity,
-    pub surface_mesh: Handle<Mesh>,
-    pub image: Handle<Image>,
-    /// Shadow light direction (towards the light, model space) used last frame.
-    smoothed: Option<Vec3>,
+/// Render layer of the silhouette draws (the game uses 0, 1, 6, 28, 30).
+pub const SHADOW_LAYER: usize = 40;
+/// Tiles per row of the silhouette atlas (`SHADOW_TILES^2` casters at most; further casters get no shadow).
+pub const SHADOW_TILES: usize = 8;
+const MAX_CASTERS: usize = SHADOW_TILES * SHADOW_TILES;
+
+static TILE_MASK: std::sync::Mutex<u64> = std::sync::Mutex::new(0);
+
+fn alloc_tile() -> Option<usize> {
+    let mut m = TILE_MASK.lock().ok()?;
+    let i = (0..MAX_CASTERS).find(|i| *m & (1u64 << i) == 0)?;
+    *m |= 1u64 << i;
+    Some(i)
 }
 
-/// Spawn the (initially hidden) shadow quad below `holder`.
-pub fn spawn_shadow_quad(commands: &mut Commands, holder: Entity, meshes: &mut Assets<Mesh>, images: &mut Assets<Image>, materials: &mut Assets<Sh2Material>) -> ShadowCaster {
-    let mut img = Image::new(
-        Extent3d { width: SHADOW_RES as u32, height: SHADOW_RES as u32, depth_or_array_layers: 1 },
-        TextureDimension::D2,
-        vec![0u8; SHADOW_RES * SHADOW_RES * 4],
-        TextureFormat::Rgba8Unorm,
-        RenderAssetUsages::default(),
-    );
+fn free_tile(i: usize) {
+    if let Ok(mut m) = TILE_MASK.lock() {
+        if i < MAX_CASTERS {
+            *m &= !(1u64 << i);
+        }
+    }
+}
+
+/// Owner of an atlas tile (on the caster's shadow quad, a child of its holder): the tile is released when it is despawned.
+#[derive(Component, Debug, Clone, Copy)]
+#[component(on_remove = shadow_tile_removed)]
+pub struct ShadowTile(pub usize);
+
+fn shadow_tile_removed(world: ::bevy::ecs::world::DeferredWorld, ctx: ::bevy::ecs::lifecycle::HookContext) {
+    if let Some(t) = world.get::<ShadowTile>(ctx.entity) {
+        free_tile(t.0);
+    }
+}
+
+/// Marker of the silhouette atlas camera (excluded from every "the 3D camera" query).
+#[derive(Component, Debug, Clone, Copy)]
+pub struct ShadowCamera;
+
+/// Marker of a silhouette draw (the shadow-layer twin of a caster atomic's draw).
+#[derive(Component, Debug, Clone, Copy)]
+pub struct ShadowSilhouette;
+
+pub const SH2_SHADOW_SHADER: Handle<::bevy::shader::Shader> = ::bevy::asset::uuid_handle!("2c6e9f41-8a3d-4b75-b0e2-5d17c4a9e3f6");
+
+/// The silhouette material: one per caster.  Vertex stage `sh2_shadow.wgsl`: the (GPU-skinned) world position times the caster's atlas clip
+/// matrix (`clips[index]`, written once per frame for every caster); fragment = opaque coverage.
+#[derive(Asset, TypePath, ::bevy::render::render_resource::AsBindGroup, Clone, Debug)]
+pub struct Sh2ShadowMaterial {
+    /// x = atlas tile of the caster
+    #[uniform(0)]
+    pub index: Vec4,
+    #[storage(1, read_only, visibility(vertex))]
+    pub clips: Handle<::bevy::render::storage::ShaderBuffer>,
+}
+
+impl Material for Sh2ShadowMaterial {
+    fn vertex_shader() -> ::bevy::shader::ShaderRef {
+        ::bevy::shader::ShaderRef::Handle(SH2_SHADOW_SHADER)
+    }
+    fn fragment_shader() -> ::bevy::shader::ShaderRef {
+        ::bevy::shader::ShaderRef::Handle(SH2_SHADOW_SHADER)
+    }
+    fn enable_prepass() -> bool {
+        false
+    }
+    fn enable_shadows() -> bool {
+        false
+    }
+    fn specialize(
+        _pipeline: &::bevy::pbr::MaterialPipeline,
+        descriptor: &mut ::bevy::render::render_resource::RenderPipelineDescriptor,
+        _layout: &::bevy::mesh::MeshVertexBufferLayoutRef,
+        _key: ::bevy::pbr::MaterialPipelineKey<Self>,
+    ) -> Result<(), ::bevy::render::render_resource::SpecializedMeshPipelineError> {
+        descriptor.primitive.cull_mode = None;
+        if let Some(ds) = descriptor.depth_stencil.as_mut() {
+            ds.depth_compare = Some(::bevy::render::render_resource::CompareFunction::Always);
+        }
+        Ok(())
+    }
+}
+
+/// The silhouette atlas: one `SHADOW_TILES * SHADOW_RES` square render target, one camera that renders every caster's silhouette draws
+/// ([`SHADOW_LAYER`]) into its tile in one pass, and the per-caster clip matrices.
+#[derive(Resource, Clone)]
+pub struct ShadowAtlas {
+    pub image: Handle<Image>,
+    pub camera: Entity,
+    pub clips: Handle<::bevy::render::storage::ShaderBuffer>,
+}
+
+/// Clip matrices of all tiles (zero = tile unused: everything collapses to one point).
+pub fn atlas_clip_bytes(clips: &[Mat4]) -> Vec<u8> {
+    let mut v: Vec<f32> = Vec::with_capacity(MAX_CASTERS * 16);
+    for i in 0..MAX_CASTERS {
+        v.extend_from_slice(&clips.get(i).copied().unwrap_or(Mat4::ZERO).to_cols_array());
+    }
+    bytemuck::cast_slice(&v).to_vec()
+}
+
+/// Startup: the atlas target and camera.
+pub fn setup_shadow_atlas(mut commands: Commands, mut images: ResMut<Assets<Image>>, mut buffers: ResMut<Assets<::bevy::render::storage::ShaderBuffer>>) {
+    let side = (SHADOW_TILES * SHADOW_RES) as u32;
+    let mut img = Image::new_target_texture(side, side, TextureFormat::Rgba8Unorm, None);
     img.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
         address_mode_u: ImageAddressMode::ClampToEdge,
         address_mode_v: ImageAddressMode::ClampToEdge,
@@ -165,15 +254,131 @@ pub fn spawn_shadow_quad(commands: &mut Commands, holder: Entity, meshes: &mut A
         ..default()
     });
     let image = images.add(img);
+    let clips = buffers.add(::bevy::render::storage::ShaderBuffer::new(&atlas_clip_bytes(&[]), RenderAssetUsages::default()));
+    let camera = commands
+        .spawn((
+            Name::new("shadow_atlas_camera"),
+            Camera3d::default(),
+            Camera { order: -50, is_active: false, clear_color: ClearColorConfig::Custom(Color::NONE), ..default() },
+            ::bevy::camera::RenderTarget::Image(image.clone().into()),
+            ::bevy::camera::visibility::RenderLayers::layer(SHADOW_LAYER),
+            Msaa::Off,
+            ::bevy::core_pipeline::tonemapping::Tonemapping::None,
+            super::screen::ScreenExempt,
+            ShadowCamera,
+            Transform::default(),
+        ))
+        .id();
+    commands.insert_resource(ShadowAtlas { image, camera, clips });
+}
+
+/// `clip = (2 (a . p + a0), -2 (b . p + b0), 0.5, 1)`: the texel coordinates `(a . p + a0 + 0.5, b . p + b0 + 0.5)` of the shadow texture as clip
+/// space (texture row 0 = clip y +1); constant depth (the silhouette needs no depth order).
+fn shadow_clip(a: Vec3, a0: f32, b: Vec3, b0: f32) -> Mat4 {
+    Mat4::from_cols(
+        Vec4::new(2.0 * a.x, -2.0 * b.x, 0.0, 0.0),
+        Vec4::new(2.0 * a.y, -2.0 * b.y, 0.0, 0.0),
+        Vec4::new(2.0 * a.z, -2.0 * b.z, 0.0, 0.0),
+        Vec4::new(2.0 * a0, -2.0 * b0, 0.5, 1.0),
+    )
+}
+
+/// Tile `t`'s clip rectangle inside the atlas: `[-1, 1]^2` of one caster -> its sub-rectangle (row 0 at the top).
+pub fn tile_clip(t: usize) -> Mat4 {
+    let n = SHADOW_TILES as f32;
+    let (tx, ty) = ((t % SHADOW_TILES) as f32, (t / SHADOW_TILES) as f32);
+    Mat4::from_cols(
+        Vec4::new(1.0 / n, 0.0, 0.0, 0.0),
+        Vec4::new(0.0, 1.0 / n, 0.0, 0.0),
+        Vec4::new(0.0, 0.0, 1.0, 0.0),
+        Vec4::new((2.0 * tx + 1.0) / n - 1.0, 1.0 - (2.0 * ty + 1.0) / n, 0.0, 1.0),
+    )
+}
+
+/// The silhouette tile + the geometry that shows it (children of the model's holder entity).
+pub struct ShadowCaster {
+    /// flat fallback quad on the model-space plane `y = 0`
+    pub quad: Entity,
+    /// Shadow geometry conforming to the receiver floor (child of the holder, positions in model space).
+    pub surface: Entity,
+    pub surface_mesh: Handle<Mesh>,
+    /// atlas tile of the silhouette
+    pub tile: usize,
+    /// the caster's silhouette material (created on the first frame, see `model.rs`)
+    pub material: Option<Handle<Sh2ShadowMaterial>>,
+    /// receivers' material (the atlas texture, clamped to this tile)
+    pub receiver_material: Handle<Sh2Material>,
+    /// Shadow light direction (towards the light, model space) used last frame.
+    smoothed: Option<Vec3>,
+    /// receiver triangles uploaded last (skipped when unchanged)
+    last_surface: Vec<[f32; 3]>,
+    last_uv: Vec<[f32; 2]>,
+}
+
+/// Silhouette extents of a caster's posed vertices (model space), gathered while its palette is evaluated (see `model.rs`).
+#[derive(Clone, Copy, Debug)]
+pub struct ShadowExtents {
+    /// light-plane coordinates (`p . u`, `p . v` of [`light_basis`])
+    pub lo: Vec2,
+    pub hi: Vec2,
+    /// floor-plane projection ([`project_to_floor`]) for the flat fallback
+    pub flat_lo: Vec2,
+    pub flat_hi: Vec2,
+    /// smallest y (highest point, y down)
+    pub top: f32,
+    pub any: bool,
+}
+
+impl ShadowExtents {
+    pub fn new() -> Self {
+        ShadowExtents { lo: Vec2::splat(f32::MAX), hi: Vec2::splat(f32::MIN), flat_lo: Vec2::splat(f32::MAX), flat_hi: Vec2::splat(f32::MIN), top: 0.0, any: false }
+    }
+    /// Add one posed vertex (`u`, `v` light basis, `l` towards the light, model space).
+    #[inline]
+    pub fn add(&mut self, p: Vec3, u: Vec3, v: Vec3, l: Vec3) {
+        let q = Vec2::new(p.dot(u), p.dot(v));
+        self.lo = self.lo.min(q);
+        self.hi = self.hi.max(q);
+        let f = project_to_floor(p, l);
+        self.flat_lo = self.flat_lo.min(f);
+        self.flat_hi = self.flat_hi.max(f);
+        self.top = self.top.min(p.y);
+        self.any = true;
+    }
+}
+
+impl Default for ShadowExtents {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Spawn the (initially hidden) shadow geometry below `holder` and take an atlas tile.  `None` when every tile is taken.
+pub fn spawn_shadow_quad(commands: &mut Commands, holder: Entity, meshes: &mut Assets<Mesh>, _images: &mut Assets<Image>, materials: &mut Assets<Sh2Material>) -> Option<ShadowCaster> {
+    let tile = alloc_tile()?;
     let mut quad = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
     quad.insert_attribute(Mesh::ATTRIBUTE_POSITION, vec![[-0.5f32, 0.0, -0.5], [0.5, 0.0, -0.5], [0.5, 0.0, 0.5], [-0.5, 0.0, 0.5]]);
     quad.insert_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0f32, -1.0, 0.0]; 4]);
     quad.insert_attribute(Mesh::ATTRIBUTE_UV_0, vec![[0.0f32, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]);
     quad.insert_indices(Indices::U32(vec![0, 1, 2, 0, 2, 3]));
     let mesh = meshes.add(quad);
-    let mat = materials.add(Sh2Material::textured(Some(image.clone())).with_blend(Sh2Blend::Normal, None).with_lit(false).with_fog(false).with_sort_bias(2.0));
+    // black, alpha = coverage x strength (`texel.A * vertex.A`, see the module docs): `tex * tint` with tint (0, 0, 0, strength); the texture
+    // (the atlas, set on the first frame) is sampled inside this caster's tile (`extra.z` = tile + 1, `extra.w` = tiles per row, see `sh2.wgsl`)
+    let mut m = Sh2Material::textured(None).with_blend(Sh2Blend::Normal, None).with_lit(false).with_fog(false).with_sort_bias(2.0);
+    m.tint = Vec4::new(0.0, 0.0, 0.0, ShadowSettings::default().strength.clamp(0.0, 1.0));
+    m.extra.z = tile as f32 + 1.0;
+    m.extra.w = SHADOW_TILES as f32;
+    let mat = materials.add(m);
     let e = commands
-        .spawn((Name::new("shadow"), Mesh3d(mesh), MeshMaterial3d(mat.clone()), Transform::from_xyz(0.0, -0.06, 0.0), Visibility::Hidden, ::bevy::camera::visibility::NoFrustumCulling))
+        .spawn((
+            Name::new("shadow"),
+            ShadowTile(tile),
+            Mesh3d(mesh),
+            MeshMaterial3d(mat.clone()),
+            Transform::from_xyz(0.0, -0.06, 0.0),
+            Visibility::Hidden,
+            ::bevy::camera::visibility::NoFrustumCulling,
+        ))
         .id();
     commands.entity(holder).add_child(e);
     let mut sm = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
@@ -184,10 +389,10 @@ pub fn spawn_shadow_quad(commands: &mut Commands, holder: Entity, meshes: &mut A
     sm.insert_indices(Indices::U32(vec![0, 1, 2]));
     let surface_mesh = meshes.add(sm);
     let surface = commands
-        .spawn((Name::new("shadow_surface"), Mesh3d(surface_mesh.clone()), MeshMaterial3d(mat), Transform::default(), Visibility::Hidden, ::bevy::camera::visibility::NoFrustumCulling))
+        .spawn((Name::new("shadow_surface"), Mesh3d(surface_mesh.clone()), MeshMaterial3d(mat.clone()), Transform::default(), Visibility::Hidden, ::bevy::camera::visibility::NoFrustumCulling))
         .id();
     commands.entity(holder).add_child(surface);
-    ShadowCaster { quad: e, surface, surface_mesh, image, smoothed: None }
+    Some(ShadowCaster { quad: e, surface, surface_mesh, tile, material: None, receiver_material: mat, smoothed: None, last_surface: Vec::new(), last_uv: Vec::new() })
 }
 
 /// Direction *towards* the shadow light in Bevy world space: the strongest of the three lit slots of the scene light
@@ -225,59 +430,6 @@ pub fn project_to_floor(p: Vec3, l: Vec3) -> Vec2 {
     let t = p.y / l.y; // both negative
     let h = p - l * t;
     Vec2::new(h.x, h.z)
-}
-
-/// Fill the triangles (already in texel coordinates) into a coverage buffer.
-pub fn fill_triangles(tris: &[[Vec2; 3]], res: usize) -> Vec<u8> {
-    let mut cov = vec![0u8; res * res];
-    for t in tris {
-        let (a, b, c) = (t[0], t[1], t[2]);
-        let min = a.min(b).min(c);
-        let max = a.max(b).max(c);
-        let x0 = (min.x.floor().max(0.0)) as usize;
-        let y0 = (min.y.floor().max(0.0)) as usize;
-        let x1 = (max.x.ceil().min(res as f32 - 1.0)).max(0.0) as usize;
-        let y1 = (max.y.ceil().min(res as f32 - 1.0)).max(0.0) as usize;
-        let d = (b.y - c.y) * (a.x - c.x) + (c.x - b.x) * (a.y - c.y);
-        if d.abs() < 1e-6 {
-            continue;
-        }
-        for y in y0..=y1 {
-            for x in x0..=x1 {
-                let p = Vec2::new(x as f32 + 0.5, y as f32 + 0.5);
-                let w0 = ((b.y - c.y) * (p.x - c.x) + (c.x - b.x) * (p.y - c.y)) / d;
-                let w1 = ((c.y - a.y) * (p.x - c.x) + (a.x - c.x) * (p.y - c.y)) / d;
-                let w2 = 1.0 - w0 - w1;
-                let e = -0.05;
-                if w0 >= e && w1 >= e && w2 >= e {
-                    cov[y * res + x] = 255;
-                }
-            }
-        }
-    }
-    cov
-}
-
-/// 3x3 box blur (the original samples the silhouette texture with bilinear filtering).
-pub fn blur(cov: &[u8], res: usize) -> Vec<u8> {
-    let mut out = vec![0u8; res * res];
-    for y in 0..res {
-        for x in 0..res {
-            let mut s = 0u32;
-            let mut n = 0u32;
-            for dy in -1i32..=1 {
-                for dx in -1i32..=1 {
-                    let (xx, yy) = (x as i32 + dx, y as i32 + dy);
-                    if xx >= 0 && yy >= 0 && (xx as usize) < res && (yy as usize) < res {
-                        s += cov[yy as usize * res + xx as usize] as u32;
-                        n += 1;
-                    }
-                }
-            }
-            out[y * res + x] = (s / n) as u8;
-        }
-    }
-    out
 }
 
 /// Orthonormal basis of the light plane (`u`, `v` perpendicular to the light direction `l`, which points towards the light).
@@ -347,147 +499,117 @@ pub fn shadow_receivers(
 }
 
 impl ShadowCaster {
-    /// Rasterise the silhouette of the given skinned atomics (model space positions + triangle lists) and update the shadow geometry.
+    /// Direction towards the light (model space) after the elevation clamp, and its light-plane basis: what [`ShadowExtents::add`] needs.
+    pub fn light_frame(light_model: Vec3) -> (Vec3, Vec3, Vec3) {
+        let l = clamp_light_elevation(light_model.normalize_or(Vec3::NEG_Y));
+        let (u, v) = light_basis(l);
+        (l, u, v)
+    }
+
+    /// Fit the silhouette tile to the caster's extents and update the shadow geometry.  Returns the caster's clip matrix (model space -> its
+    /// tile's `[-1, 1]^2`, see [`tile_clip`]) or `None` when nothing is drawn.
     ///
-    /// `light_model` is the direction towards the light in model space; `world_to_model` maps PS2 world space to the model's space (for
-    /// the receiver triangles of `floor`).
+    /// `l` is the clamped direction towards the light in model space ([`Self::light_frame`]); `world_to_model` maps PS2 world space to the
+    /// model's space (for the receiver triangles of `floor`).
     #[allow(clippy::too_many_arguments)]
     pub fn update(
         &mut self,
-        casters: &[(Vec<[f32; 3]>, Vec<[u32; 3]>)],
-        light_model: Vec3,
-        strength: f32,
+        ext: &ShadowExtents,
+        l: Vec3,
         floor: Option<&ShadowFloor>,
         world_to_model: &Mat4,
-        images: &mut Assets<Image>,
         meshes: &mut Assets<Mesh>,
         tfs: &mut Query<&mut Transform, Without<super::model::AnimatedModel>>,
         vis: &mut Query<&mut Visibility>,
-    ) {
+    ) -> Option<Mat4> {
         // (`Model::ShadowProcess` low-pass filters the light *position* when the shadow light changes; the light is constant here and the
         // direction is in model space, so smoothing would only make the shadow lag behind a turning actor)
-        let l = clamp_light_elevation(light_model.normalize_or(Vec3::NEG_Y));
         self.smoothed = Some(l);
         let (u, v) = light_basis(l);
-        // silhouette in light-plane coordinates
-        let mut tris2: Vec<[Vec2; 3]> = Vec::new();
-        let mut top = 0.0f32;
-        for (pos, tris) in casters {
-            let proj: Vec<Vec2> = pos
-                .iter()
-                .map(|p| {
-                    let p = Vec3::from(*p);
-                    top = top.min(p.y);
-                    Vec2::new(p.dot(u), p.dot(v))
-                })
-                .collect();
-            for t in tris {
-                tris2.push([proj[t[0] as usize], proj[t[1] as usize], proj[t[2] as usize]]);
-            }
-        }
         let have_floor = floor.map(|f| !f.tris.is_empty()).unwrap_or(false);
-        let hide_all = |vis: &mut Query<&mut Visibility>, this: &Self| {
-            if let Ok(mut x) = vis.get_mut(this.quad) {
-                *x = Visibility::Hidden;
-            }
-            if let Ok(mut x) = vis.get_mut(this.surface) {
-                *x = Visibility::Hidden;
-            }
-        };
-        if tris2.is_empty() {
-            hide_all(vis, self);
-            return;
-        }
-        let mut lo = Vec2::splat(f32::MAX);
-        let mut hi = Vec2::splat(f32::MIN);
-        for t in &tris2 {
-            for p in t {
-                lo = lo.min(*p);
-                hi = hi.max(*p);
-            }
-        }
-        // the original fits the bounding extent x 1.3 (`getPacket`): a square rectangle with margin so the clamped border is empty
-        let side = (hi - lo).max_element() * 1.3 + 2.0;
-        let c = (lo + hi) * 0.5;
-        let scale = SHADOW_RES as f32 / side;
-        let texel: Vec<[Vec2; 3]> = tris2.iter().map(|t| t.map(|p| (p - c) * scale + Vec2::splat(SHADOW_RES as f32 * 0.5))).collect();
-        let cov = blur(&fill_triangles(&texel, SHADOW_RES), SHADOW_RES);
-        if let Some(mut img) = images.get_mut(&self.image) {
-            if let Some(data) = img.data.as_mut() {
-                let a = (strength.clamp(0.0, 1.0) * 255.0) as u32;
-                for (i, &k) in cov.iter().enumerate() {
-                    data[i * 4] = 0;
-                    data[i * 4 + 1] = 0;
-                    data[i * 4 + 2] = 0;
-                    data[i * 4 + 3] = (k as u32 * a / 255) as u8;
+        let set_vis = |vis: &mut Query<&mut Visibility>, e: Entity, on: bool| {
+            if let Ok(mut x) = vis.get_mut(e) {
+                let want = if on { Visibility::Inherited } else { Visibility::Hidden };
+                if *x != want {
+                    *x = want;
                 }
             }
+        };
+        if !ext.any {
+            set_vis(vis, self.quad, false);
+            set_vis(vis, self.surface, false);
+            return None;
         }
         if have_floor {
+            // the original fits the bounding extent x 1.3 (`getPacket`): a square rectangle with margin so the clamped border is empty
+            let side = (ext.hi - ext.lo).max_element() * 1.3 + 2.0;
+            let c = (ext.lo + ext.hi) * 0.5;
+            let top = ext.top;
             let height = (top * 0.6 - 4.0, -top * 0.5 + 4.0);
             let (pos, nrm, uv) = shadow_receivers(floor.unwrap(), world_to_model, u, v, (c, side), height);
             if std::env::var_os("SH2_SHADOW_DEBUG").is_some() {
                 eprintln!("shadow: floor tris {} receivers {} side {side:.1} top {top:.1} light {l:?}", floor.unwrap().tris.len(), pos.len() / 3);
             }
             if !pos.is_empty() {
-                if let Some(mut m) = meshes.get_mut(&self.surface_mesh) {
-                    let n = pos.len() as u32;
-                    m.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
-                    m.insert_attribute(Mesh::ATTRIBUTE_NORMAL, nrm);
-                    m.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv);
-                    m.insert_indices(Indices::U32((0..n).collect()));
+                if pos != self.last_surface || uv != self.last_uv {
+                    if let Some(mut m) = meshes.get_mut(&self.surface_mesh) {
+                        let n = pos.len() as u32;
+                        m.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos.clone());
+                        m.insert_attribute(Mesh::ATTRIBUTE_NORMAL, nrm);
+                        m.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv.clone());
+                        m.insert_indices(Indices::U32((0..n).collect()));
+                    }
+                    self.last_surface = pos;
+                    self.last_uv = uv;
                 }
-                if let Ok(mut x) = vis.get_mut(self.quad) {
-                    *x = Visibility::Hidden;
-                }
-                if let Ok(mut x) = vis.get_mut(self.surface) {
-                    *x = Visibility::Inherited;
-                }
-                return;
+                set_vis(vis, self.quad, false);
+                set_vis(vis, self.surface, true);
+                // texel = ((p . u - c.x) / side + 0.5, (p . v - c.y) / side + 0.5): the receivers' UVs
+                return Some(shadow_clip(u / side, -c.x / side, v / side, -c.y / side));
             }
             // no receiver under the caster (jumping over a pit, off the floor data): nothing to draw on
-            hide_all(vis, self);
-            return;
+            set_vis(vis, self.quad, false);
+            set_vis(vis, self.surface, false);
+            return None;
         }
-        // flat fallback: project the silhouette on the actor's floor plane and draw it on one quad
-        let flat: Vec<[Vec2; 3]> = casters
-            .iter()
-            .flat_map(|(pos, tris)| {
-                let proj: Vec<Vec2> = pos.iter().map(|p| project_to_floor(Vec3::from(*p), l)).collect();
-                tris.iter().map(move |t| [proj[t[0] as usize], proj[t[1] as usize], proj[t[2] as usize]]).collect::<Vec<_>>()
-            })
-            .collect();
-        let mut flo = Vec2::splat(f32::MAX);
-        let mut fhi = Vec2::splat(f32::MIN);
-        for t in &flat {
-            for p in t {
-                flo = flo.min(*p);
-                fhi = fhi.max(*p);
+        // flat fallback: the silhouette projected along the light onto the actor's floor plane, drawn on one quad
+        let fside = ((ext.flat_hi - ext.flat_lo).max_element() * 1.3 + 2.0).max(6.0);
+        let fc = (ext.flat_lo + ext.flat_hi) * 0.5;
+        if let Ok(mut t) = tfs.get_mut(self.quad) {
+            let tr = Vec3::new(fc.x, -0.06, fc.y);
+            let sc = Vec3::new(fside, 1.0, fside);
+            if t.translation != tr || t.scale != sc {
+                t.translation = tr;
+                t.scale = sc;
             }
         }
-        let fside = ((fhi - flo).max_element() * 1.3 + 2.0).max(6.0);
-        let fc = (flo + fhi) * 0.5;
-        let fscale = SHADOW_RES as f32 / fside;
-        let ftexel: Vec<[Vec2; 3]> = flat.iter().map(|t| t.map(|p| (p - fc) * fscale + Vec2::splat(SHADOW_RES as f32 * 0.5))).collect();
-        let fcov = blur(&fill_triangles(&ftexel, SHADOW_RES), SHADOW_RES);
-        if let Some(mut img) = images.get_mut(&self.image) {
-            if let Some(data) = img.data.as_mut() {
-                let a = (strength.clamp(0.0, 1.0) * 255.0) as u32;
-                for (i, &k) in fcov.iter().enumerate() {
-                    data[i * 4 + 3] = (k as u32 * a / 255) as u8;
+        set_vis(vis, self.surface, false);
+        set_vis(vis, self.quad, true);
+        // floor point h = p - l * p.y / l.y; texel = ((h.x - fc.x) / fside + 0.5, (h.z - fc.y) / fside + 0.5) (the quad's UVs)
+        let k = Vec3::new(1.0, -l.x / l.y, 0.0);
+        let kz = Vec3::new(0.0, -l.z / l.y, 1.0);
+        Some(shadow_clip(k / fside, -fc.x / fside, kz / fside, -fc.y / fside))
+    }
+
+    /// Hide everything (shadows switched off).
+    pub fn hide(&self, vis: &mut Query<&mut Visibility>) {
+        for e in [self.quad, self.surface] {
+            if let Ok(mut x) = vis.get_mut(e) {
+                if *x != Visibility::Hidden {
+                    *x = Visibility::Hidden;
                 }
             }
         }
-        if let Ok(mut t) = tfs.get_mut(self.quad) {
-            t.translation = Vec3::new(fc.x, -0.06, fc.y);
-            t.scale = Vec3::new(fside, 1.0, fside);
-        }
-        if let Ok(mut x) = vis.get_mut(self.surface) {
-            *x = Visibility::Hidden;
-        }
-        if let Ok(mut x) = vis.get_mut(self.quad) {
-            *x = Visibility::Inherited;
-        }
+    }
+}
+
+/// Registers the silhouette material and the atlas (render apps only: added by `Sh2MaterialPlugin`).
+pub struct Sh2ShadowPlugin;
+
+impl Plugin for Sh2ShadowPlugin {
+    fn build(&self, app: &mut App) {
+        ::bevy::asset::load_internal_asset!(app, SH2_SHADOW_SHADER, "sh2_shadow.wgsl", ::bevy::shader::Shader::from_wgsl);
+        app.add_plugins(MaterialPlugin::<Sh2ShadowMaterial>::default()).add_systems(Startup, setup_shadow_atlas);
     }
 }
 
@@ -515,12 +637,42 @@ mod tests {
     }
 
     #[test]
-    fn triangle_fill_covers_its_area() {
-        let cov = fill_triangles(&[[Vec2::new(2.0, 2.0), Vec2::new(30.0, 2.0), Vec2::new(2.0, 30.0)]], 32);
-        let n = cov.iter().filter(|&&c| c > 0).count();
-        assert!((350..450).contains(&n), "{n}"); // 28*28/2 = 392
-        assert_eq!(cov[0], 0);
-        assert_eq!(cov[5 * 32 + 5], 255);
+    fn silhouette_projections_match_the_receiver_uvs() {
+        let l = clamp_light_elevation(Vec3::new(0.4, -1.0, 0.3).normalize());
+        let (u, v) = light_basis(l);
+        let p = Vec3::new(3.0, -12.0, 1.5);
+        // light-plane camera: texel = ((p.u - c.x) / side + 0.5, (p.v - c.y) / side + 0.5); clip x = 2 tu - 1, clip y = 1 - 2 tv
+        let (c, side) = (Vec2::new(0.7, -2.0), 30.0);
+        let m = shadow_clip(u / side, -c.x / side, v / side, -c.y / side);
+        let q = m.project_point3(p);
+        let tu = (p.dot(u) - c.x) / side + 0.5;
+        let tv = (p.dot(v) - c.y) / side + 0.5;
+        assert!((q.x - (2.0 * tu - 1.0)).abs() < 1e-5 && (q.y - (1.0 - 2.0 * tv)).abs() < 1e-5, "{q:?}");
+        // flat fallback: the floor projection of the CPU path
+        let (fc, fside) = (Vec2::new(1.0, 2.0), 25.0);
+        let k = Vec3::new(1.0, -l.x / l.y, 0.0);
+        let kz = Vec3::new(0.0, -l.z / l.y, 1.0);
+        let q = shadow_clip(k / fside, -fc.x / fside, kz / fside, -fc.y / fside).project_point3(p);
+        let f = project_to_floor(p, l);
+        assert!((q.x - (2.0 * ((f.x - fc.x) / fside + 0.5) - 1.0)).abs() < 1e-5);
+        assert!((q.y - (1.0 - 2.0 * ((f.y - fc.y) / fside + 0.5))).abs() < 1e-5);
+        assert!((q.z - 0.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn atlas_tiles_are_recycled_and_cover_the_atlas() {
+        let a = alloc_tile().unwrap();
+        let b = alloc_tile().unwrap();
+        assert_ne!(a, b);
+        free_tile(a);
+        free_tile(b);
+        // tile 0 = top-left eighth, the last tile = bottom-right eighth
+        let p = tile_clip(0).project_point3(Vec3::new(-1.0, 1.0, 0.5));
+        assert!((p.x + 1.0).abs() < 1e-6 && (p.y - 1.0).abs() < 1e-6);
+        let q = tile_clip(SHADOW_TILES * SHADOW_TILES - 1).project_point3(Vec3::new(1.0, -1.0, 0.5));
+        assert!((q.x - 1.0).abs() < 1e-6 && (q.y + 1.0).abs() < 1e-6);
+        let r = tile_clip(1).project_point3(Vec3::new(-1.0, 1.0, 0.5));
+        assert!((r.x - (-1.0 + 2.0 / SHADOW_TILES as f32)).abs() < 1e-6);
     }
 
     #[test]
