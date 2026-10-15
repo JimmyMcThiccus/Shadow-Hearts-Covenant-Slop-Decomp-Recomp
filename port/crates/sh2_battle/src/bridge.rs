@@ -216,7 +216,10 @@ pub fn build_setup(data: &BattleData, session: &GameSession, pcs: &[u8], monster
             turns_taken: 0,
             removed: false,
         });
-        let nm = rec_name(data, 8, mid as usize);
+        // the name row is the record's +2 index, not the monster id (they part at monster 57: live US target lists show monster 58 as
+        // "Pendulum" = row 57, 142 as "Susano-o" = row 132; round 5b LV)
+        let name_row = if m.model >= 0 && data.us().is_some() { m.model as usize } else { mid as usize };
+        let nm = rec_name(data, 8, name_row);
         names.push(if nm.trim().is_empty() { format!("Monster {mid}") } else { nm });
         ids.push(None);
     }
@@ -485,6 +488,21 @@ mod tests {
     fn us_data() -> Option<BattleData> {
         let d = PkbDisc::open(std::env::var_os("SH2_US_DISC_DIR")?).ok()?;
         BattleData::load_us(&d).ok()
+    }
+
+    /// Monster names come from the record's +2 name row (live US target lists, round 5b LV): MONSET 95 = Quartzback, Wormgaur,
+    /// Quartzback, Pendulum; MONSET 302 = Kusanagi Sword, Yasakani Gem, Yata Mirror, Susano-o.
+    #[test]
+    fn us_monster_names_use_the_name_row() {
+        let Some(d) = us_data() else { return };
+        let mut s = GameSession::default();
+        s.new_game("OP_00_U");
+        init_new_game_retail(&d, &mut s, 0);
+        let mut r = || 0u32;
+        let names = |set: usize, r: &mut dyn FnMut() -> u32| build_setup(&d, &s, &[5], set, r).map(|b| b.names[1..].to_vec()).unwrap_or_default();
+        assert_eq!(names(95, &mut r), ["Quartzback", "Wormgaur", "Quartzback", "Pendulum"]);
+        assert_eq!(names(302, &mut r), ["Kusanagi Sword", "Yasakani Gem", "Yata Mirror", "Susano-o"]);
+        assert_eq!(names(0, &mut r), ["Revenant"; 4]);
     }
 
     /// Retail tables through the demo-shaped view: the tutorial monster set (4 Revenants), Karin / Nicolai as the starting party, the scene 0 items.

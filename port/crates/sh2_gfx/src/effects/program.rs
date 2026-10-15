@@ -128,7 +128,11 @@ impl SysCalls for FxHost {
                 vm.write_u32(arg(3), h);
             }
             1315 => vm.write_u32(arg(1), 6), // hitGetShotHitFrame
-            1307 | 1308 | 1310 | 1311 | 1312 | 1314 => {}
+            // hitResetHitMark: the retail hit mark that `EffectDamageSet` checks is cleared, so the next `btlEffectDamageSet` on the same
+            // target counts again even inside the 8-tick loop guard (live US, round 5b LV: Soul Comet lv 2 = three hits 5 ticks apart,
+            // 57 / 85 / 143 = 20 / 30 / 50 %, each after a hitResetHitMark; the guard alone dropped the middle one)
+            1307 => self.damage_at.clear(),
+            1308 | 1310 | 1311 | 1312 | 1314 => {}
             // btl*: nothing to do in the port (the battle flow owns status / idle motions)
             1100 | 1101 | 1104 | 1110 | 1112 | 1116 | 1117 | 1118 | 1119 | 1120 | 1121 | 1122 | 1123 | 1125 | 1128 | 1130 | 1131 | 1132 | 1133 => {
                 if id == 1119 || id == 1132 {

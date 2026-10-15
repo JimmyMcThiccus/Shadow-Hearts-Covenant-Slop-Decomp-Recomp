@@ -498,6 +498,9 @@ impl CommandMenu {
 pub trait Host {
     /// Enemy decision (AI scripts `BTLDATA/AIS/Mnnn_nnn.AIS`, VM in `CBattle::AITurnFunc`).
     fn choose_ai_command(&mut self, actor: usize, fighters: &[Option<Fighter>]) -> MenuEvent;
+    /// Called right after [`Host::choose_ai_command`] with write access to the fighters (round 5b LV hook, BE: the last boss's
+    /// `LastBossSpecial` attaches / releases its parts here).
+    fn after_ai_command(&mut self, _actor: usize, _fighters: &mut [Option<Fighter>]) {}
     /// Evaluate an item/magic/skill effect (`EffectCodeFunc`).  Returns damage (+) / heal (-) per target.
     ///
     /// The hook may also change the fighters (MP / SP costs, status, revive); HP changes should be returned so that they produce
@@ -1002,7 +1005,9 @@ impl<H: Host> Battle<H> {
                 let enemy = self.fighters[i].as_ref().unwrap().is_enemy;
                 let berserk = !enemy && self.ext.get(i).map(|e| e.berserk).unwrap_or(false);
                 let ev = if enemy {
-                    Some(self.host.choose_ai_command(i, &self.fighters))
+                    let ev = self.host.choose_ai_command(i, &self.fighters);
+                    self.host.after_ai_command(i, &mut self.fighters);
+                    Some(ev)
                 } else if berserk {
                     // `BerserkFunc` (retail 0x690270): no command menu; the port keeps its "attack somebody" branch (a random living enemy).  The
                     // item / crest-spell branches and the antics phases 0x0f..0x12 are not modelled.

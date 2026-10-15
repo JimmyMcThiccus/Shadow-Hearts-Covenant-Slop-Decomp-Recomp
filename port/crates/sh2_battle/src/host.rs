@@ -81,6 +81,12 @@ pub struct BtlHost {
     /// engine-started effect programs requested by the battle (path, caster slot, target slot): `BD_%03d.EFD` when such a boss falls,
     /// `UNION.EFD` for the last boss's special turn (`LastBossFunc`); the plugin drains it into `effects_bridge::ExtraFx`
     pub engine_fx: Vec<(String, usize, usize)>,
+    /// round 5b LV -- `LastBossSpecial` (live MONSET 302): the slots of the last boss's parts (CHR 500..502) while they are attached to
+    /// the core (CHR 499).  Attached parts take no turns and cannot be targeted (live: the target list holds only Susano-o, only the core
+    /// acts), but the AI still sees them (retail keeps them in the battle with `bState` 3, condition 0x3f).
+    pub boss_parts: Vec<usize>,
+    /// a `LastBoss` decision is waiting for [`Host::after_ai_command`]
+    pub boss_toggle: bool,
 }
 
 /// Status bits a monster cannot receive: retail `AIIfFunc` case 0x3a / `GetTarget` criterion 130 decode `MONSTERParam+0x32..0x34` into the
@@ -181,6 +187,8 @@ impl BtlHost {
             se_bank: vec![0; slots],
             bd_fx: vec![false; slots],
             engine_fx: vec![],
+            boss_parts: vec![],
+            boss_toggle: false,
         }
     }
 
@@ -242,7 +250,7 @@ impl BtlHost {
                 Some(x) => {
                     let (s0, s1) = self.skills.get(i).copied().unwrap_or((-1, -1));
                     AiChr {
-                        present: !x.removed,
+                        present: !x.removed || self.boss_parts.contains(&i),
                         enemy: x.is_enemy,
                         hp: x.hp,
                         max_hp: x.max_hp,
@@ -563,6 +571,7 @@ impl Host for BtlHost {
                     // AIS 0x2a: `LastBossFunc` -- `EFFECT/UNION.EFD` with the core and its parts, then `LastBossSpecial` re-arranges them; the turn ends
                     AiDecision::LastBoss => {
                         host.engine_fx.push(("EFFECT/UNION.EFD".to_string(), actor, actor));
+                        host.boss_toggle = true;
                         MenuEvent::Wait { actor: me }
                     }
                     // AIS 1 / 3: retail phase 0x14 with `nCmdKind = 1`, `flTurnPush = 3.0` -- the unit ends its turn (no guard stance, it stays in the battle)
@@ -576,6 +585,32 @@ impl Host for BtlHost {
             host.ai_log.push(format!("ai {actor}: {raw} -> {ev:?}"));
         }
         ev
+    }
+
+    /// `LastBossSpecial` (live MONSET 302, round 5b LV): the first special of the core combines -- the living parts (CHR 500..502) leave the
+    /// turn order and the target lists (retail `bState` 3, flagsA |= 0x180000, flagsB |= 0x100, `CBattle+0x26` |= 8) -- the next one
+    /// separates them again (they act and can be targeted; retail places them on an arc in front of the core at R_core + R_part + 12).
+    fn after_ai_command(&mut self, _actor: usize, fighters: &mut [Option<Fighter>]) {
+        if !std::mem::take(&mut self.boss_toggle) {
+            return;
+        }
+        if self.boss_parts.is_empty() {
+            for (i, f) in fighters.iter_mut().enumerate() {
+                let part = matches!(self.models.get(i), Some(500..=502));
+                if let Some(f) = f.as_mut().filter(|f| part && f.is_enemy && f.hp > 0 && !f.removed) {
+                    f.removed = true;
+                    self.boss_parts.push(i);
+                }
+            }
+        } else {
+            for i in std::mem::take(&mut self.boss_parts) {
+                if let Some(Some(f)) = fighters.get_mut(i) {
+                    if f.hp > 0 {
+                        f.removed = false;
+                    }
+                }
+            }
+        }
     }
 
     fn resolve_effect(&mut self, actor: usize, cmd: &Command, fighters: &mut [Option<Fighter>]) -> Vec<(usize, i32)> {
@@ -829,6 +864,17 @@ mod tests {
         if scripted > 0 {
             assert!(b.host.ai_scripted > 0, "no AIS decision was used");
         }
+    }
+
+    /// Soul Comet lv 2 (`SKIL` group 1 #2, effect 202): live US 57 / 85 / 143 per hit = 20 / 30 / 50 % (round 5b LV); the three
+    /// `btlEffectDamageSet` calls are each preceded by `hitResetHitMark`.
+    #[test]
+    fn soul_comet_has_three_hits_like_the_live_game() {
+        let Some(dir) = std::env::var_os("SH2_US_DISC_DIR") else { return };
+        let Ok(d) = sh2_core::fileio::Disc::open(dir) else { return };
+        let Ok(bytes) = d.read(&crate::effects_bridge::efd_path(202)) else { return };
+        let p: Vec<i32> = crate::actions::program_hits(202, &bytes).iter().map(|h| h.1).collect();
+        assert_eq!(p, vec![20, 30, 50]);
     }
 
     /// Snap Shot (JP `BtlFree` command kind 6): a monster target is recorded for the library "snapped" bit, an ally target is not.

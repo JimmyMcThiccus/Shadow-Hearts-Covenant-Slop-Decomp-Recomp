@@ -206,7 +206,8 @@ impl MonSetTbl {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MonsterParam {
     pub id: u16,
-    /// +2: model / chr id (BTLDATA/CHR/nnn.BCM), 0xffff = unused slot
+    /// +2: on the US disc the **name index** (`MES` section 8 row of the monster's name; live 2026-10-14: monster 58 -> 57 "Pendulum",
+    /// 142 -> 132 "Susano-o"; it equals the id up to monster 56 only).  The JP demo comment called it a model id; the CHR is +4.
     pub model: i16,
     /// Element of the monster in the damage formulas, **both** as defender and as attacker: `GetPAtkDamage` (JP 0x00602a90) reads `pParam[0x14] & 7`
     /// for either side when `bFlagsB & 1` (enemy).  (`+4/+5` is the u16 CHR model number, [`MonsterParam::chr_model`]; the `+4 & 7` read of

@@ -10,7 +10,8 @@
 //!   4 -> `R0 + 2 R1 + 18`, `R1 + 6`, `-(R2 + 6)`, `-(2 R2 + 18 + R3)`.
 //! * Enemies: the MONSET `formation` id (0..0x13) chooses the rows (1, 2, 3 ... 6 monsters, see [`monster_count`]); most ids pick one of several spreads at random
 //!   (`rand() % 100` against 50 % / 25 % ... thresholds, always the tight one when `bNoEvade`); the wide variants are clamped to the arena (`|x| <= (DAT x - 10) / 2 - R`).
-//!   Ids 0..6, 0xf..0x13 are ported with all variants; 7..0xe keep their rows but only the tight variant (documented gap: the wide spreads of 4 / 5 / 6 monster rows).
+//!   Ids 0..6, 9, 0xf..0x13 are ported with all variants (9 also with the CHR 499 last-boss override); 7, 8, 0xa..0xe keep their rows but only the tight
+//!   variant (documented gap: the wide spreads of 4 / 5 / 6 monster rows).
 //! * Ambush (`bFlags24 >> 3` = 1 / 2): the surrounded side stands in the middle (2 -> `+-(max R + 6)`, more -> a ring `sum(2 R + 12) / 2 pi * 1.2`), the surrounding side on a
 //!   circle around them (radius `ring + max R`, facing the middle).
 //! * The final position is `home - Rot_y(yaw) * (box.off.x, box.off.z)` (`+0x390`), i.e. the box centre, not the feet, stands on the formation slot.
@@ -80,7 +81,13 @@ pub struct Inputs<'a> {
     pub ambush: Ambush,
     /// `CBattle::bNoEvade`: always the tight spreads
     pub no_evade: bool,
+    /// enemy slot 3 is the last boss's core (CHR 499, `MONSTERParam` 142 Susano-o): formation 9 puts it at the back wall (`BtlChrPosInit`
+    /// case 9 tail; live MONSET 302: (0, 62.34) = (0, DAT_z / 2 - R))
+    pub core499: bool,
 }
+
+/// `MONSTERParam` id of the last boss's core (CHR 499; checked by `BtlChrPosInit` case 9 through `BtlChr+0x18c`).
+pub const LAST_BOSS_CORE: i32 = 142;
 
 /// Slot centres `(x, z)` (PS2) of the party and the enemies, in slot order.
 pub fn layout(inp: &Inputs, rnd: &mut dyn FnMut() -> f32) -> (Vec<[f32; 2]>, Vec<[f32; 2]>) {
@@ -358,12 +365,73 @@ fn enemy_rows(inp: &Inputs, rnd: &mut dyn FnMut() -> f32) -> Vec<[f32; 2]> {
             p[3] = [6.0 + r3, z1];
         }
         9 => {
+            // `BtlChrPosInit` case 9 (JP CBattle.c 32372): a front row of three (tight / shifted right / shifted left / wide) and a fourth
+            // unit behind; live MONSET 22 = the 2nd variant (-37.81, 18.00, 36.92 / back 18.00 tight), MONSET 302 = the CHR 499 override.
             let m = r0.max(r1).max(r2);
-            let z0 = zb + m;
-            p[0] = [-(r1 + 12.0 + r0), z0];
-            p[1] = [0.0, z0];
-            p[2] = [r2 + 12.0 + r1, z0];
-            p[3] = [0.0, r3 + zb + m * 2.0 + 12.0];
+            let zf = zb + m;
+            let z_tight = r3 + zb + m * 2.0 + 12.0;
+            let z_far = zhi(r3 + zb + m * 2.0 + 48.0, 3);
+            let q = pct();
+            let (x0, x1, x2, mut x3, mut z1, mut z3);
+            z1 = zf;
+            if q < 100.0 / 9.0 || ne {
+                x0 = -(r1 + 12.0 + r0);
+                x1 = 0.0;
+                x2 = r2 + 12.0 + r1;
+                x3 = 0.0;
+                z3 = z_tight;
+            } else if q < 400.0 / 9.0 {
+                x0 = lo(-(r1 + r0 + 48.0) + 18.0, 0);
+                x2 = hi(r2 + 12.0 + r1 + 18.0, 2);
+                x1 = x2 - (r2 + 12.0 + r1);
+                let q2 = pct();
+                if q2 < 100.0 / 3.0 {
+                    x3 = r3 + x0 + 12.0 + r0;
+                    z3 = z_tight;
+                } else if q2 < 200.0 / 3.0 {
+                    x3 = x2 - (r2 + 12.0 + r3);
+                    z3 = z_tight;
+                } else {
+                    x3 = x2 - (r2 + 12.0 + r3);
+                    z3 = z_far;
+                }
+            } else if q < 700.0 / 9.0 {
+                x0 = lo(-(r1 + 12.0 + r0) - 18.0, 0);
+                x1 = r1 + x0 + 12.0 + r0;
+                x2 = hi(r2 + r1 + 48.0 - 18.0, 2);
+                let q2 = pct();
+                if q2 < 100.0 / 3.0 {
+                    x3 = r3 + x0 + 12.0 + r0;
+                    z3 = z_tight;
+                } else if q2 < 200.0 / 3.0 {
+                    x3 = r3 + x0 + 12.0 + r0;
+                    z3 = z_far;
+                } else {
+                    x3 = x2 - (r2 + 12.0 + r3);
+                    z3 = z_tight;
+                }
+            } else {
+                x0 = lo(-(r1 + r0 + 48.0), 0);
+                x2 = hi(r2 + r1 + 48.0, 2);
+                x1 = 0.0;
+                x3 = 0.0;
+                if pct() < 50.0 {
+                    z3 = z_tight;
+                } else {
+                    z3 = z_far;
+                    // the middle unit steps back next to the far one (`fStack_50 = m + (z3 - 12) + r3`, as decompiled)
+                    z1 = m + (z3 - 12.0) + r3;
+                }
+            }
+            if inp.core499 {
+                z3 = az / 2.0 - r3;
+                z1 = zf;
+                x3 = 0.0;
+            }
+            p[0] = [x0, zf];
+            p[1] = [x1, z1];
+            p[2] = [x2, zf];
+            p[3] = [x3, z3];
         }
         10 => {
             let (m012, m34) = (r0.max(r1).max(r2), m2(r3, r4));
@@ -480,19 +548,22 @@ pub fn homes_for(setup: &crate::bridge::BattleSetup, boxes: &[Option<ChrBox>], a
     let pi: Vec<usize> = (0..side.len()).filter(|&i| !side[i]).collect();
     let ei: Vec<usize> = (0..side.len()).filter(|&i| side[i]).collect();
     let (pr, er): (Vec<f32>, Vec<f32>) = (pi.iter().map(|&i| radius(i)).collect(), ei.iter().map(|&i| radius(i)).collect());
+    let core499 = ei.get(3).is_some_and(|&i| setup.fighters[i].char_id == LAST_BOSS_CORE);
     let mut s = (setup.set as u32).wrapping_mul(2654435761) ^ (setup.formation as u32).wrapping_mul(40503) ^ 0x9e37_79b9;
     let mut rnd = move || {
         s = s.wrapping_mul(1664525).wrapping_add(1013904223);
         (s >> 8) as f32 / 16777216.0
     };
-    let (pp, ep) = layout(&Inputs { party: &pr, enemy: &er, formation: setup.formation, arena, ambush: setup.ambush, no_evade: false }, &mut rnd);
+    let (pp, ep) = layout(&Inputs { party: &pr, enemy: &er, formation: setup.formation, arena, ambush: setup.ambush, no_evade: false, core499 }, &mut rnd);
     let mut out = vec![bevy::math::Vec3::ZERO; side.len()];
+    // the feet stand about the box centre turned towards the nearest opponent (live: `pos = slot - Rot_y(heading) * box.off` once the units
+    // have turned, see `models::side_facing`)
     for (k, &i) in pi.iter().enumerate() {
-        let f = feet(pp[k], boxes.get(i).and_then(|b| b.as_ref()), 180.0);
+        let f = feet(pp[k], boxes.get(i).and_then(|b| b.as_ref()), facing_yaw(pp[k], &ep, 180.0));
         out[i] = to_bevy(f);
     }
     for (k, &i) in ei.iter().enumerate() {
-        let f = feet(ep[k], boxes.get(i).and_then(|b| b.as_ref()), 0.0);
+        let f = feet(ep[k], boxes.get(i).and_then(|b| b.as_ref()), facing_yaw(ep[k], &pp, 0.0));
         out[i] = to_bevy(f);
     }
     // development aid (live comparisons): `SH2_BATTLE_ENEMY_POS="x,z;x,z;.."` = the enemies' feet in PS2 coordinates as read from a live battle (the retail
@@ -516,6 +587,17 @@ pub fn homes_for(setup: &crate::bridge::BattleSetup, boxes: &[Option<ChrBox>], a
     out
 }
 
+/// PS2 heading (degrees) of a unit at `me` facing the nearest of `foes` (`yaw 0` looks along -z, 180 along +z: direction `(-sin, -cos)`);
+/// `default` when there is none.  Live US: Ducky Toy at (-40.89, 15.44) facing Karin at (0, -37.70) -> -37.6, Karin -> the duck at x -18 -> 161.3.
+pub fn facing_yaw(me: [f32; 2], foes: &[[f32; 2]], default: f32) -> f32 {
+    foes.iter()
+        .map(|f| (f[0] - me[0], f[1] - me[1]))
+        .filter(|d| d.0.abs() + d.1.abs() > 0.01)
+        .min_by(|a, b| (a.0 * a.0 + a.1 * a.1).total_cmp(&(b.0 * b.0 + b.1 * b.1)))
+        .map(|(dx, dz)| (-dx).atan2(-dz).to_degrees())
+        .unwrap_or(default)
+}
+
 /// Apply the box-centre correction: `pos = home - Rot_y(yaw) * (off.x, off.z)` (`yaw` PS2 degrees, 180 for the party, 0 for the enemies).
 pub fn feet(home: [f32; 2], bx: Option<&ChrBox>, yaw_deg: f32) -> [f32; 2] {
     let Some(bx) = bx else { return home };
@@ -530,7 +612,50 @@ mod tests {
     use super::*;
 
     fn inp<'a>(party: &'a [f32], enemy: &'a [f32], formation: u16) -> Inputs<'a> {
-        Inputs { party, enemy, formation, arena: [150.0, 150.0], ambush: Ambush::None, no_evade: true }
+        Inputs { party, enemy, formation, arena: [150.0, 150.0], ambush: Ambush::None, no_evade: true, core499: false }
+    }
+
+    /// Live US formations (round 5b LV, debug event battles on the 200 x 200 grid stage; radii = `BtlChr+0x2a4`, slots = `+0xc0`).
+    #[test]
+    fn formations_match_the_live_us_battles() {
+        let close = |a: &[[f32; 2]], b: &[[f32; 2]]| a.len() == b.len() && a.iter().zip(b).all(|(p, q)| (p[0] - q[0]).abs() < 0.02 && (p[1] - q[1]).abs() < 0.02);
+        let run = |party: &[f32], enemy: &[f32], f: u16, core499: bool, draws: &[f32]| {
+            let mut it = draws.to_vec().into_iter();
+            let mut rnd = move || it.next().unwrap_or(0.0);
+            layout(&Inputs { party, enemy, formation: f, arena: [200.0, 200.0], ambush: Ambush::None, no_evade: false, core499 }, &mut rnd)
+        };
+        let party = [2.703, 4.08, 1.87];
+        // party row (Karin, Blanca, Anastasia)
+        let (p, e) = run(&party, &[5.443; 3], 3, false, &[0.6]);
+        assert!(close(&p, &[[18.79, -39.08], [0.0, -39.08], [-17.96, -39.08]]), "{p:?}");
+        // MONSET 10: three Ducky Toys, formation 3, variant q 50..75
+        assert!(close(&e, &[[-40.89, 15.44], [-18.0, 15.44], [40.89, 15.44]]), "{e:?}");
+        // MONSET 0: four Revenants, formation 6, variant q 40..60
+        let (_, e) = run(&party, &[2.315; 4], 6, false, &[0.5]);
+        assert!(close(&e, &[[-42.945, -2.685], [-26.315, -2.685], [32.315, -2.685], [48.945, -2.685]]), "{e:?}");
+        // MONSET 14: Martega, Mash, Maya, formation 0x11
+        let (_, e) = run(&party, &[4.07; 3], 0x11, false, &[]);
+        assert!(close(&e, &[[-32.14, -0.93], [32.14, -0.93], [0.0, 55.21]]), "{e:?}");
+        // MONSET 22: Ekimmu + 3 Clawed Soldiers, formation 9, variant 2 / back unit sub-variant 2
+        let (_, e) = run(&party, &[4.35, 3.46, 3.46, 3.46], 9, false, &[0.3, 0.5]);
+        assert!(close(&e, &[[-37.81, -0.65], [18.0, -0.65], [36.92, -0.65], [18.0, 19.16]]), "{e:?}");
+        // MONSET 302: the core (CHR 499) stands at the back wall whatever the roll
+        let (_, e) = run(&party, &[14.56, 5.82, 8.91, 32.66], 9, true, &[0.9, 0.9]);
+        assert!((e[3][0]).abs() < 0.01 && (e[3][1] - 62.34).abs() < 0.01, "{e:?}");
+    }
+
+    #[test]
+    fn units_face_the_nearest_opponent_like_the_live_game() {
+        let ducks = [[-40.89, 15.44], [-18.0, 15.44], [40.89, 15.44]];
+        let karin = [[0.0, -37.70]];
+        assert!((facing_yaw(ducks[0], &karin, 0.0) - -37.6).abs() < 0.1);
+        assert!((facing_yaw(ducks[1], &karin, 0.0) - -18.7).abs() < 0.1);
+        assert!((facing_yaw(ducks[2], &karin, 0.0) - 37.6).abs() < 0.1);
+        assert!((facing_yaw(karin[0], &ducks, 180.0).rem_euclid(360.0) - 161.3).abs() < 0.1);
+        // box-centre correction with the turned heading: Karin's box off (0.21, -0.73) -> rotated (-0.43, 0.62) at 161.3 deg (live +0x2f0)
+        let bx = ChrBox { off: [0.21, -8.32, -0.73], size: [2.09, 5.65, 3.32] };
+        let f = feet([0.0, -37.70], Some(&bx), 161.3);
+        assert!((f[0] - 0.43).abs() < 0.02 && (f[1] - -38.32).abs() < 0.02, "{f:?}");
     }
 
     #[test]
@@ -554,7 +679,7 @@ mod tests {
                     s = s.wrapping_mul(1664525).wrapping_add(1013904223);
                     (s >> 8) as f32 / 16777216.0
                 };
-                let (_, e) = layout(&Inputs { party: &[4.0, 4.0], enemy: &r, formation: f, arena: [150.0, 150.0], ambush: Ambush::None, no_evade: false }, &mut rnd);
+                let (_, e) = layout(&Inputs { party: &[4.0, 4.0], enemy: &r, formation: f, arena: [150.0, 150.0], ambush: Ambush::None, no_evade: false, core499: false }, &mut rnd);
                 assert_eq!(e.len(), n, "formation {f}");
                 for p in &e {
                     assert!(p[0].abs() <= 75.0 + 1.0, "formation {f} x {p:?}");
@@ -603,7 +728,7 @@ mod tests {
         // formation 4, the wide spread (first roll >= 33.3 %, second roll 25..50 %)
         let mut rolls = [0.5f32, 0.3].into_iter();
         let mut rnd = move || rolls.next().unwrap_or(0.9);
-        let (p, e) = layout(&Inputs { party: &pr, enemy: &er, formation: 4, arena: [150.0, 150.0], ambush: Ambush::None, no_evade: false }, &mut rnd);
+        let (p, e) = layout(&Inputs { party: &pr, enemy: &er, formation: 4, arena: [150.0, 150.0], ambush: Ambush::None, no_evade: false, core499: false }, &mut rnd);
         let near = |a: f32, b: f32, what: &str| assert!((a - b).abs() < 1.0, "{what}: {a} vs live {b}");
         near(p[0][0], 8.73, "Karin home x");
         near(p[0][1], -32.70, "Karin home z");

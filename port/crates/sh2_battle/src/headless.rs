@@ -54,6 +54,11 @@ pub struct Run {
     pub cash: i32,
     /// `MONSETTbl` flags (retail u32 at +0x10): bits 0..1 escape rule, bits 2..3 tutorial type, bit 4 (see notes)
     pub flags: u32,
+    /// last boss (`LastBossSpecial`): times the parts were attached to the core, turns the core took while they were attached, turns an
+    /// attached part took (must stay 0)
+    pub boss_combines: u32,
+    pub boss_core_turns: u32,
+    pub boss_part_turns: u32,
 }
 
 /// The retail `MONSETTbl` flags word (`+0x10`, u32) of row `set` (`None` on the demo data).
@@ -154,6 +159,9 @@ pub fn run_set(data: &BattleData, tables: &Arc<ActionTables>, disc: &PkbDisc, se
         exp: 0,
         cash: 0,
         flags,
+        boss_combines: 0,
+        boss_core_turns: 0,
+        boss_part_turns: 0,
     };
     let Some(mut setup): Option<BattleSetup> = bridge::build_setup(data, session, &party, set, &mut rnd) else { return run };
     if !setup.fighters.iter().any(|f| f.is_enemy) {
@@ -224,7 +232,22 @@ pub fn run_set(data: &BattleData, tables: &Arc<ActionTables>, disc: &PkbDisc, se
     let mut seen_log = 0;
     let trace = std::env::var_os("BE_TRACE").is_some();
     let mut seen_ev = 0;
+    let (mut boss_ev, mut attached) = (0usize, false);
     while b.poll() {
+        if !b.host.boss_parts.is_empty() && !attached {
+            run.boss_combines += 1;
+        }
+        attached = !b.host.boss_parts.is_empty();
+        while boss_ev < b.events.len() {
+            if let BattleEvent::TurnStart { chr } = b.events[boss_ev] {
+                if b.host.boss_parts.contains(&chr) {
+                    run.boss_part_turns += 1;
+                } else if attached && b.host.models.get(chr) == Some(&499) {
+                    run.boss_core_turns += 1;
+                }
+            }
+            boss_ev += 1;
+        }
         guard += 1;
         if guard > 2_000_000 {
             break;
@@ -317,6 +340,20 @@ mod tests {
     /// Every retail monster set builds, its monsters have models, AIS scripts and skill effects on the disc, the enemies decide through their
     /// scripts, and the battle ends.  A few fights are legitimately lost / endless against the harness party (instant HP-1 combos, the Blooming
     /// Phoenix revive loop, the 30000 HP hidden boss): at least 95 % must be won.
+    /// MONSET 302 (Susano-o + Kusanagi Sword / Yasakani Gem / Yata Mirror): the core's AIS 0x2a turns attach the parts (no part turns,
+    /// only the core acts, live: 4 core turns per combined period) and release them again (round 5b LV live check).
+    #[test]
+    fn last_boss_attaches_and_releases_its_parts() {
+        let Some(d) = us_disc() else { return };
+        let data = BattleData::load_us(&d).unwrap();
+        let tables = Arc::new(ActionTables::load(&data));
+        let s = sturdy_session(&data);
+        let r = (1..6).map(|seed| run_set(&data, &tables, &d, &s, 302, seed, 400)).find(|r| r.boss_combines > 0).expect("no LastBoss turn in 5 seeds");
+        eprintln!("302: combines {} core turns while attached {} part turns {} outcome {:?} turns {}", r.boss_combines, r.boss_core_turns, r.boss_part_turns, r.outcome, r.turns);
+        assert_eq!(r.boss_part_turns, 0, "{r:?}");
+        assert!(r.boss_core_turns > 0 || r.outcome == Outcome::Win, "{r:?}");
+    }
+
     #[test]
     fn every_us_monster_set_runs() {
         let Some(d) = us_disc() else { return };

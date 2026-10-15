@@ -608,3 +608,14 @@ Still open for others:
 * **MN**: the field Judgement Ring screen (`st.ring` / `RingControl`, see above) -- the port answers the first area's colour at once.
 * **FX**: `fldAttachBG2` named BG models for SM_07_U.
 * **QA**: `GetFieldData(0x26)` (pit-fight info, DB_00_U / GT_10_U / GI_02_N) is the one documented selector still answered -1.
+
+## Round 5 LV (live verification, 2026-10-14)
+* **BP (flow.rs, additive hook):** `Host::after_ai_command(actor, &mut fighters)` (default no-op) is called right after
+  `choose_ai_command` in `Phase::Command`; BE's `BtlHost` uses it for the last boss's part attach / release.  Also for BP: retail sets the
+  Snap Shot album bit (`BTL0+0xfc3`) **immediately** (Album usable in the same battle; the port writes it at battle end), and Gathering
+  places the units with `GetWarpPos` (JP BtlFree 0x5e38a0), target "All Enemies" -- the 12-unit ring is wrong (r5_lv.md check 5).
+* **FX (sh2_gfx/src/effects/program.rs, one arm):** syscall 1307 `hitResetHitMark` now clears the 8-tick `btlEffectDamageSet` loop
+  guard; live Soul Comet lv 2 = 3 hits 20 / 30 / 50 % (the guard dropped the middle one).  17 programs gain hits (`bp_tables fxpow`).
+  Also: `btlGetWarpPos` (1118) needs the battle's `GetWarpPos` answer (program 080 builds garbage root matrices now).
+* **MN:** monster names are `MES` section 8 row = MON record +2 (not the monster id; they differ from monster 57 on: 58 = Pendulum,
+  142 = Susano-o).  `sh2_field/src/cmd_view.rs` ~708 (library) uses `env.name(8, id)` -- please check it against the record's +2.

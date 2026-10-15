@@ -19,3 +19,7 @@ state load / restart helps) when the command menu is opened with one of the entr
 usable through `MENU+0x300+i = 2` on a save that has not unlocked them (three hangs, every time one of these was set; 2 / 3 / 7 = Crest Magic /
 Crest Change / Party Members are safe).  Earlier I blamed reopening the menu during its close animation: that was wrong (the third hang had no
 fast reopen).  Do not force those three entries; unlock them the game's way (debug menu > Other > Menu settings) instead.
+* `ringd.py SECS LOG` (round 5b LV) - run in the background during a battle: every Judgement Ring at `[CBattle+0x45d0]` (attacks, skills,
+  items; any phase) is handed to the game's own autoplayer the moment it starts (abnormal flags +0x50c/+0x50d cleared, signed period +0xbc
+  made positive, `auto_mode` +0x58c = 1): grade 2 every time, also under the reverse / fast ring statuses that defeat `fight.py`'s timed
+  presses.  Logs each ring and its result flags (+0x512).

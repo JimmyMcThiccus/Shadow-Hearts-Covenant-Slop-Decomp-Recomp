@@ -522,15 +522,24 @@ pub fn read_box(disc: &Sh2Disc, chr_no: u32) -> Option<crate::formation::ChrBox>
     crate::formation::ChrBox::parse(bbx.1)
 }
 
-/// Horizontal unit direction fighter `i` looks along when standing at its slot.  Live retail data (`BtlChr+0x184` yaw, PINE): the party stands at yaw 180 and the enemies
-/// at yaw 0 (rows face each other along the stage's z axis), each turned by +-29.47 degrees depending on the side of the centre line the slot is on (`sign(x)`; Nicolai x -8.7 -> 150.53,
-/// Karin x +8.7 -> 209.45, the Revenants at x -28.4 / +28.5 -> -29.47 / +29.47).  In Bevy space `forward = (sin yaw, 0, cos yaw)`.
+/// Horizontal unit direction fighter `i` looks along when standing at its slot: **towards the nearest opponent** (live US, round 5b LV: at
+/// `(2, 0)` everyone still stands at yaw 180 / 0, by the first command menu every unit of MONSETs 10 / 22 faces its nearest opponent's slot,
+/// e.g. Ducky Toys at x -40.89 / -18.0 / 40.89 -> -37.6 / -18.7 / 37.6 deg towards Karin, Karin -> the middle duck; the old constant
+/// +-29.47 deg was this rule's value for the MONSET 4 layout).  Falls back to the plain side direction (party +z PS2, enemies -z) when there
+/// is no opponent.  In Bevy space `forward = (sin yaw, 0, cos yaw)`.
 pub fn side_facing(setup: &crate::bridge::BattleSetup, homes: &[Vec3], i: usize) -> Vec3 {
-    const TURN: f32 = 29.47;
     let enemy = setup.fighters[i].is_enemy;
-    let x = homes.get(i).map(|h| h.x).unwrap_or(0.0);
-    let dev = if x.abs() < 0.01 { 0.0 } else { x.signum() * TURN };
-    let yaw = (if enemy { 0.0f32 } else { 180.0 } + dev).to_radians();
+    let me = homes.get(i).copied().unwrap_or(Vec3::ZERO);
+    let nearest = (0..setup.fighters.len().min(homes.len()))
+        .filter(|&j| setup.fighters[j].is_enemy != enemy && !setup.fighters[j].removed)
+        .map(|j| homes[j] - me)
+        .map(|d| d.with_y(0.0))
+        .filter(|d| d.length() > 0.01)
+        .min_by(|a, b| a.length().total_cmp(&b.length()));
+    if let Some(d) = nearest {
+        return d.normalize();
+    }
+    let yaw = (if enemy { 0.0f32 } else { 180.0 }).to_radians();
     Vec3::new(yaw.sin(), 0.0, yaw.cos())
 }
 
