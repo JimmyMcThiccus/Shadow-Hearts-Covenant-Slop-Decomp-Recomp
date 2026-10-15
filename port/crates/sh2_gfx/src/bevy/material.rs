@@ -19,8 +19,10 @@
 //! ## Colour space
 //!
 //! The GS blends *display-referred* values (gamma space).  In the default [`Sh2ColorSpace`] `gamma` mode (`SH2_LINEAR_BLEND=1` turns it off) the shader therefore
-//! outputs the raw PS2 colour, the camera renders into an `Rgba16Float` (HDR) target, so blending happens on those raw values, and a single
-//! full-screen pass ([`Sh2GammaDecode`], before tonemapping) converts raw -> linear right before the sRGB surface encodes it again.
+//! outputs the raw PS2 colour, the cameras render into an `Rgba16Float` (HDR) target, so blending happens on those raw values, and the
+//! picture is decoded raw -> linear exactly once right before the sRGB surface encodes it again: by the last window camera's blit
+//! (Bevy's `CompositingSpace::Srgb`, which also makes the 2D / UI layers blend raw values, see [`setup_gamma_cameras`]), or by a
+//! full-screen pass ([`Sh2GammaDecode`], before tonemapping) on a camera that is alone on its target.
 //! This makes additive glows (`Cs*As + Cd`) saturate exactly like the GS (clamp at the very end like the 8-bit frame buffer).
 
 use ::bevy::asset::{load_internal_asset, uuid_handle};
@@ -49,11 +51,14 @@ pub const SH2_VERTEX_SHADER: Handle<Shader> = uuid_handle!("b3f0c9e2-4d71-4a8e-9
 pub struct Sh2ColorSpace {
     /// Blend raw display values (like the GS) in an HDR target and decode once at the end.
     pub gamma: bool,
+    /// With `gamma`: the 2D / UI cameras composite in gamma space too ([`setup_gamma_cameras`]); `SH2_UI_LINEAR_BLEND=1` restores the
+    /// round 6 arrangement (decode on the 3D camera, UI blended in linear light) for A/B comparisons.
+    pub ui_gamma: bool,
 }
 
 impl Default for Sh2ColorSpace {
     fn default() -> Self {
-        Sh2ColorSpace { gamma: std::env::var_os("SH2_LINEAR_BLEND").is_none() }
+        Sh2ColorSpace { gamma: std::env::var_os("SH2_LINEAR_BLEND").is_none(), ui_gamma: std::env::var_os("SH2_UI_LINEAR_BLEND").is_none() }
     }
 }
 
@@ -365,40 +370,201 @@ impl FullscreenMaterial for Sh2GammaDecode {
     }
 }
 
-/// Put every 3D camera into the gamma-space pipeline (HDR target + decode pass, no tonemapping) once, or remove it again.
+/// `true` while the window cameras composite in gamma space ([`setup_gamma_cameras`]: two or more cameras on the window, the last one's
+/// blit decodes).  The 2D / UI draws then blend raw display values like the GS, so per-draw compensations for linear blending (the
+/// menu text `gamma_alpha` of `sh2_menu::bevy_ui`) must be off.
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Sh2GammaCompositing(pub bool);
+
+/// Put the cameras into the gamma-space pipeline (or take them out again).
 ///
-/// **Every other camera (the 2D backdrop / UI cameras of the game app) goes HDR as well.**  Bevy gives each distinct
-/// (target, format, MSAA) its own main texture; cameras that share the key share the texture and draw on top of each other, but
-/// every camera ends with an *upscaling blit* of its main texture onto the window with blending off.  With only the 3D camera in
-/// `Rgba16Float`, the 2D UI camera (order 100, `ClearColorConfig::None`) kept an `Rgba8UnormSrgb` texture of its own that was
-/// cleared black by the backdrop camera, and its blit overwrote the finished 3D image: the 3D layer was "pure black behind the UI".
-/// The same format for all cameras makes them share one texture again (the decode pass only touches the 3D camera's view, the
-/// UI is drawn into the decoded result afterwards, exactly like the linear pipeline).
+/// **Window cameras (round 6 GPA): one gamma-space texture, decoded by the last blit.**  Bevy gives each distinct (target, format,
+/// MSAA) its own main texture; cameras that share the key share the texture and draw on top of each other, and every camera ends with
+/// an *upscaling blit* of the texture onto the window (blending off, so the last camera's blit is what the window shows).  All window
+/// cameras are HDR (`Rgba16Float`, one shared texture holding raw PS2 display values) and, from the second one on, carry Bevy's
+/// [`CompositingSpace::Srgb`]: their 2D meshes / sprites / text output sRGB-encoded (= raw) values (`SRGB_OUTPUT`), and their blit
+/// decodes raw -> linear (`SRGB_TO_LINEAR`) for the sRGB surface.  So the 3D scene, the backdrop clear colour, the canvas sprite
+/// layers, the effect 2D layers and -- through [`patch_ui_shaders`] -- Bevy UI nodes (fader, title, HUD rects / text) all blend in
+/// gamma space like the GS frame buffer, and are decoded exactly once.  The first (clearing) camera keeps no compositing space so the
+/// clear colour keeps the `Color::linear_rgb(raw)` convention of the field / battle / cut scene `ClearColor`.
+///
+/// A camera alone on its target (tools / viewers without the UI cameras, the menu model view rendering into an image) keeps the old
+/// arrangement: HDR + a [`Sh2GammaDecode`] pass at the end of its 3D post-processing.  [`NativeTarget`](super::screen::NativeTarget)
+/// cameras render raw values straight into the 8-bit virtual frame buffer (no HDR, no decode; the presenter draws it on the window).
+#[allow(clippy::type_complexity)]
 pub fn setup_gamma_cameras(
     settings: Res<Sh2ColorSpace>,
+    mut compositing: ResMut<Sh2GammaCompositing>,
+    mut last_window: Local<Vec<(isize, Entity)>>,
     mut commands: Commands,
-    cams: Query<(Entity, Option<&Sh2GammaDecode>, Has<Camera3d>, Has<::bevy::camera::Hdr>, Has<super::screen::NativeTarget>), (With<Camera>, Without<super::shadow::ShadowCamera>)>,
+    cams: Query<
+        (
+            Entity,
+            &Camera,
+            Option<&::bevy::camera::RenderTarget>,
+            Option<&Sh2GammaDecode>,
+            Option<&::bevy::camera::CompositingSpace>,
+            Has<Camera3d>,
+            Has<::bevy::camera::Hdr>,
+            Has<super::screen::NativeTarget>,
+            Option<&Tonemapping>,
+            Option<&Name>,
+        ),
+        Without<super::shadow::ShadowCamera>,
+    >,
 ) {
-    for (e, has, is_3d, hdr, native) in &cams {
+    use ::bevy::camera::{CompositingSpace, Hdr, RenderTarget};
+    let on_window = |t: Option<&RenderTarget>| t.is_none_or(|t| matches!(t, RenderTarget::Window(_)));
+    // window cameras in render order: the first one clears, the last one's blit is the picture
+    let mut window: Vec<(isize, Entity)> =
+        cams.iter().filter(|c| c.1.is_active && !c.7 && on_window(c.2)).map(|c| (c.1.order, c.0)).collect();
+    window.sort();
+    let shared = settings.gamma && settings.ui_gamma && window.len() >= 2;
+    if compositing.0 != shared {
+        compositing.0 = shared;
+    }
+    if *last_window != window {
+        let names: Vec<String> = window.iter().map(|&(o, e)| format!("{o}:{}", cams.get(e).ok().and_then(|c| c.9).map(|n| n.as_str().to_string()).unwrap_or_else(|| format!("{e}")))).collect();
+        log::info!("gamma: window cameras {names:?}, gamma compositing {shared}");
+        *last_window = window.clone();
+    }
+    for (e, _, _, decode, space, is_3d, hdr, native, tonemapping, _) in &cams {
+        let mut ec = commands.entity(e);
         if native && settings.gamma {
-            // renders raw display values into the virtual 512 x 448 UNORM target (clamped per blend): no HDR, no decode (the presenter decodes)
-            if has.is_some() || hdr {
-                commands.entity(e).remove::<(::bevy::camera::Hdr, Sh2GammaDecode)>();
+            // renders raw display values into the virtual 512 x 448 UNORM target (clamped per blend): no HDR, no decode (the presenter's camera decodes)
+            if decode.is_some() || hdr || space.is_some() {
+                ec.remove::<(Hdr, Sh2GammaDecode, CompositingSpace)>();
             }
             continue;
         }
-        if is_3d {
-            match (settings.gamma, has.is_some()) {
-                (true, false) => {
-                    commands.entity(e).insert((::bevy::camera::Hdr, Tonemapping::None, Sh2GammaDecode { enabled: 1.0, ..default() }));
-                }
-                (false, true) => {
-                    commands.entity(e).remove::<(::bevy::camera::Hdr, Sh2GammaDecode)>();
-                }
-                _ => {}
+        if !settings.gamma {
+            if is_3d && decode.is_some() {
+                ec.remove::<(Hdr, Sh2GammaDecode)>();
             }
-        } else if settings.gamma && !hdr {
-            commands.entity(e).insert(::bevy::camera::Hdr);
+            if space.is_some() {
+                ec.remove::<CompositingSpace>();
+            }
+            continue;
+        }
+        if !hdr {
+            ec.insert(Hdr);
+        }
+        if is_3d && tonemapping != Some(&Tonemapping::None) {
+            // raw display values must reach the decode untouched
+            ec.insert(Tonemapping::None);
+        }
+        let pos = window.iter().position(|&(_, w)| w == e);
+        let (want_decode, want_space) = match pos {
+            Some(i) if shared => (false, (i > 0).then_some(CompositingSpace::Srgb)),
+            _ => (is_3d, None),
+        };
+        match (want_decode, decode.is_some()) {
+            (true, false) => {
+                ec.insert(Sh2GammaDecode { enabled: 1.0, ..default() });
+            }
+            (false, true) => {
+                ec.remove::<Sh2GammaDecode>();
+            }
+            _ => {}
+        }
+        if space.copied() != want_space {
+            match want_space {
+                Some(s) => {
+                    ec.insert(s);
+                }
+                None => {
+                    ec.remove::<CompositingSpace>();
+                }
+            }
+        }
+    }
+}
+
+/// Bevy UI fragment shaders (`bevy_ui_render`, embedded assets) whose output [`patch_ui_shaders`] encodes for gamma-space compositing.
+pub const UI_SHADER_PATHS: [&str; 4] = [
+    "embedded://bevy_ui_render/ui.wgsl",
+    "embedded://bevy_ui_render/ui_texture_slice.wgsl",
+    "embedded://bevy_ui_render/box_shadow.wgsl",
+    "embedded://bevy_ui_render/gradient.wgsl",
+];
+const UI_PATCH_MARK: &str = "sh2_linear_fragment";
+
+/// Rewrite a WGSL source so its `@fragment fn fragment(..) -> @location(0) vec4<f32>` returns sRGB-encoded rgb: the original entry point
+/// becomes the plain function `sh2_linear_fragment` and a new `fragment` wraps it.  `None` when the shape is not the expected one.
+pub fn encode_fragment_output(src: &str) -> Option<String> {
+    if src.contains(UI_PATCH_MARK) {
+        return None;
+    }
+    let f = src.find("fn fragment(")?;
+    let head = src[..f].trim_end();
+    let attr = head.strip_suffix("@fragment")?.len();
+    let open = f + "fn fragment(".len();
+    let close = open + src[open..].find(')')?;
+    let params = src[open..close].trim().trim_end_matches(',').to_string();
+    if !src[close + 1..].trim_start().starts_with("-> @location(0) vec4<f32>") {
+        return None;
+    }
+    let args: Vec<&str> = params.split(',').map(|p| p.split(':').next().unwrap_or("").trim()).filter(|a| !a.is_empty()).collect();
+    if args.iter().any(|a| a.starts_with('@')) {
+        return None;
+    }
+    // a plain function may not carry `@location` on its return type
+    let rest = src[open..].replacen("-> @location(0) vec4<f32>", "-> vec4<f32>", 1);
+    Some(format!(
+        "{}fn {UI_PATCH_MARK}({}\n\n\
+         // sh2 (sh2_gfx::bevy::material::patch_ui_shaders): gamma-space compositing, the target holds raw (sRGB-encoded) display values\n\
+         fn sh2_encode(c: f32) -> f32 {{\n    if c <= 0.0031308 {{ return max(c, 0.0) * 12.92; }}\n    return 1.055 * pow(c, 1.0 / 2.4) - 0.055;\n}}\n\n\
+         @fragment\nfn fragment({params}) -> @location(0) vec4<f32> {{\n    let c = {UI_PATCH_MARK}({});\n    return vec4<f32>(sh2_encode(c.r), sh2_encode(c.g), sh2_encode(c.b), c.a);\n}}\n",
+        &src[..attr],
+        rest,
+        args.join(", ")
+    ))
+}
+
+/// Bevy UI has no notion of [`CompositingSpace`](::bevy::camera::CompositingSpace): its shaders always output linear colour.  While
+/// [`Sh2GammaCompositing`] is on, the UI camera composites into the raw (gamma) texture, so the UI fragment shaders are patched to
+/// output sRGB-encoded values ([`encode_fragment_output`]); `Color`s / sRGB textures of the nodes keep their meaning (`encode(c * t)`
+/// is `raw(c) * raw(t)` up to the sRGB curve's linear toe), only the blend now happens on display values like the GS.  The original
+/// sources are restored when the compositing turns off again.
+pub fn patch_ui_shaders(
+    on: Res<Sh2GammaCompositing>,
+    server: Res<AssetServer>,
+    mut shaders: ResMut<Assets<Shader>>,
+    mut state: Local<Vec<(Handle<Shader>, Option<::bevy::shader::Source>, bool)>>,
+) {
+    if state.is_empty() {
+        if !on.0 {
+            return;
+        }
+        *state = UI_SHADER_PATHS.iter().map(|p| (server.load::<Shader>(*p), None, false)).collect();
+    }
+    for (h, original, patched) in state.iter_mut() {
+        if *patched == on.0 {
+            continue;
+        }
+        let Some(sh) = shaders.get(&*h) else { continue };
+        if on.0 {
+            let ::bevy::shader::Source::Wgsl(src) = &sh.source else {
+                *patched = true;
+                continue;
+            };
+            match encode_fragment_output(src) {
+                Some(new_src) => {
+                    *original = Some(sh.source.clone());
+                    if let Some(mut sh) = shaders.get_mut(&*h) {
+                        sh.source = ::bevy::shader::Source::Wgsl(new_src.into());
+                    }
+                }
+                None => log::warn!("gamma UI: could not patch {:?}; Bevy UI there blends in linear light", sh.path),
+            }
+            *patched = true;
+        } else {
+            if let Some(src) = original.take() {
+                if let Some(mut sh) = shaders.get_mut(&*h) {
+                    sh.source = src;
+                }
+            }
+            *patched = false;
         }
     }
 }
@@ -472,9 +638,10 @@ impl Plugin for Sh2MaterialPlugin {
         app.init_resource::<Sh2Fog>()
             .init_resource::<Sh2SceneLight>()
             .init_resource::<Sh2ColorSpace>()
+            .init_resource::<Sh2GammaCompositing>()
             .add_plugins(MaterialPlugin::<Sh2Material>::default())
             .add_plugins(FullscreenMaterialPlugin::<Sh2GammaDecode>::default())
-            .add_systems(PostUpdate, (setup_gamma_cameras, sync_material_globals))
+            .add_systems(PostUpdate, ((setup_gamma_cameras, patch_ui_shaders).chain(), sync_material_globals))
             .add_systems(Startup, super::model::spawn_skin_joint)
             .add_plugins((super::fxquad::Sh2FxQuadPlugin, super::perf::Sh2PerfPlugin, super::shadow::Sh2ShadowPlugin));
     }
@@ -492,6 +659,30 @@ mod tests {
         assert_eq!(texture_blend(0x42).0, Sh2Blend::Sub);
         assert_eq!(texture_blend(0x2064).1, Some(0x20 as f32 / 128.0));
         assert_eq!(texture_blend(0x44).1, None);
+    }
+
+    #[test]
+    fn ui_fragment_gets_encoded() {
+        let src = "#import x
+fn helper() {}
+@fragment
+fn fragment(
+    in: VertexOutput,
+) -> @location(0) vec4<f32> {
+    return in.color;
+}
+";
+        let out = encode_fragment_output(src).expect("patch");
+        assert!(out.contains("fn sh2_linear_fragment(
+    in: VertexOutput,
+) -> vec4<f32> {
+    return in.color;"));
+        assert_eq!(out.matches("@fragment").count(), 1);
+        assert!(out.contains("fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
+    let c = sh2_linear_fragment(in);"));
+        // idempotent, and unknown shapes are left alone
+        assert!(encode_fragment_output(&out).is_none());
+        assert!(encode_fragment_output("fn fragment(in: V) -> vec4<f32> { }").is_none());
     }
 
     #[test]

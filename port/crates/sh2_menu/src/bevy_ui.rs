@@ -600,7 +600,8 @@ fn ui_probe(mut commands: Commands, mut canvas: ResMut<UiCanvas>, mut spawned: L
 // (triangles from degenerate quads, per-vertex colour gradients, texel sub-rectangles / mirrored UVs).  Layers with an id
 // >= [`layer::SPRITE_BASE`] are therefore turned into real meshes: one quad (two triangles, strip order TL, BL, TR, BR) per
 // [`DrawCmd::Quad`], vertex colours converted from the GS convention (0x80 = 1.0, sRGB-encoded like everything else the game draws),
-// and one `Text2d` per [`DrawCmd::Text`].  Everything sits on render layer 1, i.e. is drawn by the UI camera
+// and one `Text2d` per [`DrawCmd::Text`].  In the gamma-space pipeline the UI camera has `CompositingSpace::Srgb`: `ColorMaterial` /
+// `Text2d` re-encode their (linear) result, so these layers blend raw display values like the GS (`sh2_gfx::bevy::material::setup_gamma_cameras`).  Everything sits on render layer 1, i.e. is drawn by the UI camera
 // (`ScalingMode::Fixed` 512x448, y up, origin at the centre), below the Bevy UI nodes of that camera; the command index is the z order.
 
 use bevy::asset::RenderAssetUsages;
@@ -694,7 +695,8 @@ fn expand_text(cmds: Vec<DrawCmd>, bank: &FontBank, pools: &mut SpritePools, tex
 
 /// The GS blends in gamma space (`Cs * a + Cd * (1 - a)` on the 8-bit frame buffer), Bevy in linear light: a half-transparent bright glyph
 /// over the dark menu backdrops comes out ~1.5x too bright (live: a greyed `Shield` row is 113 / 226 of the white text, linear blending gave
-/// 182 / 244).  For text (bright source over darker destination) `a' = a^2.2` reproduces the gamma blend over black exactly.
+/// 182 / 244).  For text (bright source over darker destination) `a' = a^2.2` reproduces the gamma blend over black exactly.  Only used
+/// when the UI blends in linear light (`SH2_LINEAR_BLEND=1`); the default pipeline composites in gamma space (`Sh2GammaCompositing`).
 fn gamma_alpha(c: Rgba) -> Rgba {
     if c.a >= 0x80 || c.a == 0 {
         return c;
@@ -755,6 +757,7 @@ pub fn render_sprite_layers(
     mut images: ResMut<Assets<Image>>,
     assets: Option<Res<crate::plugin::MenuAssets>>,
     font: Res<UiFont>,
+    compositing: Option<Res<sh2_gfx::bevy::material::Sh2GammaCompositing>>,
     windows: Query<&Window>,
     mut quads: Query<(&mut Transform, &mut Visibility, &mut MeshMaterial2d<ColorMaterial>), (With<SpriteQuad>, Without<SpriteText>)>,
     mut texts: Query<(&mut Transform, &mut Visibility, &mut Text2d, &mut TextColor, &mut TextFont, &mut bevy::sprite::Text2dShadow), (With<SpriteText>, Without<SpriteQuad>)>,
@@ -788,8 +791,10 @@ pub fn render_sprite_layers(
         }
         let mut cmds: Vec<DrawCmd> = if alive { canvas.layers[&id].cmds.clone() } else { Vec::new() };
         if let Some(b) = &bank {
-            // the gamma-space text alpha is only applied to the command menu layer (verified there); other layers keep their tuned alphas
-            cmds = expand_text(cmds, b, &mut pools, &mut textures, &mut images, id == layer::MENU2D);
+            // the gamma-space text alpha is only applied to the command menu layer (verified there); other layers keep their tuned alphas.
+            // Not needed (and wrong) once the UI camera composites in gamma space itself (`Sh2GammaCompositing`, round 6 GPA).
+            let gamma_composited = compositing.as_ref().is_some_and(|c| c.0);
+            cmds = expand_text(cmds, b, &mut pools, &mut textures, &mut images, id == layer::MENU2D && !gamma_composited);
         }
         let z0 = id as f32;
         let (mut qi, mut ti) = (0usize, 0usize);
