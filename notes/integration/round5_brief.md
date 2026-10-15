@@ -95,3 +95,10 @@ coordinator says it is loaded.  Ring: use `tools/live/ringd.py` (the game's own 
 under reverse / fast ring).  HP pin loop: BtlChr +0x7c/+0x80; bosses heal.  Never force MENU+0x300 entries 5 / 8 / 14 (hang).
 `grab.py` always writes `g.png` in the cwd.  The debug map's Battle player reaches any MONSET; killing the last boss starts the
 disc-2 ending, which retail cannot load from disc 1 (needs a state reload).
+
+## Build load (round 6, 2026-10-14)
+
+Seven agents share 40 threads.  Every cargo call: `CARGO_BUILD_JOBS=6` (cargo's jobserver also caps rustc's codegen threads).
+Use the **dev** profile (workspace crates opt-level 1, dependencies opt-level 3: already fast) for tests, dev drives and screenshots;
+`--release` only for long headless sweeps where runtime dominates (coverage `run_all`, `story_walk`), and don't alternate
+profiles on the same crate (each switch is a full non-incremental rebuild of sh2_field / sh2_battle).
