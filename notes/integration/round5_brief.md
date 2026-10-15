@@ -73,3 +73,25 @@ BATTLE.BIN are raw at 0 -- subtract the load base 0x45ea80 from US addresses), t
 * At the end append one dated `Status 2026-10-xx (round 5 <id>, ...)` paragraph to `docs/OUTLINE.md` section 4 (append only).
 * QA writes `notes/integration/coverage.md` (the whole-game matrix).  Everyone: when you fix something listed there, rerun the
   relevant QA check if it exists, or note it in your r5 file.
+
+## Round 6 (2026-10-14, second pass) -- ownership and new rules
+
+Seven agents again; everything above still applies (build rules, locks, timeout-wrapped windowed runs, read-only git).  Round-5
+results: commits `ed231e6..48c0c56`, notes `r5_*.md`, `coverage.md` (3543 / 3793 ok).  Your round-6 notes: `r6_<id>.md`.
+
+| id | area | owns |
+|----|------|------|
+| FS2 | story to the end, field scripts | `sh2_script/**`, `sh2_field/src/` except MN2 / CS2 / RG files |
+| BT | battle (party + enemy, merged) | `sh2_battle/src/*.rs` except `effects_bridge.rs` |
+| RG | field Judgement Ring screen (`RingControl`, `st.ring`) | new `sh2_field/src/field_ring.rs` (+ hooks) |
+| MN2 | menus / meta screens | `sh2_menu/**` except `movie.rs`; sh2_field menu files listed for MN above |
+| FX2 | effects + renderer | `sh2_gfx/**`, `sh2_formats/**`, `sh2_battle/src/effects_bridge.rs` |
+| CS2 | cut scenes, movies, audio | `sh2_audio/**`, `sh2_menu/src/movie.rs`, `sh2_field/src/cutscene*.rs` |
+| QA2 | coverage harness, sh2_app, final integration | `sh2_app/**`, `tools/coverage/**` |
+
+Live PCSX2 (learned in round 5): agents cannot load save states.  If you need one, send a message to `main` naming the slot
+(1 = debug map DB_00_U, throwaway; 5 = AP_02_U east stairs; 8 = AP_02_U before fight 1) and keep doing port work until the
+coordinator says it is loaded.  Ring: use `tools/live/ringd.py` (the game's own autoplayer plays every ring; timed presses fail
+under reverse / fast ring).  HP pin loop: BtlChr +0x7c/+0x80; bosses heal.  Never force MENU+0x300 entries 5 / 8 / 14 (hang).
+`grab.py` always writes `g.png` in the cwd.  The debug map's Battle player reaches any MONSET; killing the last boss starts the
+disc-2 ending, which retail cannot load from disc 1 (needs a state reload).
