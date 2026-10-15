@@ -16,7 +16,8 @@ fn main() {
         for l in r.lines.iter().take(60) {
             let t = sh2_menu::sjis::message_to_string(&l.text);
             let w = fonts[l.font as usize].as_ref().map(|f| f.measure(&t, 0)).unwrap_or(-1.0);
-            println!("{:6} x {:4} f{} k{} s{:.2} st{:02x} w {:6.1} centre {:6.1} {}", l.y, l.x, l.font, l.kind, l.scale, l.style, w, l.x as f32 + w * l.scale / 2.0, t);
+            let rw = sh2_field::cutscene_plugin::staff_line_width(fonts[l.font as usize].as_ref(), l);
+            println!("{:6} x {:4} f{} k{} s{:.2} st{:02x} fl{:02x} w {:6.1} retail {:6.1} retail_centre {:6.1} port_centre {:6.1} {}", l.y, l.x, l.font, l.kind, l.scale, l.style, l.flags, w, rw, l.x as f32 + rw * l.scale / 2.0, l.x as f32 + w * l.scale / 2.0, t);
         }
     }
 }

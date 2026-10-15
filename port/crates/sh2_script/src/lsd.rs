@@ -503,6 +503,21 @@ pub struct AnimData {
     pub events_skipped: usize,
     /// baked event keys (`TXAeye` texture-animation frames, `BLINK`, `DYNA` hair / cloth control): `name` indexes [`AnimData::event_names`]
     pub events: Vec<AnimEvent>,
+    /// (CS2 round 6) target 1 keys: blend-shape slider weights (`LSDAnim::setFrameData` -> `BlendShapeControl::changeSliderGrp(w / 255,
+    /// group, k + 1)`), sorted by time
+    pub shape_keys: Vec<ShapeKey>,
+    /// (CS2 round 6) target 8 keys: `Model::EventCallBack(.., "Visible", value, bone)` -- `name` is the event's bone word (bit 15 = atomic
+    /// group `b17`, else atomic index), `value` 0 / 1
+    pub vis_keys: Vec<AnimEvent>,
+}
+
+/// One `ANMS` blend-shape key (event record target 1): the weights (0..255) of sliders `1..=n` of every blend shape whose group is `group`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShapeKey {
+    /// time in 1/60 s
+    pub t: i32,
+    pub group: u8,
+    pub weights: Vec<u8>,
 }
 
 /// One baked event key of an `ANMS` track (record type 2, target 0 / 8: two `{u16 name_index, u16 value}` keys per 8 bytes).
@@ -580,14 +595,21 @@ impl AnimData {
                                     let name = u16::from_le_bytes([b[0], b[1]]);
                                     if target == 0 && (name as usize) < self.event_names.len() {
                                         self.events.push(AnimEvent { t: rec_t, name, value: i16::from_le_bytes([b[2], b[3]]) });
+                                    } else if target == 8 {
+                                        self.vis_keys.push(AnimEvent { t: rec_t, name, value: i16::from_le_bytes([b[2], b[3]]) });
                                     }
                                 }
                             }
                             p += count.div_ceil(2) * 8;
                         }
                         1 => {
+                            // `{u8 group, u8 n, weights}` padded to 8 bytes (`(n + 9) & !7`, `getFrameData`); `setFrameData` reads the weights
+                            // six per 8-byte block at bytes 2..7 of each block
                             for _ in 0..count {
+                                let group = payload.get(p).copied().unwrap_or(0);
                                 let len = payload.get(p + 1).copied().unwrap_or(0) as usize;
+                                let weights = (0..len).map(|i| payload.get(p + 8 * (i / 6) + 2 + i % 6).copied().unwrap_or(0)).collect();
+                                self.shape_keys.push(ShapeKey { t: rec_t, group, weights });
                                 p += (len + 9) & !7;
                             }
                         }
@@ -783,6 +805,8 @@ impl LsdContent {
                         b.pos.sort_by_key(|k| k.t);
                     }
                     a.events.sort_by_key(|e| e.t);
+                    a.shape_keys.sort_by_key(|e| e.t);
+                    a.vis_keys.sort_by_key(|e| e.t);
                 }
                 TrackData::Cam(c) => c.sort_by_key(|k| k.t),
                 _ => {}

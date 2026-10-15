@@ -192,7 +192,8 @@ struct ModelInst {
     cur_track: Option<usize>,
     anim_t: f32,
     /// next baked event key (`TXAeye` / `BLINK` / `DYNA`) of `cur_track` to apply
-    ev_next: usize,
+    /// cursors of `cur_track`: baked event keys, blend-shape keys (target 1), `Visible` keys (target 8)
+    ev_next: [usize; 3],
     /// the scene light last pushed into this model's materials (per-model lighting)
     light: Option<Sh2SceneLight>,
 }
@@ -248,6 +249,8 @@ struct Active {
     models: Vec<ModelInst>,
     maps: HashMap<usize, MapInstance>,
     shown_map: Option<usize>,
+    /// `BGEffectAlpha(id, alpha, time)` calls waiting for a shown map with background effects
+    bg_alpha: Vec<(i32, f32, f32)>,
     script: Option<ScriptRun>,
     fader: Fader,
     cine: bool,
@@ -417,7 +420,7 @@ fn begin(
         let motions = m.anims.iter().map(|(_, mo)| mo.clone()).collect();
         let holder = spawn_animated_model_ex(&mut commands, root, m.model.clone(), motions, &mats, &mut gpu, Transform::default(), &format!("lsd_{}", m.name), false);
         commands.entity(holder).insert(Visibility::Hidden);
-        models.push(ModelInst { holder, jaw: HashMap::new(), cur_track: None, anim_t: 0.0, ev_next: 0, light: None });
+        models.push(ModelInst { holder, jaw: HashMap::new(), cur_track: None, anim_t: 0.0, ev_next: [0; 3], light: None });
     }
     // script
     let script = data.script_image().and_then(|img| {
@@ -508,6 +511,7 @@ fn begin(
         models,
         maps: HashMap::new(),
         shown_map: None,
+        bg_alpha: Vec::new(),
         script,
         fader: Fader::default(),
         cine: false,
@@ -664,6 +668,8 @@ struct Gpu<'w, 's> {
     gts: Query<'w, 's, &'static GlobalTransform>,
     /// every running `.EFD` track is drawn (`FxLiveSet`, ids `2000 + track`)
     fx_set: Option<ResMut<'w, sh2_gfx::effects::render::FxLiveSet>>,
+    /// the maps' background effects (`BGEffectAlpha`)
+    bg_fx: Query<'w, 's, &'static mut sh2_gfx::effects::bgfx_render::BgFxInstance>,
 }
 
 /// Inputs and clocks.
@@ -766,7 +772,11 @@ fn apply_script_out(a: &mut Active, out: Vec<ScriptOut>, tex: &mut Option<(&mut 
                 // `CFieldBG::GetModel(id)->SetMotion(name)`: the BG models of the `Ap_xx_u` map move (locator ANMS tracks); not applied
                 debug!("cutscene script: SetBGMotion({id}, '{motion}') (map model motions are not applied)");
             }
-            ScriptOut::BgEffectAlpha { id, alpha, time } => debug!("cutscene script: BGEffectAlpha({id}, {alpha}, {time}) (not applied)"),
+            // `LSDScrEx` 0x0e: `CFieldBG::EffectAlpha((float)alpha, m_pCurrent, id, time)` -> applied to the shown map's effects in `drive`
+            ScriptOut::BgEffectAlpha { id, alpha, time } => {
+                info!("cutscene script: BGEffectAlpha({id}, {alpha}, {time}) at {:.2} s", a.head.time);
+                a.bg_alpha.push((id, alpha as f32, time as f32));
+            }
             ScriptOut::InvokeBattle => {
                 // `MCESInvokeBattle`: `BreakMCES(2)` ends the scene here (the rest of the file is the battle-entry tail the console cuts) and the
                 // battle entry (`BtlIn::CaptureBtlIn / StartBtlIn`) begins; the field is not restored (`UpdateMCES` state 0x12).  The field script,
@@ -780,12 +790,12 @@ fn apply_script_out(a: &mut Active, out: Vec<ScriptOut>, tex: &mut Option<(&mut 
 }
 
 /// Apply the baked `ANMS` event keys (`TXAeye` frames, `BLINK`, `DYNA`) that fell due.
-fn apply_anim_events(am: &mut AnimatedModel, ad: &sh2_script::lsd::AnimData, next: &mut usize, t60: i32) {
-    while let Some(e) = ad.events.get(*next) {
+fn apply_anim_events(am: &mut AnimatedModel, ad: &sh2_script::lsd::AnimData, next: &mut [usize; 3], t60: i32) {
+    while let Some(e) = ad.events.get(next[0]) {
         if e.t > t60 {
             break;
         }
-        *next += 1;
+        next[0] += 1;
         let Some(name) = ad.event_names.get(e.name as usize) else { continue };
         if let Some(tx) = name.strip_prefix("TXA") {
             am.inst.change_texture_anim(tx, e.value as i32);
@@ -797,6 +807,57 @@ fn apply_anim_events(am: &mut AnimatedModel, ad: &sh2_script::lsd::AnimData, nex
                 d.dyna_function(e.value as i32);
             }
         }
+    }
+    // target 1 (`setFrameData` JP 0x003c67b0): `changeSliderGrp(w / 255, group, k + 1)` on every blend shape of the group (lip / face shapes)
+    let mut dirty = vec![false; am.inst.model.blend_shapes.len()];
+    while let Some(k) = ad.shape_keys.get(next[1]) {
+        if k.t > t60 {
+            break;
+        }
+        next[1] += 1;
+        apply_shape_key(&mut am.inst, k, &mut dirty);
+    }
+    for (si, d) in dirty.iter().enumerate() {
+        if *d {
+            am.inst.shape_geometry[si] = sh2_gfx::model::instance::blend_shape_geometry(&am.inst.model.blend_shapes[si], &am.inst.shape_weights[si]);
+        }
+    }
+    // target 8: `Model::EventCallBack(.., "Visible", value, bone)` -- bit 15 = every atomic of group `b17`, else the atomic index
+    while let Some(k) = ad.vis_keys.get(next[2]) {
+        if k.t > t60 {
+            break;
+        }
+        next[2] += 1;
+        set_visible_key(&mut am.inst, k.name, k.value != 0);
+    }
+}
+
+/// One `ANMS` target-1 key: slider `j + 1` of every blend shape of `k.group` = `weights[j] / 255` (`FUN_0024a300` -> `changeSlider`).
+pub fn apply_shape_key(inst: &mut sh2_gfx::model::ModelInstance, k: &sh2_script::lsd::ShapeKey, dirty: &mut [bool]) {
+    for (si, sh) in inst.model.blend_shapes.iter().enumerate() {
+        if sh.group != k.group {
+            continue;
+        }
+        for (j, &w) in k.weights.iter().enumerate() {
+            if let Some(slot) = inst.shape_weights.get_mut(si).and_then(|v| v.get_mut(j + 1)) {
+                *slot = w as f32 * 0.003921568;
+            }
+        }
+        if let Some(d) = dirty.get_mut(si) {
+            *d = true;
+        }
+    }
+}
+
+/// `Visible` event with the bone word `bone` (`Model::EventCallBack`, same mapping as the motion event in `ModelInstance::apply_events`).
+pub fn set_visible_key(inst: &mut sh2_gfx::model::ModelInstance, bone: u16, on: bool) {
+    if bone & 0x8000 != 0 {
+        let g = (bone & 0x7fff) as u8;
+        if let Some(i) = inst.model.atomics.iter().position(|a| a.b17 == g) {
+            inst.visible[i] = on;
+        }
+    } else if let Some(v) = inst.visible.get_mut(bone as usize) {
+        *v = on;
     }
 }
 
@@ -822,7 +883,7 @@ fn drive(
     let Some(a) = rt.0.as_mut() else { return };
     let speed = std::env::var("SH2_CUTSCENE_SPEED").ok().and_then(|v| v.parse::<f32>().ok()).unwrap_or(1.0).clamp(0.1, 32.0);
     let gamma = space.map(|s| s.gamma).unwrap_or(true);
-    let Gpu { meshes, images, materials, bg_models, gts, fx_set } = &mut gpu;
+    let Gpu { meshes, images, materials, bg_models, gts, fx_set, bg_fx } = &mut gpu;
     // ---- START pause / TRIANGLE skip (`CLSDPauser`)
     let mut skipped = false;
     if a.pause_rule {
@@ -997,6 +1058,19 @@ fn drive(
         let mut texs = ui_tex.as_deref_mut().map(|t| (t, &mut **images));
         apply_script_out(a, out, &mut texs);
     }
+    // ---- `BGEffectAlpha`: `BgEffectMan::EffectAlpha` -> element vtable `+0x34` (fade to `alpha` over `time` frames) on the current map
+    // (`m_pCurrent` = the shown map; a map without effects ignores it; before any map is shown the call waits for the first one)
+    if !a.bg_alpha.is_empty() {
+        if let Some(m) = a.shown_map.and_then(|t| a.maps.get(&t)) {
+            let mut fx = m.fx.and_then(|e| bg_fx.get_mut(e).ok());
+            for (id, alpha, time) in a.bg_alpha.drain(..) {
+                match fx.as_mut() {
+                    Some(fx) => fx.fx.fade_slot(id as u16, alpha, time),
+                    None => debug!("cutscene: BGEffectAlpha({id}) on a map without background effects"),
+                }
+            }
+        }
+    }
     // ---- vibration sequences (`CVibeMan::Polling`, elapsed ms; muted while the START pause is up, `CLSDPauser` -> `SetMute`)
     {
         let ms = (dt * 1000.0).round() as u32;
@@ -1153,12 +1227,12 @@ fn drive(
             am.auto_restart = false;
             am.speed = if real > 1e-4 { dt / real } else { 0.0 };
             if inst.cur_track != Some(*tr) {
-                inst.ev_next = 0;
+                inst.ev_next = [0; 3];
                 inst.cur_track = Some(*tr);
                 am.play(&name);
                 am.inst.add_time(target);
             } else if (am.inst.time() - target).abs() > 0.04 {
-                inst.ev_next = 0;
+                inst.ev_next = [0; 3];
                 am.play(&name);
                 am.inst.add_time(target);
             }
@@ -1292,6 +1366,14 @@ fn update_movies(a: &mut Active, commands: &mut Commands, images: &mut Assets<Im
     use ::bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
     use sh2_menu::movie::MovieMsg;
     let now = a.head.time;
+    // the staff roll's shrink-blur filter is up from the roll's start until its last object has left (`Event`: `+0x3d6`)
+    let blur = a
+        .data
+        .staff
+        .iter()
+        .filter(|(ti, r)| r.dim < 1.0 && a.head.states.get(*ti).map(|s| s.alive).unwrap_or(false) && r.scroll_at(now).map(|sc| sc <= r.end_scroll() + 448.0).unwrap_or(false))
+        .map(|(_, r)| r.dim)
+        .next();
     for (tr, m) in a.movies.iter_mut() {
         if m.failed {
             continue;
@@ -1365,7 +1447,11 @@ fn update_movies(a: &mut Active, commands: &mut Commands, images: &mut Assets<Im
             m.decoded += 1;
             latest = Some(f);
         }
-        if let (Some(f), Some(mut img)) = (latest, m.image.as_ref().and_then(|h| images.get_mut(h))) {
+        if let (Some(mut f), Some(mut img)) = (latest, m.image.as_ref().and_then(|h| images.get_mut(h))) {
+            if let Some(dim) = blur {
+                let (w, h) = (img.width() as usize, img.height() as usize);
+                staff_blur(&mut f, w, h, dim);
+            }
             img.data = Some(f);
         }
         if let Some(n) = m.node {
@@ -1416,8 +1502,113 @@ fn render_caption(font: &sh2_menu::gamefont::GameFont, text: &str) -> Option<sh2
     Some(sh2_menu::gamefont::TextImage { width: w as u32, height: h as u32, pixels: px })
 }
 
-/// Centre column of the staff roll lines (512 x 448 frame), measured from the data (see [`draw_staff_roll`]).
-pub const STAFF_CENTRE: f32 = 133.0;
+/// Per-glyph pen advance of a staff-roll line (`FUN_00269d00`, the measure of the text objects `FUN_00279d10` / `FUN_00279f00`): with the
+/// proportional bit (record byte `+0xe` bit 7 -> text object `+0x58` bit 3) a glyph advances by its metric byte 1 (`GetFont` out `+4`),
+/// otherwise by the font's whole cell (`+0xa`: the cell width, `(cell + 1) / 2` for single-byte codes); every glyph adds the letter spacing
+/// (record `+0xb`, plus the outline style bits 3..5 of `+0xe` when bit 6 is set) and the last spacing is taken off again.
+fn staff_glyphs(font: &sh2_menu::gamefont::GameFont, l: &crate::cutscene::StaffLine) -> (Vec<(char, i32, Option<(usize, usize)>)>, i32) {
+    let txt = sh2_menu::sjis::message_to_string(&l.text);
+    let prop = l.style & 0x80 != 0;
+    let spacing = l.kind as i32 + if l.style & 0x40 != 0 { ((l.style >> 3) & 7) as i32 } else { 0 };
+    let mut pen = 0i32;
+    let mut out = Vec::new();
+    for ch in txt.chars() {
+        let half = sh2_menu::sjis::encode(&ch.to_string()).len() == 1;
+        let g = font.debug_glyph(ch).map(|(_, xo, adv)| (xo, adv));
+        if g.is_none() && ch != ' ' && ch != '\u{3000}' {
+            continue;
+        }
+        let cell = if half { (font.cell_w as i32 + 1) >> 1 } else { font.cell_w as i32 };
+        let adv = match (prop, g) {
+            (true, Some((_, a))) => a as i32,
+            _ => cell,
+        };
+        out.push((ch, pen, g));
+        pen += adv + spacing;
+    }
+    (out, (pen - spacing).max(0))
+}
+
+/// Width (font pixels, before the record scale) of a staff-roll line as the console measures it ([`staff_glyphs`]).
+pub fn staff_line_width(font: Option<&sh2_menu::gamefont::GameFont>, l: &crate::cutscene::StaffLine) -> f32 {
+    font.map(|f| staff_glyphs(f, l).1 as f32).unwrap_or(0.0)
+}
+
+/// Rasterise a staff-roll line with the console's glyph placement ([`staff_glyphs`]): a proportional glyph is drawn at the pen (its
+/// stored columns are the cropped glyph), a cell glyph `x_offset` pixels into its cell.
+fn render_staff_line(font: &sh2_menu::gamefont::GameFont, l: &crate::cutscene::StaffLine) -> Option<sh2_menu::gamefont::TextImage> {
+    let (glyphs, width) = staff_glyphs(font, l);
+    let w = width.max(1) as usize + 1;
+    let h = font.cell_h;
+    let pal = font.palette(0);
+    let prop = l.style & 0x80 != 0;
+    let mut px = vec![0u8; w * h * 4];
+    for (ch, pen, g) in glyphs {
+        let Some((xo, adv)) = g else { continue };
+        let raw = font.debug_raw(ch);
+        let bpr = adv.div_ceil(4).max(1);
+        let x0 = pen + if prop { 0 } else { xo as i32 };
+        for y in 0..h {
+            for sx in 0..adv {
+                let b = raw.get(y * bpr + sx / 4).copied().unwrap_or(0);
+                let level = ((b >> ((sx & 3) * 2)) & 3) as usize;
+                if level == 0 {
+                    continue;
+                }
+                let dx = x0 + sx as i32;
+                if dx < 0 || dx as usize >= w {
+                    continue;
+                }
+                let o = (y * w + dx as usize) * 4;
+                let e = pal[level];
+                px[o..o + 3].copy_from_slice(&e[..3]);
+                px[o + 3] = (e[3] as u32 * 2).min(255) as u8;
+            }
+        }
+    }
+    Some(sh2_menu::gamefont::TextImage { width: w as u32, height: h as u32, pixels: px })
+}
+
+/// Centre column of the staff roll lines (512 x 448 frame): what the console's measure ([`staff_line_width`]) gives for every line of the data.
+pub const STAFF_CENTRE: f32 = 128.5;
+
+/// The staff roll's screen filter (`SRDT` `dim` < 1, US 0x00291700 -> object `+0x390`, ctor 0x003cff80, OT 0xe): every frame the screen is
+/// copied into a 512 x 448 target **shrunk** to `dim` of its size (bilinear sprite, 0x003d19f0) and drawn back over the whole screen from that
+/// smaller region (bilinear sprite, 0x003d0460, vertex colour 0x80 = unity, no darkening).  At 0.9 that is a slight soft-focus blur of the film
+/// behind the roll.  The port runs the same two bilinear resamples on the film picture (`update_movies`).
+pub fn staff_blur(rgba: &mut [u8], w: usize, h: usize, dim: f32) {
+    if !(0.05..1.0).contains(&dim) || rgba.len() < w * h * 4 {
+        return;
+    }
+    let sw = ((w as f32 * dim) as usize).max(1);
+    let sh = ((h as f32 * dim) as usize).max(1);
+    let sample = |src: &[u8], sw0: usize, sh0: usize, x: f32, y: f32, c: usize| -> f32 {
+        let x = x.clamp(0.0, (sw0 - 1) as f32);
+        let y = y.clamp(0.0, (sh0 - 1) as f32);
+        let (x0, y0) = (x.floor() as usize, y.floor() as usize);
+        let (x1, y1) = ((x0 + 1).min(sw0 - 1), (y0 + 1).min(sh0 - 1));
+        let (fx, fy) = (x - x0 as f32, y - y0 as f32);
+        let p = |xx: usize, yy: usize| src[(yy * sw0 + xx) * 4 + c] as f32;
+        (p(x0, y0) * (1.0 - fx) + p(x1, y0) * fx) * (1.0 - fy) + (p(x0, y1) * (1.0 - fx) + p(x1, y1) * fx) * fy
+    };
+    let mut small = vec![0u8; sw * sh * 4];
+    for y in 0..sh {
+        for x in 0..sw {
+            let (u, v) = ((x as f32 + 0.5) / dim - 0.5, (y as f32 + 0.5) / dim - 0.5);
+            for c in 0..4 {
+                small[(y * sw + x) * 4 + c] = sample(rgba, w, h, u, v, c).round() as u8;
+            }
+        }
+    }
+    for y in 0..h {
+        for x in 0..w {
+            let (u, v) = ((x as f32 + 0.5) * dim - 0.5, (y as f32 + 0.5) * dim - 0.5);
+            for c in 0..4 {
+                rgba[(y * w + x) * 4 + c] = sample(&small, sw, sh, u, v, c).round() as u8;
+            }
+        }
+    }
+}
 
 /// The staff roll of an `SRDT` track (see [`crate::cutscene::StaffRoll`]): every line / picture inside the frame at the current scroll, drawn
 /// with the pack's own fonts at the record's scale.  The roll is not affected by the Subtitles option (it is not a caption).
@@ -1430,10 +1621,7 @@ fn draw_staff_roll(a: &mut Active, g: &mut dyn sh2_menu::gfx::MenuGfx, mut ui_te
         if scroll > roll.end_scroll() + 448.0 {
             continue;
         }
-        // `dim < 1`: the handler lays a screen filter of that level behind the roll (`FUN_003d01b0(.., 0xe)` + `FUN_003d03f0(dim, ..)`); drawn as a black veil
-        if roll.dim < 1.0 {
-            sh2_menu::bevy_ui::rect(g, 0.0, 0.0, 512.0, 448.0, sh2_menu::gfx::Rgba::new(0, 0, 0, ((1.0 - roll.dim.max(0.0)) * 128.0) as u8));
-        }
+        // `dim < 1` is not a veil: it is the shrink-blur screen filter (see `staff_blur`), applied to the film picture in `update_movies`
         let Some(tex) = ui_tex.as_deref_mut() else { continue };
         let fonts = a.staff_fonts.entry(*ti).or_insert_with(|| (0..4).map(|i| roll.font(i)).collect());
         for (li, l) in roll.lines.iter().enumerate() {
@@ -1444,18 +1632,14 @@ fn draw_staff_roll(a: &mut Active, g: &mut dyn sh2_menu::gfx::MenuGfx, mut ui_te
             let key = (*ti, li, false);
             let entry = a.staff_tex.entry(key).or_insert_with(|| {
                 let font = fonts.get(l.font as usize).and_then(|f| f.as_ref()).or_else(|| fonts.iter().flatten().next())?;
-                let txt = sh2_menu::sjis::message_to_string(&l.text);
-                let img = font.render(&txt, 0, 0)?;
+                let img = render_staff_line(font, l)?;
                 let id = tex.add(images, img.width, img.height, img.pixels);
                 Some((id, img.width as f32, img.height as f32))
             });
             if let Some((id, w, h)) = *entry {
-                // every line of the roll is centred on one column (x + width / 2 = STAFF_CENTRE in the data: the all-caps role lines of
-                // font 0 land on 132..134 at the record scale); the port's glyph advances of the lower-case full-width letters are wider than
-                // the console's, so a line is narrowed to keep that centre (at most to 60 %)
-                let nat = w * l.scale;
-                let fit = 2.0 * (STAFF_CENTRE - l.x as f32);
-                let dw = if fit > 0.0 { fit.clamp(nat * 0.6, nat) } else { nat };
+                // the console's measure (`staff_glyphs`) puts every line of the data on one centre column (x + width * scale / 2 = 128.5 +- 0.5);
+                // record flag bit 0 (`+0x58` bit 4) = the object width is scaled with the glyphs (set on every line of both rolls)
+                let dw = if l.flags & 1 != 0 { w * l.scale } else { w };
                 sh2_menu::bevy_ui::image(g, id, l.x as f32, sy, dw, h * l.scale, 0x80);
             }
         }
@@ -1846,6 +2030,68 @@ fn fx_layers(mut commands: Commands, rt: Res<CutsceneRuntime>, roots: Query<Enti
     }
 }
 
+/// [`sh2_menu::movie::MovieRequest`]s (the title's `OPENING/DEMO.LSD`, the old Theater / field movie routes) on the cut scene player
+/// ([`sh2_menu::movie::MovieDelegate`]): the request starts a [`CutsceneRequest`] of the same path, [`sh2_menu::movie::MovieStatus`] mirrors the
+/// scene (Loading -> Playing once the scene runs -> Finished / Failed, one generation per request) and the request is removed at the end; removing
+/// the request early (the title's `PauseExitMovie`) ends the scene.
+fn movie_request_bridge(
+    mut commands: Commands,
+    req: Option<Res<sh2_menu::movie::MovieRequest>>,
+    status: Option<ResMut<sh2_menu::movie::MovieStatus>>,
+    cstatus: Res<CutsceneStatus>,
+    mut cut: ResMut<CutsceneRuntime>,
+    pending: Option<Res<CutsceneRequest>>,
+    mut active: Local<Option<u32>>,
+) {
+    use sh2_menu::movie::MovieState;
+    let Some(mut status) = status else { return };
+    match (*active, req.as_ref()) {
+        (None, Some(r)) => {
+            if cut.0.is_some() || pending.is_some() {
+                return;
+            }
+            info!("movie {}: on the cut scene player", r.path);
+            status.generation += 1;
+            *status = sh2_menu::movie::MovieStatus { state: MovieState::Loading, generation: status.generation, ..Default::default() };
+            commands.insert_resource(CutsceneRequest { name: r.path.clone(), skippable: r.skippable, pad_pause: false });
+            *active = Some(cstatus.generation + 1);
+        }
+        (Some(g), r) => {
+            let mine = cstatus.generation >= g;
+            if mine && cut.0.is_some() {
+                status.state = MovieState::Playing;
+                status.elapsed_secs = cstatus.ticks / 30.0;
+                status.frames_shown = cstatus.frames as usize;
+                if r.is_none() {
+                    // the owner removed the request (`LSDPlayer::Pause` + stop)
+                    info!("movie: request removed, stopping the scene");
+                    if let Some(a) = cut.0.as_mut() {
+                        a.finished = true;
+                    }
+                }
+            } else if mine && matches!(cstatus.state, CutsceneState::Finished | CutsceneState::Failed) {
+                status.state = match (cstatus.state, r.is_some()) {
+                    (CutsceneState::Failed, _) => MovieState::Failed,
+                    (_, false) => MovieState::Skipped,
+                    _ => MovieState::Finished,
+                };
+                status.error = cstatus.error.clone();
+                commands.remove_resource::<sh2_menu::movie::MovieRequest>();
+                commands.insert_resource(sh2_menu::movie::MovieSkipPolicy::Direct);
+                *active = None;
+            } else if !mine && cut.0.is_none() && pending.is_none() {
+                // `begin` refused the file (it does not count a generation then)
+                warn!("movie: the cut scene player could not start it: {:?}", cstatus.error);
+                status.state = MovieState::Failed;
+                status.error = cstatus.error.clone();
+                commands.remove_resource::<sh2_menu::movie::MovieRequest>();
+                *active = None;
+            }
+        }
+        (None, None) => {}
+    }
+}
+
 pub struct CutscenePlugin;
 
 impl Plugin for CutscenePlugin {
@@ -1862,12 +2108,15 @@ impl Plugin for CutscenePlugin {
         }
         app.add_plugins(sh2_gfx::effects::bgfx_render::BgFxPlugin); // E2 hook: map background effects of the cutscene maps
         app.add_plugins(attract::AttractPlugin);
+        if std::env::var_os("SH2_TITLE_MOVIE_PLAYER").is_none() {
+            app.insert_resource(sh2_menu::movie::MovieDelegate);
+        }
         app.init_resource::<CutsceneRuntime>()
             .init_resource::<CutsceneStatus>()
             .init_resource::<CutsceneTiming>()
             .init_resource::<FieldMcesBridge>()
             .init_resource::<ScenePlayStatus>()
-            .add_systems(Update, (tag_field_camera, field_bridge, scene_play_bridge, begin, drive.before(sh2_gfx::bevy::model::animate_models), fx_layers, forward_vibration).chain())
+            .add_systems(Update, (tag_field_camera, field_bridge, scene_play_bridge, movie_request_bridge, begin, drive.before(sh2_gfx::bevy::model::animate_models), fx_layers, forward_vibration).chain())
             .add_systems(PostUpdate, (apply_camera, hold_environment).before(::bevy::transform::TransformSystems::Propagate))
             .add_systems(PostUpdate, (apply_model_lights, objse_listener).after(::bevy::transform::TransformSystems::Propagate));
     }

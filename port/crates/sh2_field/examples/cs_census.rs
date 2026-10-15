@@ -173,6 +173,23 @@ fn main() {
                 LgdtKind::Other => notes.push(format!("LGDT other {} ({} B, {:02x?})", b.name, b.data.len(), &b.data[..8.min(b.data.len())])),
             }
         }
+        // face / visibility keys of the model ANMS tracks (round 6): target 1 = blend-shape sliders, target 8 = `Visible`, target 9 toggles
+        for m in &data.models {
+            let (mut sk, mut vk, mut tg, mut groups) = (0usize, 0usize, 0usize, std::collections::BTreeSet::new());
+            for (tr, _) in &m.anims {
+                if let Some(sh2_script::lsd::TrackData::Anim(ad)) = data.content.data.get(*tr) {
+                    sk += ad.shape_keys.len();
+                    vk += ad.vis_keys.len();
+                    tg += ad.interp_toggles.len();
+                    groups.extend(ad.shape_keys.iter().map(|k| k.group));
+                }
+            }
+            let shapes: Vec<(String, u8, usize)> = m.model.blend_shapes.iter().map(|b| (b.name.clone(), b.group, b.targets.len())).collect();
+            if sk + vk + tg > 0 || !shapes.is_empty() {
+                let unmatched: Vec<u8> = groups.iter().copied().filter(|g| !shapes.iter().any(|s| s.1 == *g)).collect();
+                notes.push(format!("ANMS {}: shape keys {sk} (groups {groups:?}, no shape for {unmatched:?}), visible keys {vk}, toggles {tg}, shapes {shapes:?}", m.name));
+            }
+        }
         // script dry run
         let mut ops = BTreeMap::<(u8, u8), usize>::new();
         let mut outs = Vec::<ScriptOut>::new();
@@ -215,7 +232,13 @@ fn main() {
                                     }
                                 }
                             }
+                            let before = host.out.len();
                             vm.poll(&mut host);
+                            for o in &host.out[before..] {
+                                if matches!(o, ScriptOut::BgEffectAlpha { .. } | ScriptOut::InvokeBattle | ScriptOut::NextBgm(_) | ScriptOut::FadeBgm(_)) {
+                                    notes.push(format!("t {:.2} s: {o:?}", head.ticks() / 30.0));
+                                }
+                            }
                             if head.finished() {
                                 break;
                             }
@@ -246,6 +269,19 @@ fn main() {
                     if !data.lgdt.iter().any(|b| b.name.eq_ignore_ascii_case(name)) {
                         notes.push(format!("DspImage {name} missing"));
                     }
+                }
+                ScriptOut::BgEffectAlpha { id, alpha, time } => {
+                    // the elements it fades: EFFECT records of the scene's maps with `s16 +0 == id` (`CFieldBG::EffectAlpha`)
+                    let mut hits = Vec::new();
+                    for &t in &data.map_tracks {
+                        if let Some(raw) = data.content.raw(t) {
+                            let recs = sh2_gfx::effects::sbd::parse_sbd_full(raw).fx_records();
+                            let n = recs.iter().filter(|r| r.slot as i32 == *id).count();
+                            let fx = sh2_gfx::effects::bgfx::BgFx::new(&recs, 1);
+                            hits.push(format!("{} {n} recs (kinds {:?}), unsupported here {:?}, {} elements in the map", data.content.tracks[t].body_str(0), recs.iter().filter(|r| r.slot as i32 == *id).map(|r| r.kind).collect::<Vec<_>>(), fx.unsupported.iter().filter(|u| u.0 as i32 == *id).collect::<Vec<_>>(), fx.len()));
+                        }
+                    }
+                    notes.push(format!("BGEffectAlpha({id}, {alpha}, {time}): {hits:?}"));
                 }
                 ScriptOut::NextBgm(name) => {
                     if !data.lgdt.iter().any(|b| b.name.eq_ignore_ascii_case(name)) {

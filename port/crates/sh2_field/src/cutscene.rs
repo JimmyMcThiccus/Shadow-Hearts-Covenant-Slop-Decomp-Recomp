@@ -16,7 +16,7 @@
 use sh2_formats::math::{FVector, Quaternion, SVector};
 use sh2_formats::model::Model;
 use sh2_formats::motion::{BoneTrack, Motion};
-use sh2_script::lsd::{code, AnimData, AnimKey, CamKey, LsdContent, LsdEvent, TrackData, TrackHeader, TrackKind};
+use sh2_script::lsd::{code, AnimData, CamKey, LsdContent, LsdEvent, TrackData, TrackHeader, TrackKind};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -26,58 +26,71 @@ use std::sync::Arc;
 
 /// `ANMS` keys -> a main motion at 60 key frames per second (so a key time in 1/60 s is a key frame).
 ///
-/// `LSDAnim::setFrameData` holds the previous key until the next one is reached unless interpolation was switched on by an
-/// event-9 key; to reproduce the hold with a linear sampler a copy of the previous key is inserted one frame before every key
-/// that follows a gap.
+/// `LSDAnim::setFrameData` (JP 0x003c67b0) slerps / lerps between neighbouring keys while bit 0 of `LSDAnim+0x74` is set and holds the
+/// previous key while it is clear.  The constructor (0x003c6560) sets the bit; every event-9 key toggles it, `getFrameData` (0x003c7750)
+/// queues the toggle one file tick (2 units of 1/60 s) after its record time.  With the toggle off a copy of the previous key is inserted
+/// one frame before the next key, so the linear sampler reproduces the hold; keys one tick apart (dense 30 Hz data) are interpolated at
+/// the display rate either way (the console shows each tick as one frame).
 pub fn build_motion(a: &AnimData, name: &str) -> Motion {
     let mut max_t = 0i32;
     let mut tracks = Vec::with_capacity(a.bones.len());
-    let hold = |keys: &[AnimKey]| -> (Vec<u16>, Vec<[i16; 4]>) {
-        let mut times = Vec::with_capacity(keys.len());
-        let mut vals: Vec<[i16; 4]> = Vec::with_capacity(keys.len());
-        for k in keys {
-            let t = k.t.clamp(0, 65534);
-            if let (Some(&pt), Some(pv)) = (times.last(), vals.last().copied()) {
-                // keys one tick (2 units of 1/60 s) apart are dense 30 Hz data: the console shows each tick as one frame, the port
-                // interpolates between them at the display rate; only a longer gap holds the previous key (`setFrameData`)
-                if t > pt as i32 + 2 {
-                    times.push((t - 1) as u16);
-                    vals.push(pv);
-                }
-                if t <= pt as i32 {
+    let mut toggles: Vec<i32> = a.interp_toggles.iter().map(|t| t + 2).collect();
+    toggles.sort_unstable();
+    // interpolation state of frame `f` (bit 0 of `+0x74`: on at construction, flipped by every toggle at or before `f`)
+    let interp_at = |f: i32| toggles.iter().take_while(|&&t| t <= f).count() % 2 == 0;
+    fn hold<V: Copy>(keys: &[(i32, V)], interp_at: &dyn Fn(i32) -> bool, lerp: &dyn Fn(&V, &V, f32) -> V) -> (Vec<u16>, Vec<V>) {
+        let mut times: Vec<u16> = Vec::with_capacity(keys.len());
+        let mut vals: Vec<V> = Vec::with_capacity(keys.len());
+        for &(t, v) in keys {
+            let t = t.clamp(0, 65534);
+            if let (Some(&pt), Some(&pv)) = (times.last(), vals.last()) {
+                let pt = pt as i32;
+                if t <= pt {
                     // duplicate time: later key wins
-                    *vals.last_mut().unwrap() = k.v;
+                    *vals.last_mut().unwrap() = v;
                     continue;
+                }
+                if t > pt + 2 {
+                    let on: Vec<bool> = (pt + 1..t).map(interp_at).collect();
+                    if on.iter().all(|&b| !b) {
+                        times.push((t - 1) as u16);
+                        vals.push(pv);
+                    } else if !on.iter().all(|&b| b) {
+                        // the toggle changes inside the gap: one explicit key per frame
+                        for (i, f) in (pt + 1..t).enumerate() {
+                            times.push(f as u16);
+                            vals.push(if on[i] { lerp(&pv, &v, (f - pt) as f32 / (t - pt) as f32) } else { pv });
+                        }
+                    }
                 }
             }
             times.push(t as u16);
-            vals.push(k.v);
+            vals.push(v);
         }
         (times, vals)
-    };
+    }
+    let s = |v: i16| v as f32 / 4096.0;
+    let qlerp = |a: &Quaternion, b: &Quaternion, u: f32| Quaternion::slerp(a, b, u);
+    let vlerp = |a: &FVector, b: &FVector, u: f32| FVector::new(a.x + (b.x - a.x) * u, a.y + (b.y - a.y) * u, a.z + (b.z - a.z) * u, 1.0);
     for b in &a.bones {
-        let (rt, rv) = hold(&b.rot);
-        let (pt, pv) = hold(&b.pos);
         for k in b.rot.iter().chain(b.pos.iter()) {
             max_t = max_t.max(k.t);
         }
-        let s = |v: i16| v as f32 / 4096.0;
-        tracks.push(BoneTrack {
-            name: b.name.clone(),
-            rot_times: rt,
-            rot_keys: rv.iter().map(|v| Quaternion::new(s(v[0]), s(v[1]), s(v[2]), s(v[3]))).collect(),
-            pos_times: pt,
-            pos_keys: pv
-                .iter()
-                .map(|v| {
-                    let mut b = [0u8; 8];
-                    for (i, x) in v.iter().enumerate() {
-                        b[i * 2..i * 2 + 2].copy_from_slice(&x.to_le_bytes());
-                    }
-                    SVector::short_to_float(&b)
-                })
-                .collect(),
-        });
+        let rot: Vec<(i32, Quaternion)> = b.rot.iter().map(|k| (k.t, Quaternion::new(s(k.v[0]), s(k.v[1]), s(k.v[2]), s(k.v[3])))).collect();
+        let pos: Vec<(i32, FVector)> = b
+            .pos
+            .iter()
+            .map(|k| {
+                let mut raw = [0u8; 8];
+                for (i, x) in k.v.iter().enumerate() {
+                    raw[i * 2..i * 2 + 2].copy_from_slice(&x.to_le_bytes());
+                }
+                (k.t, SVector::short_to_float(&raw))
+            })
+            .collect();
+        let (rot_times, rot_keys) = hold(&rot, &interp_at, &qlerp);
+        let (pos_times, pos_keys) = hold(&pos, &interp_at, &vlerp);
+        tracks.push(BoneTrack { name: b.name.clone(), rot_times, rot_keys, pos_times, pos_keys });
     }
     Motion { name: name.to_owned(), frame_count: (max_t + 2).clamp(1, 65535) as u16, flags: 2, end_adjusted: 0, fps: 60, tracks, events: Vec::new(), byte_len: 0 }
 }
@@ -588,12 +601,15 @@ pub struct StaffLine {
     pub y: i32,
     /// font of the pack (0..3)
     pub font: u8,
-    /// record byte +0xb (copied to the text object `+0x5a`; 0 / 1 / 3 in the data)
+    /// record byte +0xb: the letter spacing (text object `+0x5a`, added after every glyph by the measure `FUN_00269d00`; 0 / 1 / 3 in the data)
     pub kind: u8,
     /// glyph scale (`byte +0xd / 100`: 0.8)
     pub scale: f32,
-    /// record byte +0xe (style bits)
+    /// record byte +0xe: bits 0..2 font kind (`+0x58`), bits 3..5 / 6 outline style (`+0x5e`), bit 7 = proportional measure (`+0x58` bit 3:
+    /// glyph advance = metric byte 1; clear = the whole cell / half cell per glyph)
     pub style: u8,
+    /// record byte +0xf: bit 0 = the object width is scaled (`+0x58` bit 4), bit 1 = created (run time)
+    pub flags: u8,
 }
 
 /// One picture of the staff roll (logos at the end).
@@ -647,6 +663,7 @@ impl StaffRoll {
                 kind: r[11],
                 scale: if r[13] == 0 { 1.0 } else { r[13] as f32 / 100.0 },
                 style: r[14],
+                flags: r[15],
             });
         }
         let mut images = Vec::with_capacity(n_img);
@@ -957,21 +974,35 @@ fn _unused(_: FVector) {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sh2_script::lsd::AnimKey;
 
     fn jp() -> Option<sh2_core::fileio::Disc> {
         sh2_core::fileio::Disc::from_env()
     }
 
     #[test]
-    fn motion_holds_previous_key_until_the_next() {
-        let a = AnimData { model: "m".into(), bones: vec![sh2_script::lsd::BoneKeys { name: "B".into(), rot: vec![AnimKey { t: 0, v: [0, 0, 0, 4096] }, AnimKey { t: 10, v: [0, 2896, 0, 2896] }], pos: vec![] }], ..Default::default() };
+    fn motion_interpolates_unless_toggled_off() {
+        let bones = vec![sh2_script::lsd::BoneKeys { name: "B".into(), rot: vec![AnimKey { t: 0, v: [0, 0, 0, 4096] }, AnimKey { t: 10, v: [0, 2896, 0, 2896] }, AnimKey { t: 40, v: [0, 0, 0, 4096] }], pos: vec![] }];
+        // default (bit 0 of `LSDAnim+0x74` set by the constructor): slerp between the keys
+        let a = AnimData { model: "m".into(), bones: bones.clone(), ..Default::default() };
         let m = build_motion(&a, "x");
         assert_eq!(m.fps, 60);
         let t = m.track("B").unwrap();
-        // held at the identity until one frame before the second key, then the second key
-        assert!((t.rotation_at(5.0).w - 1.0).abs() < 1e-3);
+        assert!(t.rotation_at(5.0).w < 0.99, "half way between identity and 90 deg: {:?}", t.rotation_at(5.0));
         assert!((t.rotation_at(10.0).y - 0.707).abs() < 1e-2);
         assert!(m.is_main() && m.duration() > 10.0 / 60.0);
+        // a toggle at record time -2 (takes effect at 0): held at the identity until one frame before the second key
+        let a = AnimData { model: "m".into(), bones: bones.clone(), interp_toggles: vec![-2], ..Default::default() };
+        let m = build_motion(&a, "x");
+        let t = m.track("B").unwrap();
+        assert!((t.rotation_at(5.0).w - 1.0).abs() < 1e-3);
+        assert!((t.rotation_at(10.0).y - 0.707).abs() < 1e-2);
+        // toggled back on at 20 inside the 10..40 gap: held until 20, then interpolated towards the third key
+        let a = AnimData { model: "m".into(), bones, interp_toggles: vec![-2, 18], ..Default::default() };
+        let m = build_motion(&a, "x");
+        let t = m.track("B").unwrap();
+        assert!((t.rotation_at(15.0).y - 0.707).abs() < 1e-2, "held: {:?}", t.rotation_at(15.0));
+        assert!(t.rotation_at(30.0).y < 0.6 && t.rotation_at(30.0).y > 0.1, "interpolating: {:?}", t.rotation_at(30.0));
     }
 
     #[test]

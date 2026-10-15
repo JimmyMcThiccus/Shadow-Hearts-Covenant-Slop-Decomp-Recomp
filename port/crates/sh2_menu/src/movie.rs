@@ -530,8 +530,18 @@ fn movie_root() -> PathBuf {
     std::env::var_os("SH2_DISC_DIR").map(PathBuf::from).unwrap_or_else(|| ".".into())
 }
 
-fn start_movie(req: Option<Res<MovieRequest>>, mut rt: ResMut<MovieRuntime>, mut status: ResMut<MovieStatus>, cfg: Option<Res<sh2_core::app::AppConfig>>) {
+/// Present while another player takes the [`MovieRequest`]s (`sh2_field::cutscene_plugin` inserts it: the retail title calls
+/// `LSDPlayer::startStream("opening/demo.lsd")`, the same LSD player and track handlers as every cut scene, so `OPENING/DEMO.LSD` runs on the
+/// cut scene player).  That player then keeps [`MovieStatus`] up to date and removes the request at the end, exactly as this plugin does.
+/// `SH2_TITLE_MOVIE_PLAYER=1` keeps the stand-alone player.
+#[derive(Resource, Clone, Copy, Debug, Default)]
+pub struct MovieDelegate;
+
+fn start_movie(req: Option<Res<MovieRequest>>, mut rt: ResMut<MovieRuntime>, mut status: ResMut<MovieStatus>, cfg: Option<Res<sh2_core::app::AppConfig>>, delegate: Option<Res<MovieDelegate>>) {
     let Some(req) = req else { return };
+    if delegate.is_some() {
+        return;
+    }
     if rt.0.is_some() || !req.is_added() && !req.is_changed() {
         return;
     }
