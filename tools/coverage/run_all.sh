@@ -1,13 +1,14 @@
 #!/bin/sh
 # Whole-game coverage harness (round 5 QA).
-#   tools/coverage/run_all.sh [all | run <cat>... | report] [--fresh] [--only NAME] [--jobs N]
-# cats: field fx battle party lsd msd story.  Writes tools/coverage/out/*.tsv and notes/integration/coverage.md.
+#   tools/coverage/run_all.sh [all | run <cat>... | report] [--fresh] [--only NAME] [--jobs N]   (default 6 workers per category; or SH2_COV_JOBS=N)
+# cats: field fx battle battleapp party lsd msd story (an unknown one exits 2 without touching coverage.md).  Writes tools/coverage/out/*.tsv and notes/integration/coverage.md.
 # The binary is copied before it runs so that a rebuild while a run is going does not fail to link (Windows locks running .exe files).
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 export SH2_US_DISC_DIR="${SH2_US_DISC_DIR:-$ROOT/../SH2US}"
 export SH2_US_DISC2_DIR="${SH2_US_DISC2_DIR:-$ROOT/../disk2extracted}"
 export SH2_DISC_DIR="${SH2_DISC_DIR:-$ROOT/../SH2JP}"
-export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$HOME/.cache/sh2-r5-qa}"
+export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-6}"
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$HOME/.cache/sh2-r6-qa2}"
 EXE="$CARGO_TARGET_DIR/release/examples/coverage"
 X=""; [ -f "$EXE.exe" ] && X=".exe"
 GOOD="$CARGO_TARGET_DIR/cov-good$X"

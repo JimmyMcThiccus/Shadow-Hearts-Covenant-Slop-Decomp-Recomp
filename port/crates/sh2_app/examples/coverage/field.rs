@@ -12,9 +12,35 @@ use sh2_script::cscript::PadState;
 use sh2_script::image::ScriptImage;
 use std::collections::{BTreeMap, BTreeSet};
 
+/// Buttons of the explore input policy, one per tap (round 6 QA2): a job still running after the circle-only phase is given the other
+/// buttons and the d-pad (scripts read the pad themselves with the `0xac` VM op: "press X to ...", direction choices, cancel).
+const EXPLORE: &[u16] = &[
+    padbit::CIRCLE,
+    padbit::DOWN,
+    padbit::CIRCLE,
+    padbit::CROSS,
+    padbit::UP,
+    padbit::CIRCLE,
+    padbit::RIGHT,
+    padbit::SQUARE,
+    padbit::LEFT,
+    padbit::TRIANGLE,
+    padbit::CIRCLE,
+    padbit::START,
+    padbit::L1,
+    padbit::R1,
+    padbit::SELECT,
+];
+
 fn step(rt: &mut FieldRuntime, session: &mut GameSession, tick: u32, acc: &mut MapAcc) {
-    // circle every 12th tick: finishes typing, releases KeyWait, picks the first selection entry
-    let press = if tick % 12 == 0 { padbit::CIRCLE } else { 0 };
+    // circle every 12th tick: finishes typing, releases KeyWait, picks the first selection entry; in the explore phase the buttons rotate
+    let press = if tick % 12 != 0 {
+        0
+    } else if acc.explore {
+        EXPLORE[(tick / 12) as usize % EXPLORE.len()]
+    } else {
+        padbit::CIRCLE
+    };
     rt.st.press = press;
     tick_state(&mut rt.st, &mut rt.sim);
     rt.sim.update_camera();
@@ -33,42 +59,36 @@ fn step(rt: &mut FieldRuntime, session: &mut GameSession, tick: u32, acc: &mut M
     audit_log(rt, acc);
 }
 
-/// Selectors / ops the port accepts without doing anything (host.rs, read 2026-10-14): `(ex.sub, what)`.
-/// GetCharacterInfo (c2.00, host.rs ~593): `what` 0..=9, 0xd answered, anything else returns 0.
-/// GetFieldData (c2.24, host.rs `get_field_data`, re-read 2026-10-14 after FS's round-5 pass): 0, 1, 2, 9, 0xc, 0xd, 0x10, 0x16, 0x1b, 0x1c,
-/// 0x1d, 0x1f, 0x21, 0x23, 0x25, 0x29, 0x36, 0x37, 0x38 answered; others -1.  **Keep in sync with host.rs** (a static copy).
-/// SetCharacterInfo (c2.01): 2, 8, 9, 0xc, 0xe, 0xf, 0x10 applied, others ignored.
+/// Selectors the port answers / applies, read from sh2_field/src/host.rs itself (`srcscan::field_tables`, round 6 QA2; the round-5 version
+/// was a hand copy that went stale): an unanswered `GetCharacterInfo` / `GetFieldData` selector falls to the `_` arm (0 / -1), a no-op
+/// `SetCharacterInfo` / `SetFieldData` one has an empty / record-only arm.  Unknown `SetFieldData` selectors are counted by the host itself
+/// (`st.unimplemented` 0xc3.sel) and reported as unimplemented ops.
 fn audit_call(ex: u8, sub: u8, args: &[i64], acc: &mut MapAcc) {
     if ex != 0xc2 {
         return;
     }
+    let t = super::srcscan::field_tables();
     let a = |i: usize| args.get(i).copied().unwrap_or(0);
+    let noop = |arms: &super::srcscan::Arms, v: i64| arms.find(v).map(|arm| super::srcscan::body_is_noop(&arm.body)).unwrap_or(true);
     match sub {
-        0x00 if a(0) & 0x80 == 0 && !matches!(a(1), 0..=9 | 0xd) => {
+        0x00 if a(0) & 0x80 == 0 && !t.get_char.answers(a(1)) => {
             acc.unknown_sel.insert(format!("GetCharacterInfo what {:#x} (returns 0)", a(1)));
         }
-        0x00 if a(0) & 0x80 != 0 && a(1) != 3 => {
+        0x00 if a(0) & 0x80 != 0 && !t.get_char_bg.answers(a(1)) => {
             acc.unknown_sel.insert(format!("GetCharacterInfo(BG model) what {:#x} (returns 0)", a(1)));
         }
-        0x01 if !matches!(a(1), 2 | 8 | 9 | 0xc | 0xe | 0xf | 0x10) => {
+        0x01 if noop(&t.set_char, a(1)) => {
             acc.noop.insert(format!("SetCharacterInfo what {:#x}", a(1)));
         }
-        0x24 => match a(0) {
-            0 | 1 | 2 | 9 | 0xc | 0xd | 0x10 | 0x16 | 0x1b | 0x1c | 0x1d | 0x1f | 0x21 | 0x23 | 0x25 | 0x29 | 0x36 | 0x37 | 0x38 => {}
-            v => {
-                acc.unknown_sel.insert(format!("GetFieldData sel {v:#x} (returns -1)"));
-            }
-        },
-        0x23 => {
-            if matches!(a(0), 0x13 | 0x1e | 0x18 | 0x17 | 0xe | 0xf | 0x12 | 0x19 | 0x1a | 0x1f | 0x20 | 8 | 0xa | 0xb | 0x24..=0x38) {
-                acc.noop.insert(format!("SetFieldData sel {:#x}", a(0)));
-            }
+        0x24 if !t.get_field.answers(a(0)) => {
+            acc.unknown_sel.insert(format!("GetFieldData sel {:#x} (returns -1)", a(0)));
         }
-        0x05 => {
-            acc.noop.insert("AttachFrame".into());
+        0x23 if t.set_field.answers(a(0)) && noop(&t.set_field, a(0)) => {
+            acc.noop.insert(format!("SetFieldData sel {:#x}", a(0)));
         }
-        0x22 => {
-            acc.noop.insert("AddLight".into());
+        // ops whose dispatcher arm is only `ExResult::Void` (AttachFrame, AddLight, ...)
+        s if t.ops.find(s as i64).map(|arm| arm.body.lines().map(|l| l.split("//").next().unwrap_or("").trim()).filter(|l| !l.is_empty()).all(|l| l.trim_end_matches(',') == "ExResult::Void")).unwrap_or(false) => {
+            acc.noop.insert(field_op_name(0xc2, s));
         }
         _ => {}
     }
@@ -108,6 +128,12 @@ struct MapAcc {
     events_run: usize,
     calls: u64,
     game_over: bool,
+    /// the explore input policy is on (set by `run` for its second phase)
+    explore: bool,
+    /// jobs that ended only with the explore inputs
+    needed_input: Vec<String>,
+    /// jobs still running that only poll the clock (`GetFieldData(0x1d)`) in a loop: ambient / timed background jobs, not blocked
+    idle: Vec<String>,
 }
 
 /// the script asked for a scene change: record it, return true
@@ -165,20 +191,69 @@ fn tail(rt: &FieldRuntime) -> String {
     t.join(" < ")
 }
 
-/// Run until the job ends, a scene change is requested or `max` ticks passed.  Returns `Some(desc)` when stuck.
+/// Run until the job ends, a scene change is requested or `max` ticks passed (circle presses); a job still running then gets `max` more
+/// / 2 ticks with the explore inputs.  Returns `Some(desc)` when it is still blocked after both; a job that keeps polling the clock
+/// (`GetFieldData(0x1d)`) in its last ticks is recorded as idle instead.
 fn run(rt: &mut FieldRuntime, session: &mut GameSession, acc: &mut MapAcc, max: u32, what: &str) -> Option<String> {
     let mut t = 0;
     acc.log_seen = rt.st.log.len();
-    while t < max && rt.vm.is_running() {
+    acc.explore = false;
+    let mut clock_polls = 0u32;
+    let mut ips: BTreeSet<u32> = BTreeSet::new();
+    let total = max + max / 2;
+    while t < total && rt.vm.is_running() {
+        if t == max {
+            acc.explore = true;
+        }
+        let before = acc.op_calls.get(&(0xc2, 0x24)).copied().unwrap_or(0);
+        let n0 = rt.st.log.len();
         step(rt, session, t, acc);
+        if t + 600 >= total {
+            if let Some(ip) = rt.vm.top_ip() {
+                ips.insert(ip);
+            }
+        }
+        // the clock poll: GetFieldData(0x1d) calls in the last 600 ticks
+        if t + 600 >= total && acc.op_calls.get(&(0xc2, 0x24)).copied().unwrap_or(0) > before && rt.st.log[n0.min(rt.st.log.len())..].iter().chain(rt.st.log.last()).any(|l| l.starts_with("ex=0xc2 sub=0x24 args=[1d")) {
+            clock_polls += 1;
+        }
         t += 1;
         if transition(rt, acc) {
+            if acc.explore {
+                acc.needed_input.push(format!("{what} (scene change after explore inputs)"));
+            }
+            acc.explore = false;
             return None;
         }
     }
+    let explored = acc.explore;
+    acc.explore = false;
     if rt.vm.is_running() {
         let mces = if rt.st.mces.state != 0 { format!(" mces {}:{}", rt.st.mces.state, rt.st.mces.name) } else { String::new() };
-        return Some(format!("{what} still running after {max} ticks{mces}, last calls {}", tail(rt)));
+        // where the top job spins in its last 600 ticks: one ip = suspended in the last engine call; a range = a script loop (does it
+        // read the pad itself, `get_pad` 0xac, or `wait` 0xaa?)
+        let wher = match (ips.first(), ips.last()) {
+            (Some(&a), Some(&b)) if a == b => format!(" [ip {a:#x}, suspended in the call]"),
+            (Some(&a), Some(&b)) => {
+                let code = &rt.vm.mem.code;
+                let lo = a.saturating_sub(16) as usize;
+                let hi = ((b + 8) as usize).min(code.len());
+                let seg = code.get(lo..hi).unwrap_or(&[]);
+                let pad = if seg.contains(&0xac) { ", get_pad byte 0xac in the loop" } else { "" };
+                let wt = if seg.contains(&0xaa) { ", wait byte 0xaa in the loop" } else { "" };
+                format!(" [loop ip {a:#x}..{b:#x}{pad}{wt}]")
+            }
+            _ => String::new(),
+        };
+        let desc = format!("{what} still running after {max} + {} explore ticks{mces}{wher}, last calls {}", max / 2, tail(rt));
+        if clock_polls >= 10 && tail(rt).starts_with("GetFieldData(c2.24)[1d") {
+            acc.idle.push(desc);
+            return None;
+        }
+        return Some(desc);
+    }
+    if explored {
+        acc.needed_input.push(what.to_string());
     }
     None
 }
@@ -352,6 +427,14 @@ fn check_map(set: &PkbSet, map: &str, start_ticks: u32, ev_ticks: u32, all_args:
         row.add_detail(format!("{} stuck jobs: {}", acc.stuck.len(), acc.stuck.iter().take(3).cloned().collect::<Vec<_>>().join(" | ")));
         row.add_owner("FS");
         row.kv("stuck", acc.stuck.len());
+    }
+    if !acc.needed_input.is_empty() {
+        row.kv("needed_input", acc.needed_input.len());
+        row.add_detail(format!("{} jobs ended only with the explore inputs (other buttons / d-pad): {}", acc.needed_input.len(), acc.needed_input.iter().take(3).cloned().collect::<Vec<_>>().join(", ")));
+    }
+    if !acc.idle.is_empty() {
+        row.kv("idle", acc.idle.len());
+        row.add_detail(format!("{} background jobs polling the clock (GetFieldData 0x1d loop, not blocked)", acc.idle.len()));
     }
     if !acc.jumps.is_empty() {
         row.kv("jumps", acc.jumps.iter().cloned().collect::<Vec<_>>().join(","));

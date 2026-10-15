@@ -1,11 +1,12 @@
 # Whole-game coverage harness (round 5 QA).
-#   tools\coverage\run_all.ps1 [all | run <cat>... | report] [--fresh] [--only NAME] [--jobs N]
-# cats: field fx battle party lsd msd story.  Writes tools\coverage\out\*.tsv and notes\integration\coverage.md.
+#   tools\coverage\run_all.ps1 [all | run <cat>... | report] [--fresh] [--only NAME] [--jobs N]   (default 6 workers per category; or SH2_COV_JOBS=N)
+# cats: field fx battle battleapp party lsd msd story (an unknown one exits 2 without touching coverage.md).  Writes tools\coverage\out\*.tsv and notes\integration\coverage.md.
 $root = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 if (-not $env:SH2_US_DISC_DIR) { $env:SH2_US_DISC_DIR = Join-Path $root "..\SH2US" }
 if (-not $env:SH2_US_DISC2_DIR) { $env:SH2_US_DISC2_DIR = Join-Path $root "..\disk2extracted" }
 if (-not $env:SH2_DISC_DIR) { $env:SH2_DISC_DIR = Join-Path $root "..\SH2JP" }
-if (-not $env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR = Join-Path $env:USERPROFILE ".cache\sh2-r5-qa" }
+if (-not $env:CARGO_BUILD_JOBS) { $env:CARGO_BUILD_JOBS = "6" }
+if (-not $env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR = Join-Path $env:USERPROFILE ".cache\sh2-r6-qa2" }
 $a = $args
 if ($a.Count -eq 0) { $a = @("all") }
 Push-Location (Join-Path $root "port")

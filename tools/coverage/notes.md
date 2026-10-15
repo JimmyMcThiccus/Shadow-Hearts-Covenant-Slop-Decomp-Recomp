@@ -2,7 +2,7 @@
 
 * Rerun everything: `tools/coverage/run_all.ps1` (PowerShell) or `tools/coverage/run_all.sh` (Git Bash) -- resumes the rows already in
   `tools/coverage/out/`; add `--fresh` to start over; one category: `run_all.sh run battle party`; one item: `--only AP_02_U`;
-  regenerate this file only: `run_all.sh report`.  The whole run takes ~15 min on this machine (field 20 shards, battleapp 16).
+  regenerate this file only: `run_all.sh report`.  The whole run takes ~15 min on this machine (6 worker processes per category; `--jobs N` / `SH2_COV_JOBS`).
   The scripts build `sh2_app --example coverage`; when another agent's half-done edit breaks the build they run the last binary that
   built (`cov-good.exe` in the target dir) and say so.
 * Each check runs in worker processes with a per-item watchdog (a hang becomes a `timeout` row, a crash a `fails` row with the exit code).

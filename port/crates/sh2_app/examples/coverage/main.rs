@@ -4,7 +4,7 @@
 //! cargo run --release -p sh2_app --example coverage -- all            # every check (resumes; --fresh starts over), then the report
 //! cargo run --release -p sh2_app --example coverage -- run field      # one category (field fx battle battleapp party lsd msd story)
 //! cargo run --release -p sh2_app --example coverage -- report         # tools/coverage/out/*.tsv -> notes/integration/coverage.md
-//! options: --out DIR (default tools/coverage/out), --only NAME, --fresh, --ticks N (start function), --ev-ticks N, --all-args
+//! options: --jobs N (worker processes per category; default 6 or SH2_COV_JOBS), --out DIR (default tools/coverage/out), --only NAME, --fresh, --ticks N (start function), --ev-ticks N, --arg1 (field events with argument 1 only; default: 1, 2 and 4)
 //! ```
 //!
 //! Each category runs in a worker process (`worker <cat>`) with a per-item watchdog: an item that hangs is written as `timeout` and the
@@ -19,9 +19,13 @@ mod lsd;
 mod msd;
 mod party;
 mod report;
+mod srcscan;
 mod story;
 
 use std::path::PathBuf;
+
+/// default worker processes per category (override: `--jobs N` / `SH2_COV_JOBS=N`)
+const MAX_JOBS: usize = 6;
 
 pub const CATS: &[&str] = &["field", "fx", "battle", "battleapp", "party", "lsd", "msd", "story"];
 
@@ -67,7 +71,7 @@ fn main() {
             let ticks: u32 = get("--ticks").and_then(|v| v.parse().ok()).unwrap_or(3000);
             let ev_ticks: u32 = get("--ev-ticks").and_then(|v| v.parse().ok()).unwrap_or(3000);
             match cat.as_str() {
-                "field" => field::run_all(&out, fresh, only.as_deref(), ticks, ev_ticks, has("--all-args")),
+                "field" => field::run_all(&out, fresh, only.as_deref(), ticks, ev_ticks, !has("--arg1")),
                 "fx" => fx::run_all(&out, fresh, only.as_deref()),
                 "battle" => battle::run_all(&out, fresh, only.as_deref()),
                 "battleapp" => battleapp::run_all(&out, fresh, only.as_deref()),
@@ -75,14 +79,24 @@ fn main() {
                 "lsd" => lsd::run_all(&out, fresh, only.as_deref(), has("--decode-movies")),
                 "msd" => msd::run_all(&out, fresh, only.as_deref()),
                 "story" => story::run_all(&out, fresh, only.as_deref()),
-                c => panic!("unknown category {c}"),
+                c => {
+                    eprintln!("coverage: unknown category {c}; categories: {}", CATS.join(" "));
+                    std::process::exit(2);
+                }
             }
         }
         "run" | "all" => {
             let cats: Vec<String> = if cmd == "all" { CATS.iter().map(|s| s.to_string()).collect() } else { a[2..].iter().take_while(|x| !x.starts_with("--")).cloned().collect() };
+            // fail fast (before any worker starts or coverage.md is rewritten) on an unknown / missing category
+            let bad: Vec<&String> = cats.iter().filter(|c| !CATS.contains(&c.as_str())).collect();
+            if cats.is_empty() || !bad.is_empty() {
+                eprintln!("coverage: unknown category {bad:?} (or none given); categories: {}", CATS.join(" "));
+                std::process::exit(2);
+            }
             let mut pass: Vec<String> = a.iter().skip(2).skip_while(|x| !x.starts_with("--")).cloned().collect();
             // --jobs N: parallel shards per category (default by category)
             let jobs_arg: Option<usize> = get("--jobs").and_then(|v| v.parse().ok());
+            let env_jobs: Option<usize> = std::env::var("SH2_COV_JOBS").ok().and_then(|v| v.parse().ok());
             if let Some(i) = pass.iter().position(|x| x == "--jobs") {
                 pass.drain(i..(i + 2).min(pass.len()));
             }
@@ -94,13 +108,12 @@ fn main() {
                         let _ = std::fs::remove_file(f);
                     }
                 }
-                let jobs = jobs_arg.unwrap_or(match cat.as_str() {
-                    "field" => 20,
-                    "battle" | "party" => 10,
-                    "battleapp" => 16,
-                    "lsd" => 12,
+                // worker processes per category: `--jobs N`, else `SH2_COV_JOBS`, else at most MAX_JOBS (6: the machine is shared by
+                // several agents; round 5 ran 20 field workers)
+                let jobs = jobs_arg.or(env_jobs).unwrap_or(match cat.as_str() {
+                    "field" | "battle" | "party" | "battleapp" | "lsd" => MAX_JOBS,
                     _ => 1,
-                });
+                }).max(1);
                 let exe = std::env::current_exe().unwrap();
                 let handles: Vec<_> = (0..jobs)
                     .map(|k| {
@@ -115,6 +128,10 @@ fn main() {
                                 match st.code() {
                                     Some(0) => break,
                                     Some(3) => eprintln!("coverage: {stem}: worker restarted after a timeout (attempt {attempt})"),
+                                    Some(2) => {
+                                        eprintln!("coverage: {stem}: worker usage error; not retrying");
+                                        break;
+                                    }
                                     other => {
                                         // a crash that is not a panic (stack overflow, abort): note the item that was running and go on
                                         eprintln!("coverage: {stem}: worker died ({other:?}); restarting");

@@ -75,8 +75,7 @@ pub fn run_all(out: &std::path::Path, fresh: bool, only: Option<&str>, decode_al
     }
 }
 
-/// `LscrHost` handles c0.00 .. c0.0f; 0x0b / 0x0c / 0x0e are accepted but not applied (SetBGMotion, BGEffectAlpha: cutscene_plugin.rs
-/// `apply_script_out`, re-read 2026-10-14; InvokeBattle 0x0d now ends the scene and the field script issues the battle).
+/// Records the ops; which of them `LscrHost` handles / leaves unapplied is read from cutscene_plugin.rs (`srcscan::lscr_op_state`).
 struct Probe {
     subs: BTreeMap<(u8, u8), u32>,
     exit: bool,
@@ -179,12 +178,14 @@ fn check(disc: &sh2_core::fileio::Disc, path: &str, decode_all: bool) -> Row {
                 row.kv("lscr_ops", host.subs.iter().map(|((e, s), n)| format!("{e:02x}.{s:02x}x{n}")).collect::<Vec<_>>().join(","));
                 for (&(e, s), n) in &host.subs {
                     let label = field_op_name(e, s);
-                    if e != 0xc0 || s > 0x0f {
+                    // the op set of `cutscene_plugin::LscrHost` and what `apply_script_out` does with it, read from the code (srcscan)
+                    let state = if e == 0xc0 { super::srcscan::lscr_op_state(s) } else { None };
+                    if state.is_none() {
                         row.worse("stub");
                         row.add_detail(format!("LSCR op {label} x{n} unknown to the cut scene host"));
                         row.add_owner("CS");
                         missing.insert(format!("LSCR {label}"));
-                    } else if matches!(s, 0x0b | 0x0c | 0x0e) {
+                    } else if state == Some(true) {
                         row.worse("stub");
                         row.add_detail(format!("LSCR {label} x{n} accepted, not applied"));
                         row.add_owner("CS");

@@ -24,6 +24,7 @@
 //! schedule; steps 2–4 become systems in `Update`, in the same order.
 
 mod autoplay;
+mod perf;
 mod viewer;
 
 use bevy::prelude::*;
@@ -92,7 +93,7 @@ fn main() {
 
     let exit = App::new()
         // CApp::InitScreen(0x200, 0x1c0): 512x448 interlaced NTSC frame.
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
+        .add_plugins(DefaultPlugins.set(bevy::log::LogPlugin { custom_layer: perf::custom_layer, ..default() }).set(WindowPlugin {
             primary_window: Some(Window {
                 title: "Shadow Hearts: Covenant (Rust port)".into(),
                 // The real game renders 512x448 and displays it stretched to 4:3; the presenter
@@ -130,6 +131,7 @@ fn main() {
         )
         .add_systems(PostUpdate, (delay_delete_flush, frame_stats))
         .add_plugins(MaxSeconds::from_env())
+        .add_plugins(perf::PerfPlugin) // SH2_PERF=<file>: per-scene CPU profile (notes/integration/r6_pf.md)
         .run();
     // `--autoplay` reports failure (timeout / game over = 2) through `AppExit`: hand it to the shell so harness scripts can detect it
     std::process::exit(match exit {

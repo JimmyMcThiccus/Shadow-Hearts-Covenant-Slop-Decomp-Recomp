@@ -121,6 +121,9 @@ pub fn run_all(out: &std::path::Path, fresh: bool, only: Option<&str>) {
     }
 }
 
+/// seconds of battle after which the harness finisher cuts the enemies to 1 HP
+const FINISH_AT: u32 = 240;
+
 fn check(id: &str, st: Start) -> Row {
     let mut row = Row::new(id);
     let mut app = build_app(st);
@@ -132,6 +135,7 @@ fn check(id: &str, st: Start) -> Row {
     let mut last_menu = false;
     let mut fx = 0u32;
     let mut stage = String::new();
+    let mut finisher = 0u32;
     let limit = 60 * 600;
     let mut i = 0;
     while i < limit {
@@ -181,6 +185,20 @@ fn check(id: &str, st: Start) -> Row {
         if s == Scene::GameOver {
             raw = tapb(padbit::CIRCLE, tap);
         }
+        // finisher (round 6 QA2): a late-game set the Lv 30 plain-attack autoplayer cannot beat would only time out; after FINISH_AT s of
+        // battle the harness cuts every living enemy to 1 HP once (and heals the party) so the kill / Victory / result / return flow still runs
+        if s == Scene::Battle && battle_ticks == 60 * FINISH_AT && finisher == 0 {
+            if let Some(mut rt) = app.world_mut().get_resource_mut::<BattleRuntime>() {
+                for f in rt.battle.fighters.iter_mut().flatten() {
+                    if f.is_enemy && f.hp > 1 {
+                        f.hp = 1;
+                        finisher += 1;
+                    } else if !f.is_enemy && f.hp > 0 {
+                        f.hp = f.max_hp;
+                    }
+                }
+            }
+        }
         app.world_mut().resource_mut::<PadInjection>().raw = raw;
     }
     row.kv("scenes", format!("{visited:?}").replace([',', ' '], ""));
@@ -189,6 +207,9 @@ fn check(id: &str, st: Start) -> Row {
     row.kv("ring_presses", rings);
     row.kv("effects_started", fx);
     row.kv("last_stage", stage.replace([';', ','], " "));
+    if finisher > 0 {
+        row.kv("finisher", finisher);
+    }
     if !visited.contains(&Scene::Battle) {
         row.status = "fails".into();
         row.detail = format!("never entered Scene::Battle ({visited:?})");
@@ -203,6 +224,9 @@ fn check(id: &str, st: Start) -> Row {
         row.owner = "BE".into();
     } else if visited.last() == Some(&Scene::GameOver) {
         row.add_detail("lost (Game Over) with the autoplayer (party Lv 30, plain attacks)");
+    }
+    if finisher > 0 && visited.last() != Some(&Scene::Battle) {
+        row.add_detail(format!("resolved by the harness finisher ({finisher} enemies cut to 1 HP after {FINISH_AT} s; Lv 30 plain attacks were too weak)"));
     }
     let _ = results;
     let logs = take_log();

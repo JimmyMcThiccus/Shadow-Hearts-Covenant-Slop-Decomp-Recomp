@@ -60,31 +60,10 @@ pub struct FxRun {
     pub damage_events: usize,
 }
 
-/// System call ids used by the program (static scan of the `sys` instructions, op 57).
-pub fn static_syscalls(bytes: &[u8]) -> std::collections::BTreeSet<i32> {
-    use sh2_script::efmg::{kind, Efmg, Heco};
-    let mut out = std::collections::BTreeSet::new();
-    if let Ok(e) = Efmg::parse(bytes) {
-        for (_, sec) in e.iter_kind(kind::CODE) {
-            if let Ok(h) = Heco::parse(sec) {
-                for i in &h.code {
-                    if i.op == 57 {
-                        out.insert(i.operand >> 16);
-                    }
-                }
-            }
-        }
-    }
-    out
-}
-
-/// Ids the effect scene accepts without drawing them (sh2_gfx effects/scene.rs: the `"misc"` / `"fef"` / named `ignored` families).
-pub fn ignored_name(id: i32) -> Option<String> {
+/// Name of a syscall id for the "accepted, not drawn" list: `name(id)`.
+pub fn ignored_name(id: i32) -> String {
     let n = sh2_script::opcodes::us_func(id).map(|f| f.name).unwrap_or("?");
-    match id {
-        2107..=2112 | 3000..=3005 | 2300..=2303 | 3300..=3305 | 3008 | 925 | 1709 | 1206 | 1207 | 1209 => Some(format!("{n}({id})")),
-        _ => None,
-    }
+    format!("{n}({id})")
 }
 
 /// Runs one EFMG effect image to its end (or the host's 10 s cap).
@@ -94,7 +73,6 @@ pub fn run_program(id: i32, bytes: Vec<u8>, targets: usize) -> Result<FxRun, Str
         targets: (0..targets.max(1)).map(|i| Vec3::new(50.0, 0.0, -20.0 + 20.0 * i as f32)).collect(),
         height: 30.0,
     };
-    let stat = static_syscalls(&bytes);
     let mut p = FxProgram::new(id, bytes, ctx)?;
     let mut models = 0;
     let mut dmg = 0;
@@ -109,12 +87,22 @@ pub fn run_program(id: i32, bytes: Vec<u8>, targets: usize) -> Result<FxRun, Str
         ended,
         unknown: p.host.unknown.iter().map(|(k, v)| (k.to_string(), *v)).collect(),
         unhandled: p.host.scene.unhandled.iter().map(|(k, v)| (k.to_string(), *v)).collect(),
-        // the families the scene counts (`misc` = blrCreateLine.. 2107-2112, fef* 3001-3005, fld* 2300-2303, sbg* 3300-3305 or a custom
-        // effect that is not a `P` particle section: effects/scene.rs ~2036 / ~2082); `stat` names the ids of those families the program uses
-        ignored: p.host.scene.ignored.iter().map(|(k, v)| {
-            let ids: Vec<String> = if *k == "misc" { stat.iter().filter_map(|id| ignored_name(*id)).collect() } else { vec![] };
-            (if ids.is_empty() || ids.len() > 6 { k.to_string() } else { format!("misc[{}]", ids.join(" ")) }, *v)
-        }).collect(),
+        // what the effect scene accepted without drawing it: its own per-id counter `scene.ignored_ids` (round 6 QA2; was a hand-kept list),
+        // plus the named families it counts without an id (`mdlCreateShadow` ...)
+        ignored: {
+            let mut m: BTreeMap<String, u32> = p.host.scene.ignored_ids.iter().map(|(id, v)| (ignored_name(*id), *v)).collect();
+            let with_ids = p.host.scene.ignored_ids.values().sum::<u32>();
+            let fam: u32 = p.host.scene.ignored.iter().filter(|(k, _)| matches!(**k, "misc" | "fef")).map(|(_, v)| *v).sum();
+            for (k, v) in p.host.scene.ignored.iter() {
+                if !matches!(*k, "misc" | "fef") {
+                    m.insert(k.to_string(), *v);
+                }
+            }
+            if fam > with_ids {
+                m.insert("misc (no id)".into(), fam - with_ids);
+            }
+            m
+        },
         models,
         damage_events: dmg,
     })

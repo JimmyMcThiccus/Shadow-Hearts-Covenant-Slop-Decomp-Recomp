@@ -16,3 +16,9 @@ sh2_menu.workspace = true
 sh2_field.workspace = true
 sh2_battle.workspace = true
 sh2_audio = { workspace = true, features = ["bevy", "playback"] }
+# SH2_PERF span layer (sh2_app::perf); the spans themselves only exist with `--features profile`
+tracing = "0.1"
+
+[features]
+# per-system spans for the SH2_PERF report (bevy/trace).  Off by default: costs a little per system run.
+profile = ["bevy/trace"]

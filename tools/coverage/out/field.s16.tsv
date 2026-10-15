@@ -1,28 +1,16 @@
-AD_15_U	ok			models=1;bgfx=6;script=true;events=8;calls=198113;events_run=8;noop=SetFieldData sel 0x17,SetFieldData sel 0xf;jumps=AD_02_U:3,AD_12_U:0
-AP_05_A	ok			models=1;bgfx=2;script=true;events=9;calls=198158;events_run=9;noop=SetFieldData sel 0x17,SetFieldData sel 0x1f,SetFieldData sel 0x24,SetFieldData sel 0xf;jumps=AP_06_U:0,AP_07_U:1
-AR_12_U	ok			models=1;bgfx=0;script=true;events=6;calls=345113;events_run=6;noop=SetFieldData sel 0x17,SetFieldData sel 0xf;jumps=AR_11_U:1
+AD_15_U	ok			models=1;bgfx=6;script=true;events=8;calls=198159;events_run=24;noop=SetFieldData sel 0xf;jumps=AD_02_U:3,AD_12_U:0
+AP_05_A	ok			models=1;bgfx=2;script=true;events=9;calls=594440;events_run=27;noop=SetFieldData sel 0x24,SetFieldData sel 0xf;jumps=AP_06_U:0,AP_07_U:1
+AR_12_U	ok			models=1;bgfx=0;script=true;events=6;calls=1035307;events_run=18;noop=SetFieldData sel 0xf;jumps=AR_11_U:1
 CA_00_DB	ok			models=1;bgfx=0;script=false;calls=0;events_run=0;warnings=1;warn_top=WARN field: no script for CA_00_DB x1
-DO_04_U	ok			models=1;bgfx=0;script=true;events=18;calls=4596882;events_run=18;noop=SetCharacterInfo what 0x13,SetFieldData sel 0x17,SetFieldData sel 0x8,SetFieldData sel 0xa,SetFieldData sel 0xb,SetFieldData sel 0xf;jumps=DO_05_U:0;battles=set14;movies=N008.LSD
-FU_13_U	ok			models=1;bgfx=7;script=true;events=5;calls=198082;events_run=5;noop=SetFieldData sel 0x17,SetFieldData sel 0xf;jumps=FU_12_U:1
-GT_00_DB	ok			models=1;bgfx=0;script=true;events=2;calls=78042;events_run=2;jumps=%i45:1496347685,GT_10_U:0
-GY_07_U	ok			models=8;bgfx=1;script=true;events=2;calls=15;events_run=2;noop=SetFieldData sel 0x17,SetFieldData sel 0xf;jumps=GY_06_U:1
-HE_08_N	ok			models=3;bgfx=3;script=true;events=6;calls=47;events_run=6;noop=SetFieldData sel 0x17,SetFieldData sel 0x1f,SetFieldData sel 0xe,SetFieldData sel 0xf;jumps=HE_07_N:5,HE_10_N:0
-HE_23_N	ok			models=3;bgfx=13;script=true;events=10;calls=1353099;events_run=10;noop=SetCharacterInfo what 0x13,SetFieldData sel 0x17,SetFieldData sel 0xe,SetFieldData sel 0xf;jumps=HE_07_N:2
-IF_14_U	ok			models=4;bgfx=8;script=true;events=14;calls=44;events_run=14;noop=SetFieldData sel 0x17,SetFieldData sel 0xe,SetFieldData sel 0xf;jumps=IF_11_U:1,IF_15_U:0,IF_20_U:1;battles=set117
-IN_00_U	ok			models=1;bgfx=1;script=true;events=31;calls=15710044;events_run=31;noop=SetCharacterInfo what 0x13,SetFieldData sel 0x17,SetFieldData sel 0x1f,SetFieldData sel 0xf;jumps=IN_00_U:7,IN_01_U:0,IN_02_U:0;worldmap=1;movies=N108.LSD
-KT_02_U	ok			models=2;bgfx=0;script=true;events=6;calls=78240;events_run=6;noop=SetFieldData sel 0x17,SetFieldData sel 0x1f,SetFieldData sel 0x24,SetFieldData sel 0xf;jumps=KT_01_U:1,KT_03_U:0,ZI_00_U:0;worldmap=1;movies=N105.LSD
+DO_04_U	ok			models=1;bgfx=0;script=true;events=18;calls=13394252;events_run=54;noop=LoadMotion(c2.0e),SetCharacterInfo what 0x13,SetFieldData sel 0xf;jumps=DO_05_U:0;battles=set14;movies=N008.LSD
+FU_13_U	ok			models=1;bgfx=7;script=true;events=5;calls=594226;events_run=15;noop=SetFieldData sel 0xf;jumps=FU_12_U:1
+GT_00_DB	ok			models=1;bgfx=0;script=true;events=2;calls=78046;events_run=6;jumps=%i45:1496347685,GT_10_U:0
+GY_07_U	ok			models=8;bgfx=1;script=true;events=2;calls=31;events_run=6;noop=SetFieldData sel 0xf;jumps=GY_06_U:1
+HE_08_N	ok			models=3;bgfx=3;script=true;events=6;calls=95;events_run=18;noop=SetFieldData sel 0xe,SetFieldData sel 0xf;jumps=HE_07_N:5,HE_10_N:0
+HE_23_N	ok			models=3;bgfx=13;script=true;events=10;calls=4059257;events_run=30;noop=SetCharacterInfo what 0x13,SetFieldData sel 0xe,SetFieldData sel 0xf;jumps=HE_07_N:2
+IF_14_U	ok			models=4;bgfx=8;script=true;events=14;calls=104;events_run=42;noop=SetFieldData sel 0xe,SetFieldData sel 0xf;jumps=IF_11_U:1,IF_15_U:0,IF_20_U:1;battles=set117
+IN_00_U	ok			models=1;bgfx=1;script=true;events=31;calls=42538859;events_run=93;noop=LoadMotion(c2.0e),SetCharacterInfo what 0x13,SetFieldData sel 0xf,UnloadMotion(c2.0f);jumps=IN_00_U:7,IN_01_U:0,IN_02_U:0;worldmap=1;movies=N108.LSD
+KT_02_U	ok			models=2;bgfx=0;script=true;events=6;calls=234686;events_run=18;noop=SetFieldData sel 0x24,SetFieldData sel 0xf;jumps=KT_01_U:1,KT_03_U:0,ZI_00_U:0;worldmap=1;movies=N105.LSD
 MI_DB_U	ok			models=1;bgfx=0;script=false;calls=0;events_run=0;warnings=1;warn_top=WARN field: no script for MI_DB_U x1
-MS_31_U	ok			models=3;bgfx=25;script=true;events=10;calls=144;events_run=10;noop=SetFieldData sel 0x17,SetFieldData sel 0x24,SetFieldData sel 0xf;jumps=MS_24_U:0,MS_30_U:1
-ND_04_U	ok			models=1;bgfx=3;script=true;events=30;calls=974161;events_run=30;noop=SetFieldData sel 0x17,SetFieldData sel 0x1f,SetFieldData sel 0xe,SetFieldData sel 0xf;jumps=ND_03_U:1,ND_05_U:0
-PA_03_U	stub	2 stuck jobs: event 0x14(1) still running after 3000 ticks, last calls GetFieldData(c2.24)[23, 0, 0] => 0x1 | event 0x19(1) still running after 3000 ticks, last calls GetFieldData(c2.24)[23, 0, 0] => 0x1	FS	models=1;bgfx=7;script=true;events=32;calls=29789543;events_run=32;noop=SetCharacterInfo what 0x13,SetFieldData sel 0x17;stuck=2;jumps=PA_06_U:0,SM_20_U:0,SU_22_U:1;menus=Shop,Tailor
-QG_07_U	ok			models=1;bgfx=16;script=true;events=3;calls=31;events_run=3;noop=SetFieldData sel 0x17,SetFieldData sel 0x1e,SetFieldData sel 0xf;jumps=QG_08_U:1,QG_13_U:1
-RO_06_U	ok			models=1;bgfx=3;script=true;events=4;calls=195096;events_run=4;noop=SetFieldData sel 0x17,SetFieldData sel 0xf;jumps=RO_05_U:1,RO_05_U:2
-RU_03_N	ok			models=3;bgfx=6;script=true;events=13;calls=2058424;events_run=13;noop=SetCharacterInfo what 0x13,SetFieldData sel 0x17;jumps=RU_04_N:0,RU_05_N:0;menus=Shop
-SE_03_U	ok			models=1;bgfx=4;script=true;events=5;calls=372049;events_run=5;noop=SetFieldData sel 0xf
-SH_04_U	ok			models=1;bgfx=11;script=true;events=6;calls=10141527;events_run=6;noop=SetFieldData sel 0x17,SetFieldData sel 0x1f,SetFieldData sel 0xf;jumps=FI_00_U:0,SH_00_U:1;battles=boss225;worldmap=1
-SM_04_U	ok			models=1;bgfx=1;script=true;events=4;calls=357103;events_run=4;noop=SetFieldData sel 0x17,SetFieldData sel 0xf;jumps=SM_03_U:1
-SM_22_U	ok			models=1;bgfx=1;script=true;events=4;calls=23;events_run=4;noop=SetFieldData sel 0x17,SetFieldData sel 0xf;jumps=SM_11_U:5,SM_18_U:0
-SU_10_A	ok			models=1;bgfx=0;script=true;events=1;calls=14;events_run=1;noop=SetFieldData sel 0x17,SetFieldData sel 0xf;jumps=SU_07_U:1,SU_10_A:1
-TD_08_U	ok			models=1;bgfx=1;script=true;events=7;calls=30;events_run=7;noop=SetFieldData sel 0x17,SetFieldData sel 0x24,SetFieldData sel 0xf;jumps=TD_07_U:1,TD_09_U:0
-WI_02_U	ok			models=1;bgfx=4;script=true;events=7;calls=37;events_run=7;noop=SetFieldData sel 0x17,SetFieldData sel 0xf;jumps=WI_00_U:2,WI_01_U:1,WI_04_U:0
-ZI_00_DB	ok			models=1;bgfx=0;script=true;events=2;calls=63;events_run=2;noop=SetCharacterInfo what 0x13,SetFieldData sel 0xf
+MS_31_U	ok			models=3;bgfx=25;script=true;events=10;calls=408;events_run=30;noop=SetFieldData sel 0x24,SetFieldData sel 0xf;jumps=MS_24_U:0,MS_30_U:1
+ND_04_U	ok			models=1;bgfx=3;script=true;events=30;calls=2040013;events_run=90;noop=SetFieldData sel 0xe,SetFieldData sel 0xf;jumps=ND_03_U:1,ND_05_U:0

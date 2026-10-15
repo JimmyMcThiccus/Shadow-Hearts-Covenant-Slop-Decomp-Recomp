@@ -1,28 +1,16 @@
-AD_12_U	ok			models=1;bgfx=8;script=true;events=10;calls=198090;events_run=10;noop=SetFieldData sel 0x17,SetFieldData sel 0x1f,SetFieldData sel 0xf;jumps=AD_05_U:0
-AP_03_U	ok			models=1;bgfx=8;script=true;events=11;calls=5991634;events_run=11;noop=SetFieldData sel 0x17,SetFieldData sel 0x24,SetFieldData sel 0xf;jumps=AP_04_U:0,AP_10_U:1;battles=set6;menus=Tutorial
-AR_09_U	ok			models=1;bgfx=3;script=true;events=7;calls=168049;events_run=7;noop=SetFieldData sel 0x17,SetFieldData sel 0xf;jumps=AR_03_U:2,AR_07_U:1,AR_08_U:1
-BO_02_DB	ok			models=1;bgfx=0;script=true;events=2;calls=45;events_run=2;noop=SetFieldData sel 0x17;jumps=BO_02_U:0
-DO_00_U	ok			models=4;bgfx=0;script=true;events=23;calls=1686445;events_run=23;noop=SetCharacterInfo what 0x13,SetFieldData sel 0x17,SetFieldData sel 0xf;jumps=DO_01_U:0,DO_05_U:1;battles=set12,set13
-FU_10_U	ok			models=1;bgfx=0;script=true;events=5;calls=198080;events_run=5;noop=SetFieldData sel 0xf
-GI_03_R	ok			models=3;bgfx=2;script=true;events=0;calls=3291270;events_run=0;noop=SetFieldData sel 0xa,SetFieldData sel 0xb,SetFieldData sel 0xf;battles=set257
-GY_05_F	ok			models=6;bgfx=0;script=true;events=6;calls=67;events_run=6;noop=SetFieldData sel 0xf;jumps=GY_04_U:1
-HE_06_U	ok			models=6;bgfx=0;script=true;events=16;calls=1548223;events_run=16;noop=SetCharacterInfo what 0x13,SetFieldData sel 0x17;jumps=HE_00_U:3,HE_07_U:0,HE_25_U:0,HE_26_U:0
-HE_21_N	ok			models=3;bgfx=12;script=true;events=4;calls=31;events_run=4;noop=SetFieldData sel 0x17,SetFieldData sel 0xe,SetFieldData sel 0xf;jumps=HE_04_N:2
-IF_11_U	ok			models=5;bgfx=4;script=true;events=18;calls=4818783;events_run=18;noop=SetFieldData sel 0x17,SetFieldData sel 0x1f,SetFieldData sel 0x24,SetFieldData sel 0x33,SetFieldData sel 0xf;jumps=IF_11_U:0,IF_12_U:0,IF_14_U:0,IF_16_U:0;battles=set115;worldmap=1
-IK_03_U	ok			models=2;bgfx=0;script=true;events=2;calls=98;events_run=2;noop=SetFieldData sel 0xf;jumps=IK_03_U:0;battles=boss153;movies=N090a.LSD
-KT_00_DB	ok			models=1;bgfx=0;script=true;events=2;calls=57;events_run=2;noop=SetCharacterInfo what 0x13,SetFieldData sel 0x17,SetFieldData sel 0xf;jumps=KT_00_U:0
-MI_15_U	stub	9 stuck jobs: start still running after 3000 ticks, last calls GetFieldData(c2.24)[1d, 0, 0] => 0xc350 | event 0x0(1) still running after 3000 ticks, last calls GetFieldData(c2.24)[1d, 0, 0] => 0x14c08 | event 0x1(1) still running after 3000 ticks, last calls GetFieldData(c2.24)[1d, 0, 0] => 0x14c08	FS	models=2;bgfx=15;script=true;events=11;calls=43434130;events_run=11;noop=SetFieldData sel 0x17,SetFieldData sel 0x1f,SetFieldData sel 0xa,SetFieldData sel 0xb,SetFieldData sel 0xf;stuck=9;jumps=MI_14_U:2,MI_15_U:1,MI_16_U:0
-MS_27_U	ok			models=4;bgfx=14;script=true;events=14;calls=249328;events_run=14;noop=SetFieldData sel 0x17,SetFieldData sel 0x24,SetFieldData sel 0xf;jumps=MS_26_U:1,MS_29_U:0;battles=set245
-ND_02_U	ok			models=6;bgfx=5;script=true;events=28;calls=370256;events_run=28;noop=SetFieldData sel 0xe,SetFieldData sel 0xf;jumps=ND_01_U:1,ND_03_U:0
-PA_01_U	stub	bg effect types not drawn {200}	FX	models=1;bgfx=5;bgfx_missing={200};script=true;events=25;calls=19183535;events_run=25;noop=SetCharacterInfo what 0x13,SetFieldData sel 0x17,SetFieldData sel 0x8,SetFieldData sel 0xa,SetFieldData sel 0xb;jumps=PA_04_U:0,SU_20_U:2;battles=boss30,set29
-QG_04_U	ok			models=1;bgfx=8;script=true;events=4;calls=123;events_run=4;noop=SetFieldData sel 0x17,SetFieldData sel 0x1e,SetFieldData sel 0xf;jumps=QG_02_U:0,QG_06_U:1
-RO_03_U	ok			models=1;bgfx=5;script=true;events=3;calls=168033;events_run=3;noop=SetFieldData sel 0x17,SetFieldData sel 0xf;jumps=RO_01_U:1
-RU_00_U	ok			models=1;bgfx=0;script=true;events=11;calls=10954744;events_run=11;noop=SetCharacterInfo what 0x13,SetFieldData sel 0x17,SetFieldData sel 0x19,SetFieldData sel 0x20,SetFieldData sel 0xa,SetFieldData sel 0xb;jumps=RU_04_U:1;menus=Tutorial;movies=N020.LSD
-SE_01_9	stub	unanswered selectors: GetFieldData sel 0x2a (returns -1); 1 stuck jobs: event 0x3(1) still running after 3000 ticks, last calls Select(c2.48)[0, 20001165, 20001178] < OpenWindow(c2.34) < SetWindowSize(c2.33) < SetWindowPos(c2.32)	FS	models=1;bgfx=13;script=true;events=7;calls=3692132;events_run=7;unknown_sel=GetFieldData sel 0x2a (returns -1);noop=SetFieldData sel 0x17,SetFieldData sel 0x1f,SetFieldData sel 0xe,SetFieldData sel 0xf;stuck=1;jumps=SE_15_U:1
-SH_01_U	ok			models=7;bgfx=12;script=true;events=7;calls=66;events_run=7;noop=SetFieldData sel 0x17,SetFieldData sel 0xe,SetFieldData sel 0xf;jumps=SH_00_U:0,SH_00_U:1
-SM_02_U	ok			models=2;bgfx=3;script=true;events=5;calls=78087;events_run=5;noop=SetFieldData sel 0x17,SetFieldData sel 0xf;jumps=SM_01_U:1,SM_03_U:0
-SM_19_U	ok			models=2;bgfx=3;script=true;events=3;calls=381101;events_run=3;noop=SetFieldData sel 0x17,SetFieldData sel 0x1f,SetFieldData sel 0xf;jumps=SM_09_U:2
-SU_07_U	ok			models=1;bgfx=9;script=true;events=5;calls=393143;events_run=5;noop=SetFieldData sel 0x17,SetFieldData sel 0x1f,SetFieldData sel 0xf;jumps=SU_04_U:1,SU_10_A:0
-TD_05_U	stub	2 stuck jobs: event 0x5(1) still running after 3000 ticks, last calls OpenMessage(c2.36)[500000bc, 2b0c, ffffffff] < ClearMessage(c2.37) < OpenWindow(c2.34) < SetWindowSize(c2.33) | event 0x6(1) still running after 3000 ticks, last calls OpenMessage(c2.36)[500000bc, 2b0c, ffffffff] < ClearMessage(c2.37) < OpenWindow(c2.34) < SetWindowSize(c2.33)	FS	models=1;bgfx=14;script=true;events=10;calls=199868;events_run=10;noop=SetFieldData sel 0x17,SetFieldData sel 0x24,SetFieldData sel 0x2b,SetFieldData sel 0x2f,SetFieldData sel 0x35,SetFieldData sel 0xf;stuck=2;jumps=TD_04_U:1,TD_20_U:1
-WE_04_U	ok			models=1;bgfx=8;script=true;events=2;calls=15;events_run=2;noop=SetFieldData sel 0x17,SetFieldData sel 0xf;jumps=WE_02_U:2
-YO_00_U	ok			models=2;bgfx=3;script=true;events=30;calls=23972001;events_run=30;noop=SetCharacterInfo what 0x13,SetFieldData sel 0x13,SetFieldData sel 0x17;jumps=YO_00_U:0,YO_02_U:0
+AD_12_U	ok			models=1;bgfx=8;script=true;events=10;calls=594238;events_run=30;noop=SetFieldData sel 0xf;jumps=AD_05_U:0
+AP_03_U	ok			models=1;bgfx=8;script=true;events=11;calls=17578706;events_run=33;noop=LoadMotion(c2.0e),SetFieldData sel 0x24,SetFieldData sel 0xf,UnloadMotion(c2.0f);jumps=AP_04_U:0,AP_10_U:1;battles=set6;menus=Tutorial
+AR_09_U	ok			models=1;bgfx=3;script=true;events=7;calls=504125;events_run=21;noop=SetFieldData sel 0xf;jumps=AR_03_U:2,AR_07_U:1,AR_08_U:1
+BO_02_DB	ok			models=1;bgfx=0;script=true;events=2;calls=117;events_run=6;jumps=BO_02_U:0
+DO_00_U	ok			models=4;bgfx=0;script=true;events=23;calls=4663117;events_run=69;noop=SetCharacterInfo what 0x13,SetFieldData sel 0xf;jumps=DO_01_U:0,DO_05_U:1;battles=set12,set13
+FU_10_U	ok			models=1;bgfx=0;script=true;events=5;calls=594208;events_run=15;noop=SetFieldData sel 0xf
+GI_03_R	ok			models=3;bgfx=2;script=true;events=0;calls=3291270;events_run=0;noop=LoadMotion(c2.0e),SetFieldData sel 0xf;battles=set257
+GY_05_F	ok			models=6;bgfx=0;script=true;events=6;calls=181;events_run=18;noop=SetFieldData sel 0x4,SetFieldData sel 0xf;jumps=GY_04_U:1
+HE_06_U	ok			models=6;bgfx=0;script=true;events=16;calls=4644621;events_run=48;noop=SetCharacterInfo what 0x13;jumps=HE_00_U:3,HE_07_U:0,HE_25_U:0,HE_26_U:0
+HE_21_N	ok			models=3;bgfx=12;script=true;events=4;calls=53;events_run=12;noop=SetFieldData sel 0xe,SetFieldData sel 0xf;jumps=HE_04_N:2
+IF_11_U	ok			models=5;bgfx=4;script=true;events=18;calls=10597713;events_run=54;noop=LoadMotion(c2.0e),SetFieldData sel 0x24,SetFieldData sel 0x33,SetFieldData sel 0xf;jumps=IF_11_U:0,IF_12_U:0,IF_14_U:0,IF_16_U:0;battles=set115;worldmap=1
+IK_03_U	ok			models=2;bgfx=0;script=true;events=2;calls=102;events_run=6;noop=SetFieldData sel 0xf;jumps=IK_03_U:0;battles=boss153;movies=N090a.LSD
+KT_00_DB	ok			models=1;bgfx=0;script=true;events=2;calls=157;events_run=6;noop=SetCharacterInfo what 0x13,SetFieldData sel 0xf;jumps=KT_00_U:0
+MI_15_U	ok	1 jobs ended only with the explore inputs (other buttons / d-pad): start (scene change after explore inputs)		models=2;bgfx=15;script=true;events=11;calls=4726889;events_run=33;noop=SetFieldData sel 0xf;needed_input=1;jumps=MI_15_U:-2,MI_15_U:0,MI_15_U:1
+MS_27_U	ok			models=4;bgfx=14;script=true;events=14;calls=249808;events_run=42;noop=SetFieldData sel 0x24,SetFieldData sel 0xf;jumps=MS_26_U:1,MS_29_U:0;battles=set245
+ND_02_U	ok			models=6;bgfx=5;script=true;events=28;calls=720438;events_run=84;noop=SetFieldData sel 0xe,SetFieldData sel 0xf;jumps=ND_01_U:1,ND_03_U:0

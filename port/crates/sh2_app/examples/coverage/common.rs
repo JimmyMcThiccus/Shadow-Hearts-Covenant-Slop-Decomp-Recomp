@@ -147,12 +147,16 @@ impl Sink {
         if fresh {
             let _ = std::fs::remove_file(&path);
         }
-        let done = read_rows(&path).into_iter().map(|r| r.id).collect();
+        // done = the rows of every shard file of the category, so a resume with another shard count (`--jobs`) skips them too
+        let done = if fresh { read_rows(&path).into_iter().map(|r| r.id).collect() } else { cat_files(out, cat).iter().flat_map(|f| read_rows(f)).map(|r| r.id).collect() };
         let file = std::fs::OpenOptions::new().create(true).append(true).open(&path).unwrap();
         *SINK_PATH.lock().unwrap() = Some(path);
         Sink { file, done }
     }
     pub fn put(&mut self, r: &Row) {
+        let mut r = r.clone();
+        r.owner = round6_owner(&r.owner);
+        let r = &r;
         self.file.write_all(r.to_line().as_bytes()).unwrap();
         self.file.flush().unwrap();
         self.done.insert(r.id.clone());
@@ -269,6 +273,9 @@ pub fn owner_of_path(loc: &str) -> &'static str {
         if file.starts_with("cutscene") {
             return "CS";
         }
+        if file == "field_ring.rs" {
+            return "RG";
+        }
         return "FS";
     }
     if l.contains("sh2_script/") {
@@ -360,6 +367,26 @@ pub fn field_op_name(ex: u8, sub: u8) -> String {
 }
 
 /// Owner of a field script op by what it does.
+/// Round-5 owner ids (used throughout the checks) -> the round-6 agents (round5_brief.md "Round 6"): BE + BP = BT, FS2, MN2, CS2, FX2.
+pub fn round6_owner(o: &str) -> String {
+    let mut v: Vec<&str> = vec![];
+    for t in o.split('/').filter(|t| !t.is_empty()) {
+        let n = match t {
+            "BE" | "BP" => "BT",
+            "FS" => "FS2",
+            "MN" => "MN2",
+            "CS" => "CS2",
+            "FX" => "FX2",
+            "QA" => "QA2",
+            x => x,
+        };
+        if !v.contains(&n) {
+            v.push(n);
+        }
+    }
+    v.join("/")
+}
+
 pub fn field_op_owner(ex: u8, sub: u8) -> &'static str {
     if ex != 0xc2 {
         return "FS";
@@ -369,6 +396,7 @@ pub fn field_op_owner(ex: u8, sub: u8) -> &'static str {
         0x50..=0x5f | 0x62 | 0x69..=0x6e => "CS",
         0x2f | 0x60 | 0x61 => "FX",
         0x72 | 0x73 => "BE",
+        0x63 | 0x64 => "RG",
         _ => "FS",
     }
 }
