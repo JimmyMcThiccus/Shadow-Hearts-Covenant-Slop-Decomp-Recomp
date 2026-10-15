@@ -346,6 +346,10 @@ pub struct Bank {
     pub program_set_id: u16,
     /// `FT +8`
     pub timbre_set_id: u16,
+    /// `FE +8`: the SE-set id the IOP's `FindSE` (SDRV_IOP 0xde9c) compares with the high half of a global SE id (`(id >> 16) == FE+8`,
+    /// exact).  Usually equal to [`Self::bank_id`]; the battle character banks differ: `BCM` `ase` = wave bank 0x6NNN, SE set 0x6000,
+    /// `dse` = 0x7NNN / 0x7000 (one resident at a time per class; `HNMSnd::PlaySE(0x6000_1005)` etc.).  `None` = no `FE` block.
+    pub se_set_id: Option<u16>,
     pub tags: Vec<[u8; 2]>,
     pub waves: Vec<Wave>,
     pub programs: Vec<Program>,
@@ -373,6 +377,7 @@ impl Bank {
             bank_id: 0,
             program_set_id: 0,
             timbre_set_id: 0,
+            se_set_id: None,
             tags: blocks.iter().map(|b| b.tag).collect(),
             waves: vec![],
             programs: vec![],
@@ -571,6 +576,7 @@ impl Bank {
             return;
         }
         let b = fe.bytes;
+        self.se_set_id = Some(u16le(b, 8));
         let n = u16le(b, 6) as usize;
         let tab = fe.hdr_units as usize * 16;
         for i in 0..n {

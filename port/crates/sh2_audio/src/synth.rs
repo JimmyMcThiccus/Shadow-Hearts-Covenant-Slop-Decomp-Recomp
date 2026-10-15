@@ -561,8 +561,28 @@ impl Synth {
     }
 
     /// Find the bank whose wave-bank id equals `bank_id` (the high half of a global SE id, `FindSE`).
+    /// IOP `FindSE` (SDRV_IOP 0xde9c): the first resident bank (load order) whose `FE` SE-set id is `set_id` **and** whose map holds
+    /// `local` -- a set id match without the local id moves on to the next bank (several monster banks share set 0x9000).
+    /// Port extension: when no resident bank has that SE-set id, the wave-bank id (`WV +10`, unique per fighter: `0x9000 | BCD(chr)`)
+    /// is tried the same way -- retail keeps only the acting fighter's banks resident (`HNMSnd::IOPEntry` / `IOPRelease` per action), the
+    /// port keeps every battle bank loaded, so callers may address one bank by its wave-bank id.
+    pub fn find_se_bank(&self, set_id: u16, local: u16) -> Option<u32> {
+        let pick = |by_set: bool| {
+            let mut c: Vec<(u32, &Arc<Bank>)> = self
+                .banks
+                .iter()
+                .filter(|(_, b)| if by_set { b.se_set_id.unwrap_or(b.bank_id) == set_id } else { b.bank_id == set_id })
+                .map(|(h, b)| (*h, b))
+                .collect();
+            c.sort_by_key(|(h, _)| *h);
+            c.iter().find(|(_, b)| b.se_target(local).is_some()).or(c.first()).map(|(h, _)| *h)
+        };
+        pick(true).or_else(|| pick(false))
+    }
+
     pub fn find_bank_by_id(&self, bank_id: u16) -> Option<u32> {
-        self.banks.iter().filter(|(_, b)| b.bank_id == bank_id).map(|(h, _)| *h).min()
+        // IOP `FindSE` walks the resident `FE` blocks and compares their `+8` SE-set id (falls back to the wave-bank id without an `FE`)
+        self.banks.iter().filter(|(_, b)| b.se_set_id.unwrap_or(b.bank_id) == bank_id).map(|(h, _)| *h).min()
     }
 
     // ----- play control -------------------------------------------------------------------------------------------------
@@ -1008,6 +1028,7 @@ impl Player {
                 bank_id: 0,
                 program_set_id: 0,
                 timbre_set_id: 0,
+                se_set_id: None,
                 tags: vec![],
                 waves: vec![],
                 programs: vec![],
@@ -2038,6 +2059,25 @@ mod tests {
         let mut s = Synth::new();
         let h = s.add_bank(bank);
         (s, h)
+    }
+
+    #[test]
+    fn find_se_walks_the_fe_sets_then_the_wave_banks() {
+        // IOP FindSE: (id >> 16) == FE +8, first bank (load order) holding the local id; port fallback: the WV wave-bank id
+        let mut s = Synth::new();
+        let mut a = Bank::parse(&mini_bank(&[0, 0xff], &[(1, 0x1000)])).unwrap();
+        a.se_set_id = Some(0x9000);
+        a.bank_id = 0x9001;
+        let mut b = Bank::parse(&mini_bank(&[0, 0xff], &[(2, 0x1000)])).unwrap();
+        b.se_set_id = Some(0x9000);
+        b.bank_id = 0x9002;
+        let ha = s.add_bank(a);
+        let hb = s.add_bank(b);
+        assert_eq!(s.find_se_bank(0x9000, 1), Some(ha));
+        assert_eq!(s.find_se_bank(0x9000, 2), Some(hb));
+        assert_eq!(s.find_se_bank(0x9002, 2), Some(hb));
+        assert_eq!(s.find_se_bank(0x9003, 2), None);
+        assert_eq!(s.find_se_bank(0x9000, 7), Some(ha));
     }
 
     #[test]

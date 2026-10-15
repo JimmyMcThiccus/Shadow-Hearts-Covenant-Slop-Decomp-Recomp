@@ -240,11 +240,11 @@ impl SoundBackend for AudioEngine {
     }
     fn play_se(&mut self, sdh: SoundHandle, se_id: u32, p: &SeParam) -> SoundHandle {
         let mut s = lock(&self.synth);
-        // a global id carries the wave-bank number in its high half (FindSE); a bank handle selects the bank directly
+        // a global id carries the bank's `FE` SE-set id in its high half (FindSE); a bank handle selects the bank directly
         let (bank, local) = if sdh != 0 {
             (Some(sdh), (se_id & 0xffff) as u16)
         } else {
-            (s.find_bank_by_id((se_id >> 16) as u16), (se_id & 0xffff) as u16)
+            (s.find_se_bank((se_id >> 16) as u16, se_id as u16), (se_id & 0xffff) as u16)
         };
         bank.and_then(|b| s.play_se(b, local, p)).unwrap_or(0)
     }

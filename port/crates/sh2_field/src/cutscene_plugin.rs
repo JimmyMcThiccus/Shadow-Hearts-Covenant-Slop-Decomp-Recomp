@@ -915,7 +915,7 @@ fn drive(
             }
             if a.slave.bad && !a.warned_bad {
                 a.warned_bad = true;
-                warn!("cutscene: the audio position runs at the wrong speed; the game clock drives the scene");
+                warn!("cutscene: the audio position runs at the wrong speed (x{:.3} at scene time {:.2}s); the game clock drives the scene", a.slave.bad_rate, a.head.time);
             }
         }
     }

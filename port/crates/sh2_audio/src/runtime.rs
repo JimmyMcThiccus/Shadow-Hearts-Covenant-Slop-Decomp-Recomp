@@ -88,8 +88,13 @@ pub enum AudioRequest {
     /// `%03dW%02d.SSE` per PC weapon (same wave bank as the PC's `M`), `%03dC.SSE` per PC = `0x9100 | pc`); every bank stays resident until
     /// [`AudioRequest::UnloadBattleBanks`] so `PlayGlobalSe { id: (bank << 16) | local }` finds them (`Sdrv::PlaySE` -> `FindSE`)
     LoadBattleBanks { chrs: Vec<u16>, weapons: Vec<(u16, u8)>, voices: Vec<u16> },
-    /// leave the battle: drop the banks of [`AudioRequest::LoadBattleBanks`]
+    /// leave the battle: drop the banks of [`AudioRequest::LoadBattleBanks`] (and the `battle` banks of [`AudioRequest::LoadSeData`])
     UnloadBattleBanks,
+    /// make an SE bank held in memory resident under `key` (once): the battle character packages carry their own banks
+    /// (`BTLDATA/CHR/%03d.BCM` entries `ase` = SE set 0x6000 -- hits / swings, `HNMSnd::PlaySE(0x6000_1005)` .. -- and `dse` = SE set
+    /// 0x7000, `0x7000_000x`; retail `CBattle` -> `HNMSnd::IOPEntry(BtlChr+0x4b0 / +0x4b8)`).  `battle = true` drops it with
+    /// [`AudioRequest::UnloadBattleBanks`].  Global ids resolve through `FindSE` (`(id >> 16)` = the bank's `FE` SE-set id).
+    LoadSeData { key: String, data: std::sync::Arc<Vec<u8>>, battle: bool },
     /// stop everything (game over / reset)
     StopAll,
     /// `SaveMenuSection::UpdateSoundOut` -> `Sdrv::SetMode(mode)`: the Option page's sound-out setting, in the driver's codes
@@ -656,6 +661,18 @@ impl AudioRuntime {
                     if self.disc.as_ref().map(|d| d.exists(&p)).unwrap_or(false) && self.bank(&p).is_some() && !self.battle_banks.contains(&p) {
                         self.battle_banks.push(p);
                     }
+                }
+            }
+            AudioRequest::LoadSeData { key, data, battle } => {
+                let k = norm(key);
+                if !self.banks.contains_key(&k) {
+                    if let Some(h) = self.engine.load_bank(&data[..]) {
+                        self.banks.insert(k.clone(), h);
+                        self.stats.banks_loaded += 1;
+                    }
+                }
+                if *battle && self.banks.contains_key(&k) && !self.battle_banks.contains(&k) {
+                    self.battle_banks.push(k);
                 }
             }
             AudioRequest::UnloadBattleBanks => {

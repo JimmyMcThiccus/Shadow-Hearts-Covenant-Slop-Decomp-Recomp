@@ -1,55 +1,47 @@
-# Round 6 CS2: cut scenes, movies, audio (2026-10-14)
+# Round 6 CS2: cut scenes, movies, audio (2026-10-14 / 15)
 
-## Paused (2026-10-14 ~20:15, coordinator: max 2 running agents)
+## Status (2026-10-15, resumed after the coordinator pause; WIP commit d17d85c + this session)
 
-State: every edited file compiles (`cargo check --release -p sh2_audio -p sh2_field -p sh2_menu -p sh2_script`, target `%USERPROFILE%\.cache\sh2-r6-cs2`,
-**release profile** used for all my builds so far -- keep it to avoid a profile switch; prefix cargo with `CARGO_BUILD_JOBS=6`).  No locks held, no
-processes left.  Env helper: scratchpad `env.sh` (SH2_DISC_DIR / SH2_US_DISC_DIR / SH2_US_DISC2_DIR / CARGO_TARGET_DIR / CARGO_BUILD_JOBS).
+Builds: release profile, `CARGO_TARGET_DIR=%USERPROFILE%\.cache\sh2-r6-cs2`.  Screens: `screens/r6_cs2/`.  No locks held, no processes left.
 
-Done so far (code in place, built, partly verified):
-1. **BGEffectAlpha** wired: `ScriptOut::BgEffectAlpha` -> `Active::bg_alpha` -> `drive` calls `BgFxInstance::fx.fade_slot(id, alpha, frames)` on the
-   shown map (`m_pCurrent`); a shown map without effects ignores it, before any map is shown it waits.  Data (cs_census, new notes): N010 t=300.55 s
-   `(10, 0, 1000)` on Do_03_u (51 records of slot 10, kinds 1/4/3 = candles), N100A t=10.0 s `(10, 0, 50)` and N100B t=40.27 s `(10, 0, 0)` on
-   Td_16_m / Td_18_m (1-2 records).  Alpha arg is `(float)int` (LSDScrEx case 0x0e).  Log shows "BGEffectAlpha(10, 0, 1000) at 301.00 s" in
-   cutscene_view N010.  **Screens not finished**: `screens/r6_cs2/LSD_N010.LSD_t8900.00.png` only (before the fade).
-2. **Face blend shapes + Visible keys** (decompiled `LSDAnim::setFrameData` 0x003c67b0 / `getFrameData` 0x003c7750 in SLUS):
-   * target 1 = `{u8 group, u8 n, weights}` padded to 8 B, weights read 6 per 8-byte block at bytes 2..7 -> `FUN_0024a300(w/255, BlendShapeControl,
-     group, k+1)` = changeSliderGrp.  `sh2_script::lsd::AnimData::shape_keys` (small additive edit in FS2's lsd.rs: `ShapeKey`, `shape_keys`,
-     `vis_keys`, sorted in `LsdContent`), applied in `cutscene_plugin::apply_anim_events` (`apply_shape_key`, geometry rebuilt via
-     `blend_shape_geometry`).  The LSD head models carry shapes (`mouth` group 0 x8 targets, `eyelid` 1 x5, `eyeblow` 2 x3): e.g. Kalen_p_h 4294 keys,
-     Nicol_h 3479; every key group has a shape (census: `notes/integration/r6_cs2/cs_census.txt`, "ANMS ...: shape keys" lines, 1516 models).
-   * target 8 = `Model::EventCallBack(.., "Visible", value, bone)` (string at 0x434ca0) -> `set_visible_key` (bit 15 = atomic group b17).
-   * target 9 toggles bit 0 of `LSDAnim+0x74`; the **constructor sets it** (0x003c6560), so interpolation is ON by default and the toggle turns it
-     off (the round-5 note had it backwards).  `getFrameData` queues the toggle one tick (+2 units) late.  `cutscene::build_motion` now interpolates
-     every gap unless toggled off (hold copy / per-frame keys when the toggle changes inside a gap).  Test `motion_interpolates_unless_toggled_off`.
-     **Not yet run**: `cargo test -p sh2_field -p sh2_script` (lsd_real test asserts toggles [170, 624], unchanged).
-3. **Staff roll**: decompiled the measure `FUN_00269d00` (from `FUN_0026c780`, text objects `FUN_00279d10/f00`): per glyph advance = metric byte 1
-   (`GetFont` out +4) when record byte 0xe bit 7 is set, else the whole cell (`+0xa`, half cell for 1-byte codes); + letter spacing (record byte
-   0xb, + style bits 3..5 when bit 6); last spacing removed; displayed width x scale when record byte 0xf bit 0.  With this every GOOD_END line
-   centres on x = 128.5 +- 0.5 (`cs_staff GOOD_END`: column "retail_centre"); the old fit (133, narrowing) is gone: `staff_glyphs`,
-   `staff_line_width`, `render_staff_line` in cutscene_plugin.  `StaffLine::flags` added.  **The "dim" filter is not a darkening**: object +0x390
-   (ctor 0x003cff80, OT 0xe) copies the screen into a 512x448 target shrunk to `dim` (0.9) with a bilinear sprite (0x003d19f0) and draws it back
-   full screen (0x003d0460, vertex colour 0x80 = unity) = a slight soft-focus blur.  Port: `staff_blur` resamples the film picture (shrink + expand,
-   bilinear) in `update_movies` while the roll runs; the 10 % black veil was removed.  **Not yet screenshotted.**
-4. **Battle SE**: BE already plays motion `SEtrigg` keys (`sh2_battle::models::motion_sounds`) and posts `LoadBattleBanks`.  Open: W / C bank
-   triggers.  Retail `HNMSnd::PlaySE` (US 0x0038af50) ids seen in decomp/H/CBattle.c: 0x9000000x (item / projectile hits), 0x6000xxxx, 0x7000000x,
-   0x0200xxxx, 0x0100xxxx families -- mapping to banks not finished.  Next: `b1_events <disc> 000 us` to list the event names of party motions
-   (look for voice / weapon trigger tracks), `be_sse 000W00 000C` for the bank ids.
-5. **Title opening movie on the cut scene player** (retail: `LSDPlayer::startStream("opening/demo.lsd")` = same player): `sh2_menu::movie::MovieDelegate`
-   resource (my movie.rs): `start_movie` ignores requests while it exists; `cutscene_plugin::movie_request_bridge` turns a `MovieRequest` into a
-   `CutsceneRequest` of the same path, mirrors `MovieStatus` (Loading -> Playing -> Finished / Skipped / Failed, generation +1), removes the request at
-   the end, ends the scene when the owner removes the request.  CutscenePlugin inserts the delegate unless `SH2_TITLE_MOVIE_PLAYER=1`.
-   **Not yet verified in sh2_app** (risk: title root node z 20000 black / movie node z 50 instead of 10000 -- check that the movie is visible).
-6. Ear-only questions / WAV renders: not started.
+### Done
+1. **BGEffectAlpha** (`ScriptOut::BgEffectAlpha` -> `BgFx::fade_slot(id, alpha, frames)` on the shown map; LSDScrEx case 0x0e, `(float)int`).
+   Data: N010 t=300.55 s `(10, 0, 1000)` on Do_03_u (slot 10 = the camp fire / candles, 51 records), N100A t=10.0 s `(10, 0, 50)`, N100B
+   t=40.27 s `(10, 0, 0)` (Td_16_m / Td_18_m, 1-2 records).  Seen on screen: N010 camp fire dims after the call (`N010_fire_fade_t9000_9050_9150.png`,
+   fire region mean R 66 -> 59 -> 47; the camera then leaves the fire).  N100A / N100B (`N100A_t250-400.png`, `N100B_t1150-1230.png`): the slot-10
+   element is not distinguishable in those framings -- logged call, no visible change.
+2. **Face blend shapes + Visible keys** (`LSDAnim::setFrameData` 0x003c67b0 / `getFrameData` 0x003c7750): target 1 = blend-shape group weights
+   (`changeSliderGrp`), target 8 = `Visible`, target 9 = interpolation toggle (ON by default, the toggle turns it off; the round-5 note had it
+   backwards).  On screen: `N010_face_shapes_t9780-9940.png` (21 crops, 8 ticks apart): eyelids close (blinks at 9780 / 9908), mouth shapes change.
+3. **Staff roll**: measure from `FUN_00269d00` (per-glyph advance = metric byte 1 when record byte 0xe bit 7, else cell; + letter spacing;
+   x scale when byte 0xf bit 0).  Every centred GOOD_END line centres on x = 128.5 +- 0.5; lines authored at x = 20 (too wide to centre, e.g.
+   "Gepetto, Roger Bacon, & Naniwa", "by courtesy of Virgin Records Co.") are left-aligned in the data itself (`cs_staff --us GOOD_END`).
+   "dim" (object +0x390) = soft-focus (shrink to 0.9 + bilinear expand), no darkening.  `LSD_GOOD_END.LSD_t8000.00.png`, `..t12000.00.png`.
+4. **Title opening movie on the cut scene player** (`sh2_menu::movie::MovieDelegate`, `cutscene_plugin::movie_request_bridge`; retail
+   `LSDPlayer::startStream("opening/demo.lsd")`).  Verified visible in `sh2_app --us` (`sh2_app_title_opening_movie_t60-1500.png`: black,
+   white, Nautilus logo, forest, Gepetto).  One run of two logged "the audio position runs at the wrong speed" ~17 s in (the A/V slave then
+   follows the game clock); the warning now prints the measured rate (`AudioSlave::bad_rate`) -- not reproduced in the second run.
+5. **Battle SE class ids solved** (details + API in requests.md "Round 6 CS2"): IOP `FindSE` (JP SDRV_IOP.IRX 0xde9c, disassembled with
+   `tools/be/mipsdis.py`) matches `id >> 16` against the **FE block +8 SE-set id** (not the WV wave-bank id) and moves to the next resident
+   bank when the local id is absent.  `0x6000_xxxx` / `0x7000_xxxx` = the `ase` / `dse` entries of `BTLDATA/CHR/%03d.BCM` (wave 0x6NNN / 0x7NNN,
+   set 0x6000 / 0x7000); monster `M` / `W` = set 0x9000, `C` = 0x9100; field event banks set 0x1000.  Port: `Bank::se_set_id`,
+   `Synth::find_se_bank` (+ wave-bank fallback), `AudioRequest::LoadSeData`, test `find_se_walks_the_fe_sets_then_the_wave_banks`.
+   Tool `sh2_battle/examples/cs2_chr_se.rs` (`--wav DIR` renders); samples `r6_cs2/wav/chr001_ase_60001005.wav` (PC hit, 1.13 s),
+   `chr001_dse_70000000.wav`.  `0x7000_0001` of chr 001 renders silent (empty record), `0x6000_2000` loops.
+   The battle side (posting `LoadSeData` at fighter load and the hit ids from `drive_battle_models`) is BT's.
 
-Next steps, in order:
-1. `CARGO_BUILD_JOBS=6 cargo test --release -p sh2_field -p sh2_script -p sh2_audio`; fix fallout.
-2. Screens (timeout-wrapped; `--hz 1` runs ~1 scene-second per wall-second at 640x448): N010 ticks 9300 / 9700 / 10300 (candles fading, needs
-   `--seconds 400` or so), N100A ~ticks 250 / 400, N100B ~1200 / 1215; GOOD_END ticks 8000 / 12000 (staff roll centred + blur) -- shots dir
-   `notes/integration/screens/r6_cs2/`.  A face scene (N004 or a Kalen_p_h scene) close-up to see mouth / eyelid shapes move.
-3. sh2_app title: `SH2_MAX_SECONDS=60 timeout -k 5 90 sh2_app --us ...` screenshot of the opening movie playing via the cut scene player.
-4. Battle W / C triggers (item 4), coordinate with BT in requests.md.
-5. Ear-only items: decompile driver facts (PlaySeR fade unit, reverb depth, master volume), render port WAVs into `notes/integration/r6_cs2/`;
-   PCSX2 capture via `main` (instances: main / 2 / 3 / 4 = disc 2; SendMessage to main for a state).
-6. `cs_census`, `movie_census`, `tools/coverage/run_all.sh run cutscenes`, autoplay sanity shots, requests.md entry (lsd.rs additive edit;
-   MovieDelegate), OUTLINE.md status paragraph.
+6. **Coverage / sanity**: `tools/coverage/run_all.sh run lsd --fresh --jobs 6`: 166 scenes, 0 fail, the 3 BGEffectAlpha stubs gone, but 48
+   new `fx lsdGetModel(2900)` stubs from the harness (no scene models handed to the `.EFD` run; request to QA2 / FX2).  Autoplay
+   (`sh2_app --us --autoplay`): title -> OP_00_U -> world map -> AP_00_U / AP_02_U -> battle won -> field, `autoplay_sanity_sheet.png`.
+   `cs_census` / `movie_census` not rerun (no LSD parser / movie change since d17d85c's census).
+
+### Open
+* Ear-only driver facts (PlaySeR fade unit, reverb depth, master volume) not decompiled; no PCSX2 capture made (needs a battle save state
+  in instance `main`).  Nothing listened to by a human yet.
+* N100A / N100B slot-10 fade not visible in frame; N010 fade speed (1000 frames at the 30 Hz effect clock = 33 s) not compared with retail.
+* Title A/V slave: the one-off "wrong speed" fallback (watch the logged rate if it recurs).
+* Retail keeps only the acting fighter's battle banks resident; the port keeps all and relies on the wave-bank fallback for per-fighter ids.
+
+### Tests (this session)
+`cargo test --release -p sh2_audio -p sh2_script -p sh2_menu` green (audio 40 + 14 real-data/runtime, script 29, menu 84 + 4);
+`cargo test --release -p sh2_field --lib` 125 ok (cut scene tests 10/10); `cargo check --release --workspace --all-targets` clean.

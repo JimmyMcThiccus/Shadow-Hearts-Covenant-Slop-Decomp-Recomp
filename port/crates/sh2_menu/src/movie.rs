@@ -374,6 +374,8 @@ impl FrameClock {
 pub struct AudioSlave {
     pub engaged: bool,
     pub bad: bool,
+    /// the measured audio / wall rate that made the clock [`Self::bad`] (diagnostics)
+    pub bad_rate: f32,
     last_pos: f32,
     last_pos_wall: f32,
     ref_wall: f32,
@@ -400,6 +402,7 @@ impl AudioSlave {
             let rate = (pos - self.ref_pos) / (wall - self.ref_wall);
             if (rate - 1.0).abs() > 0.1 && (rate - 1.0).abs() < 1.0e6 {
                 self.bad = true;
+                self.bad_rate = rate;
                 return dt;
             }
             self.ref_wall = wall;

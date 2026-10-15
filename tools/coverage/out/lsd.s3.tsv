@@ -1,14 +1,28 @@
 LSD/G03.LSD	ok			secs=136.2;tracks=25;models=6;events=109;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=0;maps=2;disc=disc 2;via_disc2_fallback=1
+LSD/G06B.LSD	ok			secs=59.9;tracks=17;models=3;events=44;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=0;maps=1;disc=disc 2;via_disc2_fallback=1
 LSD/M04.LSD	ok			secs=69.8;tracks=5;models=0;events=11;lscr_ops=c0.00x2;efd=0;maps=0;movie=1;pictures=60;size=512x448;disc=disc 1
+LSD/M13.LSD	ok			secs=79.7;tracks=5;models=0;events=11;lscr_ops=c0.00x2;efd=0;maps=0;movie=1;pictures=60;size=512x448;disc=disc 1
 LSD/MOVIE_C.LSD	ok			secs=367.0;tracks=7;models=0;events=16;lscr_ops=c0.00x2,c0.06x14,c0.07x7,c0.08x10,c0.0fx1;efd=0;maps=0;dlby=1;movie=1;pictures=60;size=512x448;disc=disc 1
+LSD/N002.LSD	ok			secs=29.5;tracks=22;models=5;events=50;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=0;maps=1;disc=disc 1
 LSD/N008.LSD	ok			secs=28.6;tracks=35;models=9;events=86;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=0;maps=1;disc=disc 1
+LSD/N014.LSD	ok			secs=64.8;tracks=27;models=7;events=70;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=0;maps=1;disc=disc 1
 LSD/N020.LSD	ok			secs=126.7;tracks=41;models=11;events=142;lscr_ops=c0.00x4,c0.05x1,c0.0fx1;efd=0;maps=2;disc=disc 1
+LSD/N026.LSD	stub	effect tracks: fx lsdGetModel(2900)	FX2	secs=154.0;tracks=85;models=29;events=226;lscr_ops=c0.00x2,c0.05x1,c0.06x1,c0.07x1,c0.0dx1,c0.0fx1;efd=1;maps=1;missing=fx lsdGetModel(2900);disc=disc 1
 LSD/N033.LSD	ok			secs=133.2;tracks=41;models=12;events=132;lscr_ops=c0.00x4,c0.05x1,c0.0fx1;efd=0;maps=1;disc=disc 1
+LSD/N039.LSD	ok			secs=70.4;tracks=67;models=23;events=190;lscr_ops=c0.00x2,c0.05x1,c0.0dx1,c0.0fx1;efd=0;maps=1;disc=disc 1
 LSD/N047.LSD	ok			secs=180.0;tracks=30;models=8;events=109;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=0;maps=1;disc=disc 1
+LSD/N053.LSD	ok			secs=223.3;tracks=127;models=46;events=327;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=0;maps=1;disc=disc 1
 LSD/N059.LSD	ok			secs=199.7;tracks=114;models=50;events=292;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=0;maps=1;disc=disc 1
-LSD/N070.LSD	ok			secs=38.8;tracks=74;models=28;events=153;lscr_ops=c0.00x2,c0.05x1,c0.06x10,c0.0dx1,c0.0fx1;efd=4;maps=2;disc=disc 1
+LSD/N065.LSD	ok			secs=243.3;tracks=19;models=4;events=99;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=0;maps=1;disc=disc 1
+LSD/N070.LSD	stub	effect tracks: fx lsdGetModel(2900)	FX2	secs=38.8;tracks=74;models=28;events=153;lscr_ops=c0.00x2,c0.05x1,c0.06x10,c0.0dx1,c0.0fx1;efd=4;maps=2;missing=fx lsdGetModel(2900);disc=disc 1
+LSD/N076.LSD	stub	effect tracks: fx lsdGetModel(2900)	FX2	secs=183.3;tracks=83;models=24;events=229;lscr_ops=c0.00x2,c0.05x1,c0.06x6,c0.08x2,c0.0fx1;efd=13;maps=2;missing=fx lsdGetModel(2900);disc=disc 1
 LSD/N082.LSD	ok			secs=91.8;tracks=18;models=3;events=58;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=0;maps=1;disc=disc 2;via_disc2_fallback=1
+LSD/N088.LSD	ok			secs=49.7;tracks=31;models=8;events=68;lscr_ops=c0.00x4,c0.05x1,c0.0dx1,c0.0fx1;efd=0;maps=1;disc=disc 2;via_disc2_fallback=1
 LSD/N093.LSD	ok			secs=418.2;tracks=125;models=56;events=268;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=0;maps=1;disc=disc 2;via_disc2_fallback=1
+LSD/N099.LSD	ok			secs=336.5;tracks=51;models=17;events=261;lscr_ops=c0.00x8,c0.05x1,c0.09x1,c0.0ax1,c0.0fx1;efd=0;maps=1;disc=disc 2;via_disc2_fallback=1
 LSD/N104.LSD	ok			secs=66.2;tracks=47;models=15;events=94;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=0;maps=1;disc=disc 2;via_disc2_fallback=1
+LSD/N109B.LSD	ok			secs=15.2;tracks=25;models=7;events=51;lscr_ops=c0.00x2,c0.05x1,c0.0fx1;efd=0;maps=1;disc=disc 2;via_disc2_fallback=1
 LSD/N115.LSD	ok			secs=106.6;tracks=19;models=3;events=50;lscr_ops=c0.00x4,c0.05x1,c0.06x2,c0.0fx1;efd=1;maps=1;disc=disc 2;via_disc2_fallback=1
+LSD/N121.LSD	stub	effect tracks: fx lsdGetModel(2900)	FX2	secs=253.3;tracks=37;models=8;events=143;lscr_ops=c0.00x10,c0.05x1,c0.06x2,c0.07x2,c0.0fx1;efd=5;maps=1;movie=1;pictures=60;size=512x448;missing=fx lsdGetModel(2900);disc=disc 2;via_disc2_fallback=1
 LSD/N127.LSD	ok			secs=56.7;tracks=47;models=13;events=109;lscr_ops=c0.00x2,c0.05x1,c0.0dx1,c0.0fx1;efd=0;maps=1;disc=disc 2;via_disc2_fallback=1
+OPENING/DEMO.LSD	ok			secs=134.6;tracks=4;models=0;events=9;lscr_ops=c0.0fx1;efd=0;maps=0;movie=1;pictures=60;size=640x448;disc=both
