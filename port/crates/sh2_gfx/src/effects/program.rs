@@ -234,6 +234,15 @@ impl FxProgram {
         ev
     }
 
+    /// Diagnostics: one line per VM thread (tag, run state, ip, what it waits on).
+    pub fn thread_states(&self) -> Vec<String> {
+        self.machine
+            .threads
+            .iter()
+            .map(|t| format!("tag {} state {:?} ip {} motion_wait {:#x} wait_threads {} wait_tag {} count {} syscalls {}", t.tag, t.state, t.ip, t.motion_wait, t.wait_threads, t.wait_tag, t.thread_count, t.syscalls))
+            .collect()
+    }
+
     /// The renderable state of this tick.
     pub fn view(&self) -> FxView {
         self.host.scene.view(&self.host.env)

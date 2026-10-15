@@ -486,6 +486,7 @@ pub struct BtlInFx {
     /// the pending capture is for `BtlInBoss`
     boss_req: bool,
     boss: Option<super::btlin_boss::BossInRun>,
+    test_done: bool,
 }
 
 impl BtlInFx {
@@ -517,14 +518,15 @@ impl BtlInFx {
         self.stop_req = false;
         self.idle = 0;
         self.waiting = Some(Arc::new(Mutex::new(None)));
-        self.seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(1);
+        self.seed = intro_seed();
         true
     }
 
     /// `StopBtlIn`: the battle is ready -- fade the backdrop and the shards.
     pub fn stop(&mut self) {
         self.stop_req = true;
-        if let Some(s) = &mut self.sim {
+        // the shatter takes the stop once it falls (phase 2, see `drive_btlin`)
+        if let Some(s) = self.sim.as_mut().filter(|s| s.phase == 2) {
             s.stop();
         }
         if let Some(b) = &mut self.boss {
@@ -597,6 +599,16 @@ fn drive_btlin(
 ) {
     let (Some(mut images), Some(mut meshes), Some(mut materials)) = (images, meshes, materials) else { return };
     let fx: &mut BtlInFx = &mut fx;
+    // development: `SH2_BTLIN_TEST=<seconds>` starts the transition over whatever is on screen after that long (`SH2_BTLIN_BOSS=1` for the boss variant;
+    // the stop comes from the 10 s safety net)
+    if let Some(at) = std::env::var("SH2_BTLIN_TEST").ok().and_then(|v| v.parse::<f32>().ok()) {
+        if !fx.test_done && time.elapsed_secs() >= at {
+            fx.test_done = true;
+            if let Some(root) = std::env::var_os("SH2_US_DISC_DIR").or_else(|| std::env::var_os("SH2_DISC_DIR")) {
+                fx.capture(Path::new(&root), false);
+            }
+        }
+    }
     // 1. capture requested: spawn the screenshot once, then wait for the image
     if let Some(slot) = fx.waiting.clone() {
         // `waiting` + this clone: nobody else holds the slot yet -- spawn the screenshot (its observer keeps a third reference)
@@ -758,6 +770,11 @@ fn drive_btlin(
         fx.acc -= 1.0 / 30.0;
         sim.tick();
         stepped = true;
+        // a `StopBtlIn` that came before the fall (phase 2) is applied now: `Polling` only leaves phase 2 while `env == 1`, and `env` runs on to 2
+        // after 9 ticks -- a stop during the flash left the shards falling forever (the port's battle loads in a few frames, retail's never did)
+        if fx.stop_req && sim.phase == 2 && !sim.stopped() {
+            sim.stop();
+        }
         if sim.phase == 2 && !sim.stopped() {
             fx.idle += 1;
             // safety net: nobody called `stop` (no battle) -- give up after 10 s
@@ -897,4 +914,15 @@ mod tests {
         let (p, tx, _) = t[0];
         assert!((p[0] - tx[0]).abs() < 1e-3 && (p[1] - tx[1]).abs() < 1e-3);
     }
+}
+
+/// Seed of the intro cracks.  Wall-clock based normally; under `SH2_FIXED_DT` (frame-deterministic runs, round 6 GPA) a fixed sequence
+/// (`n`-th intro of the process), so two runs break the frame the same way.
+fn intro_seed() -> u64 {
+    static COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    if std::env::var_os("SH2_FIXED_DT").is_some() {
+        return 0x5eed_0000_0001 + n.wrapping_mul(0x9e37_79b9_7f4a_7c15);
+    }
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(1)
 }

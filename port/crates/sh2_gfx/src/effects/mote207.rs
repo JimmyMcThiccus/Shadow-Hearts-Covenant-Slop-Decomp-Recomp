@@ -289,6 +289,7 @@ impl Mote207 {
                     }
                 }
                 out.push(BgQuad {
+                    axes: None,
                     tex: MOTE_TEX,
                     center: m.pos,
                     offs: half,

@@ -193,6 +193,7 @@ impl Fog {
                 continue;
             }
             out.push(BgQuad {
+                axes: None,
                 tex: super::bgfx::tex::SMOKE,
                 center: d.pos,
                 offs: half,
@@ -273,6 +274,7 @@ impl Lenz6 {
             return;
         }
         out.push(BgQuad {
+            axes: None,
             tex: LENZ6_TEX,
             center: self.pos,
             offs: quad_offs(Vec2::splat(self.size * 0.5)),

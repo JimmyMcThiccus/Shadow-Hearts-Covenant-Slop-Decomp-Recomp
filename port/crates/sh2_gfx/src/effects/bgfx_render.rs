@@ -216,7 +216,13 @@ pub fn quads_to_mesh(quads: &[&BgQuad], cam_rot: Quat, cam_pos: Vec3, mesh: &mut
         let color = [q.rgba.x / 128.0, q.rgba.y / 128.0, q.rgba.z / 128.0, q.rgba.w / 128.0];
         for k in 0..4 {
             let o = q.offs[k];
-            let p = if q.billboard { c + right * o.x - up * o.y } else { c + Vec3::new(o.x, -o.y, 0.0) };
+            let p = if let Some([ax, ay]) = q.axes {
+                c + Vec3::new(ax.x, -ax.y, -ax.z) * o.x + Vec3::new(ay.x, -ay.y, -ay.z) * o.y
+            } else if q.billboard {
+                c + right * o.x - up * o.y
+            } else {
+                c + Vec3::new(o.x, -o.y, 0.0)
+            };
             pos.push(p.to_array());
             uv.push(q.uv[k].to_array());
             col.push(color);
@@ -238,6 +244,8 @@ pub fn bg_quad_recs(quads: &[&BgQuad], pulls: bool, view: &ScreenView) -> Vec<Qu
             let color = Vec4::new(q.rgba.x / 128.0, q.rgba.y / 128.0, q.rgba.z / 128.0, q.rgba.w / 128.0);
             let (center, mode, pull) = if q.screen {
                 (Vec3::new(q.center.x, q.center.y, 0.0), QuadMode::Screen { kx: view.depth / view.focal.x, ky: view.depth / view.focal.y, depth: view.depth }, 0.0)
+            } else if let Some([ax, ay]) = q.axes {
+                (p2b(q.center), QuadMode::Axes { ax: Vec3::new(ax.x, -ax.y, -ax.z), ay: Vec3::new(ay.x, -ay.y, -ay.z) }, if pulls { q.pull } else { 0.0 })
             } else if q.billboard {
                 (p2b(q.center), QuadMode::Billboard, if pulls { q.pull } else { 0.0 })
             } else {

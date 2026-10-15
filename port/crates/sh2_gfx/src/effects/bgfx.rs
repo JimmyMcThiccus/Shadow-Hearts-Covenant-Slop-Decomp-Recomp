@@ -107,6 +107,9 @@ pub struct BgQuad {
     pub screen: bool,
     /// GS depth test (`TEST_1` 0x73001, `FpPrim::setZtest(1)`); false = `0x33001`, ZTST ALWAYS: drawn over everything
     pub ztest: bool,
+    /// explicit PS2 world axes of `offs.x` / `offs.y` (overrides `billboard`): e.g. a camera-space x / z sprite (`FpObjectRetailTaki3`: size `(w, 0, d)`
+    /// through the billboard matrix = the camera's right / forward axes)
+    pub axes: Option<[Vec3; 2]>,
 }
 
 fn rd_f32(b: &[u8], o: usize) -> f32 {
@@ -414,6 +417,7 @@ enum Item {
     Mote(super::mote207::Mote207),
     Rain(super::rain206::Rain206),
     Taki(super::bgfx_taki::Taki),
+    Drift(super::bgfx_drift::Drift208),
 }
 
 /// All background effects of one stage / map (`BgEffectMan` set).
@@ -524,6 +528,10 @@ impl BgFx {
                     None => unsupported.push((r.slot, r.kind)),
                 },
                 201 => items.push((r.slot, Item::Funsui(super::bgfx_misc::Funsui::new(&mut rng)))),
+                208 => match super::bgfx_drift::Drift208::new(rd_f32(&r.param, 0) as i32, &mut rng) {
+                    Some(d) => items.push((r.slot, Item::Drift(d))),
+                    None => unsupported.push((r.slot, r.kind)),
+                },
                 204 => match super::bgfx_taki::Taki::new(rd_f32(&r.param, 0) as i32, &mut rng) {
                     Some(t) => items.push((r.slot, Item::Taki(t))),
                     None => unsupported.push((r.slot, r.kind)),
@@ -600,7 +608,8 @@ impl BgFx {
                 Item::Lenz(l) => l.step(frames, cam, rng),
                 Item::Mote(m) => m.step(frames, cam, rng),
                 Item::Rain(r) => r.step(frames, rng),
-                Item::Taki(t) => t.step(frames, rng),
+                Item::Taki(t) => t.step(frames, cam, rng),
+                Item::Drift(d) => d.step(frames, rng),
             }
         }
     }
@@ -626,7 +635,7 @@ impl BgFx {
                         // a particle whose period is exactly 0 divides 0 / 0 (`tail = period * 0.1`): the PS2 FPU saturates, the port zeroes the alpha instead of propagating a NaN
                         let fin = |v: f32| if v.is_finite() { v } else { 0.0 };
                         let a = fin(d.color.w * alpha).clamp(0.0, 128.0);
-                        out.push(BgQuad { tex, center: d.pos, offs, uv, rgba: Vec4::new(fin(d.color.x), fin(d.color.y), fin(d.color.z), a), billboard: true, pull: 0.0, additive: true, screen: false, ztest: true });
+                        out.push(BgQuad { axes: None, tex, center: d.pos, offs, uv, rgba: Vec4::new(fin(d.color.x), fin(d.color.y), fin(d.color.z), a), billboard: true, pull: 0.0, additive: true, screen: false, ztest: true });
                     }
                 }
                 Item::Flare(f) => {
@@ -646,6 +655,7 @@ impl BgFx {
                         let (u0, v0) = (st * cx, st * cy);
                         let uvs = [Vec2::new(u0, v0), Vec2::new(u0, v0 + st), Vec2::new(u0 + st, v0), Vec2::new(u0 + st, v0 + st)];
                         out.push(BgQuad {
+                            axes: None,
                             tex: tex::FLARE,
                             center: f.pos,
                             offs,
@@ -666,6 +676,7 @@ impl BgFx {
                 Item::Mote(m) => m.quads(alpha, &mut out),
                 Item::Rain(r) => r.quads(alpha, &mut out),
                 Item::Taki(t) => t.quads(alpha, &mut out),
+                Item::Drift(d) => d.quads(alpha, &mut out),
                 Item::Smoke(s) => {
                     for p in s.em.p.iter().filter(|p| p.t > 0.0 && p.t <= p.period) {
                         let h = Vec2::new(p.size[0] * 0.5 * p.scale, p.size[1] * 0.5 * p.scale);
@@ -674,6 +685,7 @@ impl BgFx {
                         let offs = [rot(Vec2::new(-h.x, -h.y)), rot(Vec2::new(-h.x, h.y)), rot(Vec2::new(h.x, -h.y)), rot(Vec2::new(h.x, h.y))];
                         let a = (p.alpha * alpha).clamp(0.0, 128.0);
                         out.push(BgQuad {
+                            axes: None,
                             tex: tex::SMOKE,
                             center: Vec3::from(p.pos),
                             offs,

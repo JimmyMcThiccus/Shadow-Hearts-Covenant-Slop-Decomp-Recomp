@@ -103,6 +103,7 @@ impl Rain206 {
                 continue;
             }
             out.push(BgQuad {
+                axes: None,
                 tex: TEX_WHITE,
                 center: glam::Vec3::ZERO,
                 offs: [Vec2::new(-W * 0.55, -H * 0.55), Vec2::new(-W * 0.55, H * 0.55), Vec2::new(W * 0.55, -H * 0.55), Vec2::new(W * 0.55, H * 0.55)],
@@ -123,6 +124,7 @@ impl Rain206 {
             let (w, h) = (s.size.x * s.scale, s.size.y * s.scale);
             let dx = (h * 2.0 * s.vel.x) / s.vel.y;
             out.push(BgQuad {
+                axes: None,
                 tex: RAIN_TEX,
                 center: glam::Vec3::new(s.pos.x - W * 0.5, s.pos.y - H * 0.5, 0.0),
                 offs: [Vec2::new(-w, -h), Vec2::new(-w + dx, h), Vec2::new(w, -h), Vec2::new(w + dx, h)],

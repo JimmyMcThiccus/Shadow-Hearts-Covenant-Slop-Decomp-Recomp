@@ -22,6 +22,10 @@ fn every_map_effect_steps_cleanly() {
         if recs.is_empty() {
             continue;
         }
+        for r in recs.iter().filter(|r| [200u16, 202, 204, 208, 209].contains(&r.kind)) {
+            let f0 = r.param.get(0..4).map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).unwrap_or(f32::NAN);
+            println!("{n}: type {} slot {} f0 {f0}", r.kind, r.slot);
+        }
         let mut fx = BgFx::new(&recs, 7);
         supported += fx.len();
         for (_, k) in &fx.unsupported {

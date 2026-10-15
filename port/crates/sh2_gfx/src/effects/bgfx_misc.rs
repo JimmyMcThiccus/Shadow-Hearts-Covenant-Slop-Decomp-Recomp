@@ -130,6 +130,7 @@ impl Funsui {
                 continue;
             }
             out.push(BgQuad {
+                axes: None,
                 tex: tex::CLOUD,
                 center: p.pos,
                 offs: quad_offs(Vec2::splat(12.0 * p.scale)),

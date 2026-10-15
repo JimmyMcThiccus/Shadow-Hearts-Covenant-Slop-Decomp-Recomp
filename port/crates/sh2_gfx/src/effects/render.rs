@@ -710,7 +710,7 @@ pub struct EffectRenderPlugin;
 
 impl Plugin for EffectRenderPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<FxLive>().init_resource::<FxLiveSet>().init_resource::<FxSlots>().add_systems(Update, sync_fx);
+        app.init_resource::<FxLive>().init_resource::<FxLiveSet>().init_resource::<FxSlots>().add_systems(Update, sync_fx.before(crate::bevy::model::animate_models));
         // the encounter shatter (`BtlIn`; its driver skips itself without the mesh / image / material assets)
         app.add_plugins(super::btlin::BtlInPlugin);
         // the screen space passes need the render sub app and the shader assets (absent in headless test apps)

@@ -61,13 +61,16 @@ pub struct EffectChoice {
     pub mode_4654: u8,
     /// `Retail_CBattle_CheckAbilitySealed(actor)` (US 0x6a6af0) answered 1
     pub check_6a6af0: bool,
-    /// `rand()` (only its low two bits are used)
+    /// `rand()` (135: `& 3`; 137: `% 10000`)
     pub rand: u32,
+    /// the acting unit is an enemy (`BtlChr +0x04` bit 0)
+    pub actor_enemy: bool,
 }
 
 /// The effect program the retail `EffectFunc` loads for an action record whose `+0x18` is `raw` (`DataReadEntry(0xc, 0xb, id)`):
-/// `raw < 0` none; `id = raw % 1000` (`raw >= 1000`: `raw - 1000`); **137 plays nothing**; 135 -> one of 135 / 252 / 253 / 254 by `rand() & 3` when `cycle_hit`, else 240;
-/// 229 -> 261 when `mode_4654 == 1`; 222 -> 260 when `mode_4654 == 1` or `!check_6a6af0`.
+/// `raw < 0` none; `id = raw % 1000` (`raw >= 1000`: `raw - 1000`); 135 -> one of 135 / 252 / 253 / 254 by `rand() & 3` when `cycle_hit`, else 240;
+/// 256 -> 256 when `cycle_hit`, else 257; 137 -> 137 when `rand() % 10000 < 5001` or the actor is an enemy, else 249; 229 -> 261 when `mode_4654 == 1`;
+/// 222 -> 260 when `mode_4654 == 1` or `!check_6a6af0` (US `decomp/I/us_battle_phases.c` ~365..445; round 5 read 137 as "no effect": wrong).
 pub fn retail_effect_id(raw: i32, c: EffectChoice) -> Option<i32> {
     if raw < 0 {
         return None;
@@ -76,7 +79,10 @@ pub fn retail_effect_id(raw: i32, c: EffectChoice) -> Option<i32> {
     Some(match id {
         135 if c.cycle_hit => [135, 252, 253, 254][(c.rand & 3) as usize],
         135 => 240,
-        137 => return None,
+        256 if c.cycle_hit => 256,
+        256 => 257,
+        137 if c.rand % 10000 < 5001 || c.actor_enemy => 137,
+        137 => 249,
         229 if c.mode_4654 == 1 => 261,
         222 if c.mode_4654 == 1 || !c.check_6a6af0 => 260,
         _ => if raw >= 1000 { raw - 1000 } else { raw },
@@ -129,12 +135,26 @@ mod tests {
         assert_eq!(retail_effect_id(-1, c), None);
         assert_eq!(retail_effect_id(27, c), Some(27));
         assert_eq!(retail_effect_id(1027, c), Some(27));
-        assert_eq!(retail_effect_id(137, c), None);
+        assert_eq!(retail_effect_id(137, c), Some(137));
+        assert_eq!(retail_effect_id(137, EffectChoice { rand: 5001, ..c }), Some(249));
+        assert_eq!(retail_effect_id(137, EffectChoice { rand: 5001, actor_enemy: true, ..c }), Some(137));
+        assert_eq!(retail_effect_id(256, c), Some(257));
+        assert_eq!(retail_effect_id(256, EffectChoice { cycle_hit: true, ..c }), Some(256));
         assert_eq!(retail_effect_id(135, c), Some(240));
         assert_eq!(retail_effect_id(135, EffectChoice { cycle_hit: true, rand: 6, ..c }), Some(253));
         assert_eq!(retail_effect_id(229, EffectChoice { mode_4654: 1, ..c }), Some(261));
         assert_eq!(retail_effect_id(222, EffectChoice { check_6a6af0: true, ..c }), Some(222));
         assert_eq!(retail_effect_id(222, c), Some(260));
+    }
+
+    #[test]
+    fn effmdl_point_lights() {
+        assert_eq!(effmdl_light(0, 0.0, true), None);
+        assert_eq!(effmdl_light(3, 0.2, true), Some((Vec3::new(0.5, 0.5, 1.0), 8.0)));
+        assert_eq!(effmdl_light(4, 0.75, false), Some((Vec3::new(1.0, 0.5, 0.5), 4.0)));
+        assert_eq!(effmdl_light(4, 1.0, false).unwrap().1, 0.0);
+        assert_eq!(effmdl_light(6, 0.1, true).unwrap().1, 8.0);
+        assert_eq!(effmdl_light(6, 0.1, false).unwrap().1, 0.0);
         assert_eq!(fusion_effect_path(0, false, 0), "EFFECT/FU_U1.EFD");
         assert_eq!(fusion_effect_path(0, false, 1), "EFFECT/FU_U2.EFD");
         assert_eq!(fusion_effect_path(7, false, 1), "EFFECT/FU_K1.EFD");
@@ -1100,6 +1120,10 @@ impl EffMdlQueue {
     /// streaks are turned to `power + 180`).
     pub fn weapon_hit(&mut self, pos: Vec3, perfect: bool, strong: bool, combo: bool, monster_move: bool, power: f32) {
         let mut speed = if combo { 1.0 } else { 1.25 };
+        // development: `SH2_HITRING_TEST=1` also starts the `HitMark` flash ring (normally only `btlHitMarkEffectCall` kind 3, programs 179 / 211 / 238)
+        if std::env::var_os("SH2_HITRING_TEST").is_some() {
+            self.rings.push((pos, 1.0));
+        }
         if monster_move {
             speed *= 1.5;
         }
@@ -1151,10 +1175,13 @@ impl EffMdlQueue {
 /// `BTL_001.BIN` entries and the models built from them.
 #[derive(Resource, Default)]
 pub struct BtlEffArt {
-    /// running `HitMark` rings: logic, mesh entity, mesh
-    rings: Vec<(sh2_gfx::effects::hitmark::HitRing, Entity, Handle<Mesh>)>,
+    /// running `HitMark` rings and their GPU record group
+    rings: Vec<sh2_gfx::effects::hitmark::HitRing>,
+    ring_group: Option<sh2_gfx::bevy::fxquad::FxGpuGroup>,
+    /// the group drew rings last frame (one more empty upload clears it)
+    ring_drawn: bool,
     /// `BTL_000` hit flash texture material (US entry 14, JP 11), loaded with the first ring
-    ring_mat: Option<Option<Handle<Sh2Material>>>,
+    ring_base: Option<Option<Sh2Material>>,
     tried: bool,
     entries: Vec<(String, Vec<u8>)>,
     models: HashMap<u8, Option<(Arc<SshModel>, sh2_gfx::bevy::model::ModelMaterials)>>,
@@ -1278,18 +1305,47 @@ pub struct EffMdlLive {
     alpha: f32,
     tag: Option<usize>,
     started: bool,
+    /// PS2 world position of the model (`EffMdl +0x540`, the point light's position)
+    pos: Vec3,
+    /// kinds 3 / 4 / 6: the `LightControl` slot of the point light in the stage's light control (`EffMdl +0x5ac`)
+    light: Option<u16>,
+}
+
+/// `EffMdl::Polling` kinds 3 / 4 / 6 (JP BATTLE.BIN `decomp/H/EffMdl.c` ~430..515): a point light at the model, no shadow, no interpolation; colour blue
+/// `(0.5, 0.5, 1)` / red `(1, 0.5, 0.5)` / `(1, 1, 0.8)`.  Kinds 3 / 4: strength `8 * f`, `f` = 1 until half the motion, then down to 0 at its end
+/// (`getSequenceProgress`); kind 6: strength 8 on the first poll, 0 afterwards (one-frame flash); `DispOff` (alpha hidden) = strength 0.
+pub fn effmdl_light(kind: u8, progress: f32, first: bool) -> Option<(Vec3, f32)> {
+    let color = match kind {
+        3 => Vec3::new(0.5, 0.5, 1.0),
+        4 => Vec3::new(1.0, 0.5, 0.5),
+        6 => Vec3::new(1.0, 1.0, 0.8),
+        _ => return None,
+    };
+    let strength = if kind == 6 {
+        if first { 8.0 } else { 0.0 }
+    } else {
+        let f = if progress >= 0.5 { 1.0 - (progress - 0.5) * 2.0 } else { 1.0 };
+        f.max(0.0) * 8.0
+    };
+    Some((color, strength))
 }
 
 /// Spawn the queued `EffMdl`s, advance them (`EffMdl::Polling` / `MotionEndCallBack`) and remove the finished / released ones.
 #[allow(clippy::too_many_arguments)]
-/// The `HitMark` flash rings (`HitMarkEffectCall` kind 3): one 10-vertex fan per ring, billboarded to the battle camera, additive, depth tested.
-fn drive_hit_rings(commands: &mut Commands, disc: &Sh2Disc, art: &mut BtlEffArt, queue: &mut EffMdlQueue, gpu: &mut CharacterGpu, cam: Option<&GlobalTransform>, dt: f32) {
+/// The `HitMark` flash rings (`HitMarkEffectCall` kind 3): four quads per ring (the 10-vertex fan = four mirrored quadrants), camera billboards, additive,
+/// depth tested; drawn as one GPU-expanded record group (`sh2_gfx::bevy::fxquad`, no per-frame mesh).
+fn drive_hit_rings(commands: &mut Commands, disc: &Sh2Disc, art: &mut BtlEffArt, queue: &mut EffMdlQueue, gpu: &mut CharacterGpu, ga: Option<&mut sh2_gfx::bevy::fxquad::FxGpuAssets>, cam: Option<&GlobalTransform>, dt: f32) {
+    use sh2_gfx::bevy::fxquad::{pack_quads, FxCamBasis, FxGpuGroup, QuadMode, QuadRec};
     use sh2_gfx::effects::hitmark::HitRing;
     let new = std::mem::take(&mut queue.rings);
-    if new.is_empty() && art.rings.is_empty() {
+    if new.is_empty() && art.rings.is_empty() && !art.ring_drawn {
         return;
     }
-    if art.ring_mat.is_none() {
+    let Some(ga) = ga else {
+        art.rings.clear();
+        return;
+    };
+    if art.ring_base.is_none() {
         let k = if sh2_core::boot::is_retail() { 14 } else { 11 };
         let img = disc.read("BTLDATA/BTL_000.BIN").ok().and_then(|b| {
             let secs = crate::stage::sections(&b);
@@ -1300,67 +1356,46 @@ fn drive_hit_rings(commands: &mut Commands, disc: &Sh2Disc, art: &mut BtlEffArt,
             let i = sh2_gfx::texture::decode_jrc(sec, 0, 0).ok()?;
             Some(sh2_gfx::bevy::image::rgba_image(i.width, i.height, i.pixels, sh2_gfx::bevy::TexFilter::Linear))
         });
-        art.ring_mat = Some(img.map(|img| {
+        art.ring_base = Some(img.map(|img| {
             let h = gpu.images.add(img);
-            gpu.materials.add(Sh2Material::textured(Some(h)).with_lit(false).with_fog(false).with_blend(sh2_gfx::bevy::Sh2Blend::Add, None))
+            Sh2Material::textured(Some(h)).with_lit(false).with_fog(false).with_blend(sh2_gfx::bevy::Sh2Blend::Add, None)
         }));
-        log::info!("battle: HitMark ring texture {}", if art.ring_mat.as_ref().map(|m| m.is_some()).unwrap_or(false) { "loaded" } else { "missing" });
+        log::info!("battle: HitMark ring texture {}", if art.ring_base.as_ref().map(|m| m.is_some()).unwrap_or(false) { "loaded" } else { "missing" });
     }
-    let Some(Some(mat)) = art.ring_mat.clone() else {
+    let Some(Some(base)) = art.ring_base.clone() else {
         art.rings.clear();
         return;
     };
-    let root = match art.root {
-        Some(r) if commands.get_entity(r).is_ok() => r,
-        _ => {
-            let r = commands.spawn((Name::new("btl_effmdl_root"), Transform::from_rotation(Quat::from_rotation_x(std::f32::consts::PI)), Visibility::default(), DespawnOnExit(sh2_core::game::Scene::Battle))).id();
-            art.root = Some(r);
-            r
+    art.rings.extend(new.into_iter().map(|(pos, speed)| HitRing::new(pos, speed.max(0.01))));
+    art.rings.retain_mut(|r| r.step(dt));
+    let basis = cam.map(|gt| { let (_, rot, pos) = gt.to_scale_rotation_translation(); FxCamBasis::from_rot_pos(rot, pos) }).unwrap_or_default();
+    let mut recs = Vec::with_capacity(art.rings.len() * 4);
+    for r in &art.rings {
+        let s = r.half();
+        let a = r.alpha() / 128.0;
+        let c = sh2_gfx::bevy::model::ps2_to_bevy(r.pos);
+        for (sx, sy) in [(-1.0f32, -1.0f32), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
+            // corners: centre, edge y, edge x, corner (triangles 0 1 2 / 1 3 2); the texture quadrant has the ring centre at uv (1, 1)
+            recs.push(QuadRec {
+                center: c,
+                mode: QuadMode::Billboard,
+                pull: 0.0,
+                offs: [Vec2::ZERO, Vec2::new(0.0, sy * s), Vec2::new(sx * s, 0.0), Vec2::new(sx * s, sy * s)],
+                uv: [Vec2::ONE, Vec2::new(1.0, 0.0), Vec2::new(0.0, 1.0), Vec2::ZERO],
+                color: [Vec4::new(1.0, 1.0, 1.0, a); 4],
+            });
         }
-    };
-    for (pos, speed) in new {
-        let mesh = gpu.meshes.add(Mesh::new(bevy::mesh::PrimitiveTopology::TriangleList, bevy::asset::RenderAssetUsages::default()));
-        let e = commands.spawn((Name::new("hitmark_ring"), Mesh3d(mesh.clone()), MeshMaterial3d(mat.clone()), Transform::default(), Visibility::default(), bevy::camera::visibility::NoFrustumCulling)).id();
-        commands.entity(root).add_child(e);
-        art.rings.push((HitRing::new(pos, speed.max(0.01)), e, mesh));
     }
-    // camera axes in PS2 world space (x right, y down)
-    let (right, down) = match cam {
-        Some(gt) => {
-            let r = gt.right().as_vec3();
-            let u = gt.up().as_vec3();
-            (Vec3::new(r.x, -r.y, -r.z), -Vec3::new(u.x, -u.y, -u.z))
-        }
-        None => (Vec3::X, Vec3::Y),
-    };
-    art.rings.retain_mut(|(ring, e, mesh)| {
-        if !ring.step(dt) {
-            if let Ok(mut ec) = commands.get_entity(*e) {
-                ec.despawn();
-            }
-            return false;
-        }
-        let fan = ring.fan();
-        let a = ring.alpha() / 128.0;
-        let mut pos = Vec::with_capacity(24);
-        let mut uv = Vec::with_capacity(24);
-        for k in 1..9 {
-            for i in [0, k, k + 1] {
-                let (o, t) = fan[i];
-                pos.push((ring.pos + right * o.x + down * o.y).to_array());
-                uv.push(t.to_array());
-            }
-        }
-        let n = pos.len();
-        if let Some(mut m) = gpu.meshes.get_mut(&*mesh) {
-            m.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
-            m.insert_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0f32, 0.0, 1.0]; n]);
-            m.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv);
-            m.insert_attribute(Mesh::ATTRIBUTE_COLOR, vec![[1.0f32, 1.0, 1.0, a]; n]);
-            m.insert_indices(bevy::mesh::Indices::U32((0..n as u32).collect()));
-        }
-        true
-    });
+    let batch = pack_quads(&recs, &basis);
+    let alive = art.ring_group.as_ref().map(|g| commands.get_entity(g.entity).is_ok()).unwrap_or(false);
+    if !alive {
+        let g = FxGpuGroup::spawn(commands, &mut gpu.meshes, ga, &base, &batch, false, "hitmark_rings");
+        commands.entity(g.entity).insert(DespawnOnExit(sh2_core::game::Scene::Battle));
+        art.ring_group = Some(g);
+    } else if let Some(g) = art.ring_group.as_mut() {
+        g.update(commands, &mut gpu.meshes, ga, &batch);
+    }
+    art.ring_drawn = !art.rings.is_empty();
 }
 
 pub fn drive_effmdls(
@@ -1372,15 +1407,30 @@ pub fn drive_effmdls(
     mut live: Query<(Entity, &mut EffMdlLive, &mut AnimatedModel)>,
     time: Res<Time>,
     cams: Query<&GlobalTransform, With<crate::plugin::BattleCamera>>,
+    (mut buffers, mut fx_mats, mut templates): (Option<ResMut<Assets<bevy::render::storage::ShaderBuffer>>>, Option<ResMut<Assets<sh2_gfx::bevy::fxquad::Sh2FxMaterial>>>, Option<ResMut<sh2_gfx::bevy::fxquad::FxTemplates>>),
+    mut stage: Query<&mut crate::stage::StageLights>,
 ) {
     let Some(disc) = disc else { return };
-    drive_hit_rings(&mut commands, &disc, &mut art, &mut queue, &mut gpu, cams.iter().next(), time.delta_secs().min(0.1));
+    // the point lights of kinds 3 / 4 / 6 live in the stage's `LightControl` (`light_fighters` evaluates it per fighter); a stage without lights keeps the
+    // port's neutral rig, so no light is added there
+    let mut lc = stage.single_mut().ok().filter(|s| s.control.num_light > 0);
+    fn release_light(lc: &mut Option<Mut<crate::stage::StageLights>>, l: &mut EffMdlLive) {
+        if let (Some(h), Some(sl)) = (l.light.take(), lc.as_mut()) {
+            sl.control.release(h as i32);
+        }
+    }
+    let mut ga = match (buffers.as_deref_mut(), fx_mats.as_deref_mut(), templates.as_deref_mut()) {
+        (Some(buffers), Some(materials), Some(templates)) => Some(sh2_gfx::bevy::fxquad::FxGpuAssets { buffers, materials, templates }),
+        _ => None,
+    };
+    drive_hit_rings(&mut commands, &disc, &mut art, &mut queue, &mut gpu, ga.as_mut(), cams.iter().next(), time.delta_secs().min(0.1));
     if !queue.reqs.is_empty() {
         art.load(&disc);
     }
     let releases = std::mem::take(&mut queue.releases);
-    for (e, l, _) in &mut live {
+    for (e, mut l, _) in &mut live {
         if l.tag.is_some() && releases.contains(&l.tag.unwrap()) {
+            release_light(&mut lc, &mut l);
             commands.entity(e).despawn();
         }
     }
@@ -1389,6 +1439,21 @@ pub fn drive_effmdls(
         if !l.started {
             l.started = true;
             continue;
+        }
+        if let Some((color, strength)) = effmdl_light(l.kind, am.inst.progress(), l.light.is_none()) {
+            if let Some(sl) = lc.as_mut() {
+                if l.light.is_none() {
+                    l.light = sl.control.create_point(l.pos, color);
+                    if let Some(d) = l.light.and_then(|h| sl.control.get_mut(h as usize)) {
+                        d.shadow_flg = false;
+                        d.interpolate = false;
+                    }
+                }
+                let hidden = am.inst.model_alpha <= 0.0;
+                if let Some(d) = l.light.and_then(|h| sl.control.get_mut(h as usize)) {
+                    d.strength = if hidden { 0.0 } else { strength };
+                }
+            }
         }
         match l.kind {
             5 => {
@@ -1409,6 +1474,7 @@ pub fn drive_effmdls(
             _ => {}
         }
         if am.inst.motion_finished() {
+            release_light(&mut lc, &mut l);
             commands.entity(e).despawn();
         }
     }
@@ -1451,7 +1517,7 @@ pub fn drive_effmdls(
         let mut g = sh2_gfx::bevy::model::GpuCtx { meshes, images, materials, filter: settings.filter };
         let e = sh2_gfx::bevy::model::spawn_animated_model_ex(&mut commands, root, model, motions, &mats, &mut g, tf, &format!("effmdl_{}_{}", r.mdl, r.motion), false);
         log::debug!("battle: EffMdl {}/{} '{}' at {:?} speed {} kind {}", r.mdl, r.anm, r.motion, r.pos, r.speed, r.kind);
-        commands.entity(e).insert(EffMdlLive { kind: r.kind, alpha: r.alpha, tag: r.tag, started: false });
+        commands.entity(e).insert(EffMdlLive { kind: r.kind, alpha: r.alpha, tag: r.tag, started: false, pos: r.pos, light: None });
         // the motion starts on the next frame (the AnimatedModel component is inserted by the spawn command)
         commands.queue(move |w: &mut World| {
             if let Some(mut am) = w.get_mut::<AnimatedModel>(e) {
@@ -1741,6 +1807,13 @@ pub fn drive_weapon_trails(
             let k = i * 2;
             idx.extend_from_slice(&[k, k + 1, k + 2, k + 1, k + 3, k + 2]);
         }
+        if idx.is_empty() {
+            // an empty vertex / index buffer makes Bevy's mesh slab allocator log "Use-after-free" every frame: one invisible triangle instead
+            pos = vec![[0.0; 3]; 3];
+            uv = vec![[0.0; 2]; 3];
+            col = vec![[0.0; 4]; 3];
+            idx = vec![0, 1, 2];
+        }
         let mut mesh = Mesh::new(bevy::mesh::PrimitiveTopology::TriangleList, bevy::asset::RenderAssetUsages::default());
         mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
         mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv);
@@ -1787,6 +1860,12 @@ pub fn drive_weapon_trails(
                     col.push([1.0, 1.0, 1.0, 1.0]);
                 }
             }
+        }
+        if pos.is_empty() {
+            // see the sword trails: no empty vertex buffers
+            pos = vec![[0.0; 3]; 2];
+            uv = vec![[0.0; 2]; 2];
+            col = vec![[0.0; 4]; 2];
         }
         let mut mesh = Mesh::new(bevy::mesh::PrimitiveTopology::LineList, bevy::asset::RenderAssetUsages::default());
         mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);

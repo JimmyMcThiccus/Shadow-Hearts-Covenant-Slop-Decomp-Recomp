@@ -5,13 +5,14 @@
 //! `FpObjectLenz` 0x002b3ea0 .. (`CalculateFunc` 0x002b4530, `SetPacket` 0x002b46d0); the JP versions in `decomp/D/Fp.c`.
 //!
 //! Record (`EFFECT` type 200): `+0x00 FVector sun position`, `+0x0c` flag word (`hi` byte, bit 5 = the block below exists), `+0x10 flags2`, `+0x1c f32 mode`.  The mode picks colours, sizes and
-//! extra objects of the sun (`FpSun::Create`): 0, 2, 3, 4, 5, 6, 7, 8 (+ occluders, not ported), 9, 10, 99 (= mode 0 with the position `(-25, -134, -332)`) and the special mode 1 (the sun is placed relative
-//! to the player's control model, `CField::GetCtrlModel`; not ported).  Every object of the class is drawn with `ALPHA_1 = 0x48` (`Cs * As + Cd`) and, for modes other than 8..10, `TEST = 0x33001`
+//! extra objects of the sun (`FpSun::Create`): 0, 2, 3, 4, 5, 6, 7, 8 (+ occluders, not ported), 9, 10, 99 (= mode 0 with the position `(-25, -134, -332)`) and the special mode 1
+//! (fixed sun, flare axis anchored 80 px above the centre, ghosts x 2.5; the game also hides it while the player's control model is at z < -20 -- not
+//! reproduced, the effect has no player position).  Every object of the class is drawn with `ALPHA_1 = 0x48` (`Cs * As + Cd`) and, for modes other than 8..10, `TEST = 0x33001`
 //! (ZTST ALWAYS: no depth test).
 //!
 //! Screen space numbers are the GS ones of the 512 x 448 frame: the screen centre is `(2048, 2048)`, the sun is projected with the view-screen matrix, the fade windows are `+-307.2 / +-268.8`
 //! (20 % outside the frame) with the ramps `51.2` / `44.8` wide.  Not ported: the retail `FpObjectRetailLenzSub` alpha scripts (per map number), the hard coded occluder quads of modes 8 / 10
-//! (`FpObjectLenzFlare::Init`), mode 1.
+//! (`FpObjectLenzFlare::Init`), the mode-1 player test.
 
 use glam::{Vec2, Vec3, Vec4};
 
@@ -146,12 +147,14 @@ pub struct LenzFlare {
     ratio: f32,
     dir448: Vec2,
     sun_screen: Vec2,
+    /// the flare axis' anchor relative to the screen centre (`+0xc0 / +0xc4` - 2048)
+    centre: Vec2,
     cam: BgCamera,
     flicker: f32,
 }
 
 impl LenzFlare {
-    /// `FpLenzFlare::Create(void*)`; `None` for mode 1 (not ported).
+    /// `FpLenzFlare::Create(void*)`; `None` for an unknown mode.
     pub fn new(p: &[u8]) -> Option<LenzFlare> {
         let sun = Vec3::new(rd_f32(p, 0), rd_f32(p, 4), rd_f32(p, 8));
         let hi = (rd_u32(p, 12) >> 24) as u8;
@@ -159,10 +162,18 @@ impl LenzFlare {
         if mode == 0 && (sun.x as i32, sun.y as i32, sun.z as i32) == (-25, -134, -332) {
             mode = 99;
         }
-        if mode == 1 || !sun.is_finite() || !(0..=99).contains(&mode) {
+        if !sun.is_finite() || !(0..=99).contains(&mode) {
             return None;
         }
+        // mode 1 (US `FpLenzFlare::Create(void*)` 0x002b0fe0): a fixed sun at (504.96, -238.88, -20) and the flare axis through a point 80 px above the screen
+        // centre (`+0xc4` = 1968 instead of 2048, read by `FpObjectLenzFlare::CalculateFunc` 0x002b2ce0)
+        let (sun, centre) = if mode == 1 {
+            (Vec3::new(f32::from_bits(0x43fc7ae1), f32::from_bits(0xc36ee148), -20.0), Vec2::new(0.0, -80.0))
+        } else {
+            (sun, Vec2::ZERO)
+        };
         Some(LenzFlare {
+            centre,
             sun,
             mode,
             suns: sun_objects(mode),
@@ -221,7 +232,7 @@ impl LenzFlare {
         self.sun_screen = rel;
         // ref length = |(256, 224)|; the line from the sun through the centre
         let reference = Vec2::new(256.0, 224.0).length();
-        let to_centre = -rel;
+        let to_centre = self.centre - rel;
         let len = to_centre.length();
         self.ratio = len.min(reference) / reference;
         self.dir448 = to_centre.normalize_or_zero() * 448.0;
@@ -244,7 +255,7 @@ impl LenzFlare {
 
     /// Screen position (relative to the centre) of ghost `g` (`FpObjectLenz::CalculateFunc`).
     pub fn ghost_pos(&self, g: &Ghost) -> Vec2 {
-        self.ratio * self.dir448 * g.factor
+        self.centre + self.ratio * self.dir448 * g.factor
     }
 
     pub fn quads(&self, alpha_power: f32, out: &mut Vec<BgQuad>) {
@@ -276,6 +287,7 @@ impl LenzFlare {
                 uv = [Vec2::new(0.0, 0.0), Vec2::new(0.0, 0.5), Vec2::new(0.5, 0.0), Vec2::new(0.5, 0.5)];
             }
             out.push(BgQuad {
+                axes: None,
                 tex: SLOT_TEX[o.slot as usize],
                 center: pos,
                 offs: quad_offs(half),
@@ -296,6 +308,7 @@ impl LenzFlare {
         if a > 0.0 {
             let h = self.glare_size * 0.5;
             out.push(BgQuad {
+                axes: None,
                 tex: SLOT_TEX[0],
                 center: self.sun_screen.extend(0.0),
                 offs: quad_offs(Vec2::new(h, h * 1.142_857_2)),
@@ -316,6 +329,7 @@ impl LenzFlare {
             }
             let h = g.size * 0.5;
             out.push(BgQuad {
+                axes: None,
                 tex: SLOT_TEX[g.slot as usize],
                 center: self.ghost_pos(g).extend(0.0),
                 offs: quad_offs(Vec2::new(h, h * 1.142_857_2)),
@@ -347,13 +361,16 @@ mod tests {
         p
     }
 
-    /// US 0x002b0fe0: `CA_00_U` (mode 2), the retail BBGs 46 / 84 (modes 10 / 9); mode 1 and unknown values are not created; the position `(-25, -134, -332)` with mode 0 is mode 99.
+    /// US 0x002b0fe0: `CA_00_U` (mode 2), the retail BBGs 46 / 84 (modes 10 / 9); unknown values are not created; the position `(-25, -134, -332)` with mode 0 is mode 99.
     #[test]
     fn record_modes() {
         let l = LenzFlare::new(&record([1677.897, -616.892, -80.371], 2.0)).unwrap();
         assert_eq!((l.mode, l.suns.len(), l.ghosts.len()), (2, 2, 17));
         assert_eq!(LenzFlare::new(&record([1394.92, -435.699, -338.539], 10.0)).unwrap().mode, 10);
-        assert!(LenzFlare::new(&record([0.0; 3], 1.0)).is_none());
+        let m1 = LenzFlare::new(&record([0.0; 3], 1.0)).unwrap();
+        assert_eq!((m1.mode, m1.centre), (1, Vec2::new(0.0, -80.0)));
+        assert!((m1.sun.x - 504.96).abs() < 0.01);
+        assert!(LenzFlare::new(&record([0.0; 3], 120.0)).is_none());
         let mut r = record([-25.873, -134.338, -332.533], 0.0);
         r[0x1c..0x20].copy_from_slice(&0f32.to_le_bytes());
         assert_eq!(LenzFlare::new(&r).unwrap().mode, 99);

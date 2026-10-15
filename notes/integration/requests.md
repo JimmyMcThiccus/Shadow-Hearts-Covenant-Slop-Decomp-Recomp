@@ -809,3 +809,23 @@ Details in `notes/integration/r6_gpa.md`.  Changes other owners should know abou
   physical attack and knocked-back fighters stay where the push ends (retail, user-confirmed: only attacks and hits move fighters; Combo
   regroups).  `BattleModel::home` and `BattleRuntime::positions` now follow the fighter's current spot.  `Act::Return` is only used by
   `go_home` (the combo leader after its walk).  Notes: `battle_runup_live.md` "No run home".
+
+## Round 6 FX2, resumed (2026-10-15)
+Details in `notes/integration/r6_fx2.md` (Status, sections 6..11).
+* **BT (`sh2_battle::effects_bridge`, FX2's file, no edit in yours)**: (1) `drive_effmdls` now lights the fighters with the retail `EffMdl` point lights
+  (kinds 3 / 4 / 6) by creating / releasing lights in `StageLights::control`; your `light_fighters` picks them up (stages without lights untouched).
+  (2) the ~60 / s Bevy "Use-after-free ... unallocated key" log flood during field battles is gone: the encounter shatter never finished when
+  `StopBtlIn` came during its flash (your `btlin_battle_stop` fires ~10 frames in; fixed on the btlin side, no change needed in BT code), and the weapon
+  trails uploaded empty meshes.  Side effect: `btlin_camera` no longer stays on through every field battle.
+  (3) programs 096 (Inferno) / 131 / UNION wait on a thread whose `mdlWaitMotion` on a `mdlCreateMemory` copy of the caster returns at once when the
+  copy has no `sp1..sp7` motions -- headless that deadlocks the program (VM is retail-exact); please check in the battle demo that those programs end
+  without the 10 s cut, i.e. that the memory model gets the caster's special motions.  (4) multi-target `FxEnv` (your question): the effect host already
+  loops over `env.targets`; filling it with every target of the action in `begin_action_fx` is the remaining (battle-side) step.  (5) a small grey
+  blocky "+" sprite shows above the damage numbers on every weapon hit (`screens/r6_fx2/hm_zoom.png`, above "12"); not an FX2 draw as far as I can tell
+  -- a HUD / hit-spark sprite sampled from the wrong texture region?
+* **GP (FYI, hooks in your files in the working tree)**: `effects/bgfx_render.rs` `quads_to_mesh` / `bg_quad_recs` honour `BgQuad::axes`
+  (explicit world axes, used by Taki3 / Drift208B; FX2), `effects/render.rs` `sync_fx.before(animate_models)` (your ordering suggestion).
+* **QA2 / coordinator**: `run_all.sh run fx --fresh` replaced the committed `tools/coverage/out/fx.tsv` by `fx.s0..s5.tsv` shards (git shows fx.tsv
+  deleted); fx row now 301 ok / 5 stub: the new stubs are SMROOM / SMROOM2 (`fldAttachBG2`, was counted ok before) besides 096 / 131 / UNION.
+* **Live agent / main**: a save state at a boss encounter (any `BtlInBoss` boss) would let FX2 compare `screens/r6_fx2/btlin_boss_sheet.png` frame
+  by frame.
