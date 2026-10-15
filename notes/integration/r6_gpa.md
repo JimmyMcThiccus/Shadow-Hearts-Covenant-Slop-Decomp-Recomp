@@ -123,6 +123,17 @@ farther and lower; not changed.
 Follow-ups: the stand-alone viewer follows the bilinear default (`--nearest` for pixels; `--linear` still accepted), and billboards with an
 animated texture (TXA copies) get the same ABE alpha-blend materials.
 
+## 5. Brightness veil (live title / menu, follow-up)
+
+Live (US, after a soft reset to the title, brightness option `MENU+0x278` = **7**, the retail new-game default): the title mist tops out at
+**233**, menu white text at **226**.  Retail draws `ScreenBright` -- a black full-screen quad, alpha `128 - min(0.7 + 0.03 v, 1) * 128` = 11 at
+v = 7 -- last, every frame (`sh2_core::app::ScreenBright`).  The port dimmed only *relative to* level 8 (alpha 4 at 7, nothing at 8) and the
+retail title had a second relative veil of its own.  Now one absolute veil (`sh2_field::menu_overlay::brightness_overlay`, a Bevy UI node
+at z 29_000 above every UI root, blended in gamma space; the title's `Part::Bright` is retired).  Result: port title max 233 (was 247), menu
+white 226 (was 240) = retail; the battle floor (retail 66..71, port 75 before) drops by the same 0.914.
+Title swirl: port stroke lift (p95 - p50 of the swirl region) 15 vs live >= 22 (live clipped at 233, different rotation phase); `SWIRL_ALPHA`
+(0.5) may be ~0.7 in fact -- not refitted yet.
+
 ## Open
 * Save point flame skirt height vs retail (same camera needed).
 * Ring gizmo fallback (`sh2_battle::plugin::RingGizmos`, only without `JRING.BIN`) is drawn by Bevy's gizmo pipeline, which has no sRGB

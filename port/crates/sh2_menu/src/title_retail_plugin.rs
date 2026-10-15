@@ -1438,7 +1438,7 @@ fn retail_draw(
     rt: Option<Res<RetailTitle>>,
     art: Res<RetailArt>,
     time: Res<Time<Real>>,
-    session: Res<GameSession>,
+    _session: Res<GameSession>,
     mut extras: ResMut<RetailExtras>,
     mut images: ResMut<Assets<Image>>,
     link: Res<DataScreenLink>,
@@ -1510,11 +1510,9 @@ fn retail_draw(
         (None, None)
     };
     let tex = &extras.theater;
-    let bright_alpha = {
-        let v = session.save.menu.data[crate::save::MenuSave::OFF_BRIGHT].clamp(1, 10) as f32;
-        let default = 8.0 * 0.03 + 0.7;
-        ((default - (v * 0.03 + 0.7)) / default).clamp(0.0, 1.0)
-    };
+    // the brightness option is the game-wide `ScreenBright` veil now (`sh2_field::menu_overlay::brightness_overlay`, absolute alpha like
+    // `CApp::SetBright`, above every UI root); a second, relative veil here dimmed the title twice (round 6 GPA)
+    let bright_alpha = 0.0;
     for (part, mut vis, img, _tr, bg, _text, node) in &mut q {
         let show = match part {
             Part::Root | Part::Cover | Part::Bright => true,

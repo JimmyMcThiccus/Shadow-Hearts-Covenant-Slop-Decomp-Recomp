@@ -531,19 +531,44 @@ fn run_menu(scene: Res<State<Scene>>) -> bool {
     *scene.get() == Scene::Field || std::env::var_os("SH2_MENU_DEV").is_some()
 }
 
-/// `CApp::SetBright(v * 0.03 + 0.7)` of the `MENU+0x278` option byte (Option page, brightness row): the port dims the whole screen
-/// with a black cover relative to the default setting (8); brighter settings cannot exceed the renderer's full range.
+/// `CApp::SetBright(v * 0.03 + 0.7)` of the `MENU+0x278` option byte (Option page, brightness row).  The original draws a black
+/// full-screen quad **last, every frame** (`ScreenBright`, JP 0x003d8770) with alpha `128 - min(f, 1) * 128` (`sh2_core::app::ScreenBright`):
+/// at the retail default 7 that is alpha 11 / 128, i.e. the whole picture at 0.914 (live: the title mist tops out at 233 / 255, menu white
+/// text 226).  The port used to dim only *relative to* level 8, i.e. not at all at the defaults; round 6 GPA draws the absolute veil as one
+/// Bevy UI node above every other UI root (title, movies, cut scene pictures), blended in gamma space like the GS.
+/// Canvas layer id formerly used by the veil (kept reserved: other code documents it as taken).
 pub const BRIGHT_LAYER: u8 = 6;
 
-fn brightness_overlay(session: Res<GameSession>, mut canvas: ResMut<UiCanvas>) {
-    let v = session.save.menu.data[sh2_menu::save::MenuSave::OFF_BRIGHT].clamp(1, 10) as f32;
-    let (b, def) = (v * 0.03 + 0.7, 8.0 * 0.03 + 0.7);
-    if b < def - 1e-4 {
-        let alpha = ((1.0 - b / def) * 128.0) as u8;
-        let mut g = canvas.begin(BRIGHT_LAYER);
-        crate::cmd_ui::fill(&mut g, 0.0, 0.0, crate::cmd_ui::SCREEN_W, crate::cmd_ui::SCREEN_H, sh2_menu::gfx::Rgba::new(0, 0, 0, alpha));
-    } else {
-        canvas.clear(BRIGHT_LAYER);
+/// The brightness veil node.
+#[derive(Component)]
+pub struct BrightVeil;
+
+/// Above every UI root of the game (title 20_000, movies, cut scene pictures), below the alignment probe (30_000).
+pub const BRIGHT_VEIL_Z: i32 = 29_000;
+
+/// The veil's alpha (0..=128 GS units) for brightness level `v` (1..=10): `CApp::SetBright` + `ScreenBright`.
+pub fn bright_veil_alpha(v: u8) -> u8 {
+    let f = (v.clamp(1, 10) as f32 * 0.03 + 0.7).min(1.0);
+    (128.0 - f * 128.0) as i32 as u8
+}
+
+fn brightness_overlay(mut commands: Commands, session: Res<GameSession>, mut veil: Query<&mut BackgroundColor, With<BrightVeil>>) {
+    let a = bright_veil_alpha(session.save.menu.data[sh2_menu::save::MenuSave::OFF_BRIGHT]);
+    let want = BackgroundColor(Color::srgba(0.0, 0.0, 0.0, a as f32 / 128.0));
+    match veil.single_mut() {
+        Ok(mut bg) => {
+            bg.set_if_neq(want);
+        }
+        Err(_) => {
+            commands.spawn((
+                Name::new("bright_veil"),
+                BrightVeil,
+                Node { position_type: PositionType::Absolute, left: Val::Px(0.0), top: Val::Px(0.0), width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
+                want,
+                GlobalZIndex(BRIGHT_VEIL_Z),
+                Pickable::IGNORE,
+            ));
+        }
     }
 }
 
@@ -555,7 +580,7 @@ impl Plugin for MenuOverlayPlugin {
         app.init_resource::<InGameMenu>()
             .add_systems(FixedUpdate, menu_tick.in_set(GameSet::Logic).run_if(run_menu))
             .add_systems(Update, menu_shots)
-            .add_systems(FixedUpdate, brightness_overlay.in_set(GameSet::Logic))
+            .add_systems(Update, brightness_overlay)
             .add_systems(OnExit(Scene::Field), clear_on_exit);
         if std::env::var_os("SH2_MENU_DEV").is_some() {
             // scripted runs must keep ticking when the window is not frontmost (the default unfocused mode updates once a minute)
@@ -563,5 +588,20 @@ impl Plugin for MenuOverlayPlugin {
             app.add_systems(FixedUpdate, dev_driver.in_set(GameSet::Logic).run_if(dev_mode));
         }
         let _ = padbit::START;
+    }
+}
+
+#[cfg(test)]
+mod bright_tests {
+    use super::bright_veil_alpha;
+
+    /// `ScreenBright` alpha for the brightness levels: retail default 7 -> 11 (picture x 0.914, live title white 233), 10 -> none.
+    #[test]
+    fn veil_alpha_follows_set_bright() {
+        assert_eq!(bright_veil_alpha(7), 11);
+        assert_eq!(bright_veil_alpha(8), 7);
+        assert_eq!(bright_veil_alpha(10), 0);
+        assert_eq!(bright_veil_alpha(1), 34);
+        assert_eq!(bright_veil_alpha(0), bright_veil_alpha(1));
     }
 }
