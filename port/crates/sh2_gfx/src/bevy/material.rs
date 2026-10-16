@@ -46,6 +46,127 @@ pub const SH2_DECODE_SHADER: Handle<Shader> = uuid_handle!("7c1e44a0-96d2-4f3b-8
 /// Vertex stage of [`Sh2Material`] (`sh2_vertex.wgsl`: Bevy's mesh vertex shader + the PS2 one-matrix-per-vertex GPU skinning).
 pub const SH2_VERTEX_SHADER: Handle<Shader> = uuid_handle!("b3f0c9e2-4d71-4a8e-9c06-2e5f7a1d8b34");
 
+/// The [`Sh2Dyn`] storage buffer (fixed size: a resize would leave the materials' bind groups on the old buffer).
+pub const SH2_DYN_BUFFER: Handle<::bevy::render::storage::ShaderBuffer> = uuid_handle!("d81c3a57-60e2-4f9b-a4d3-7b2e19c05f86");
+/// vec4s per slot: tint, flags (x = lights valid, y = tint valid), ambient, light_dir, light_color, light_dir1, light_color1, light_dir2,
+/// light_color2 (the same vectors the material uniforms would hold).
+pub const DYN_STRIDE: usize = 9;
+/// Slots in [`SH2_DYN_BUFFER`]; slot 0 = the scene light ([`Sh2SceneLight`]) for every lit material that follows the scene light.
+pub const DYN_SLOTS: usize = 2048;
+
+/// Per-draw dynamic material data on the GPU (PF2).  `Sh2Material` uniforms are re-prepared by Bevy whenever the material is modified (new
+/// bind group, entities re-specialised), so values that change every frame live here instead: a draw entity with a [`Sh2DynSlot`] (+ its
+/// `MeshTag`) reads its tint and / or lights from its slot, and lit materials that follow the scene light (`ambient.w == 0`, set by
+/// [`sync_material_globals`]) read slot 0.  The buffer is uploaded at most once per frame (`write_buffer`, same size).
+/// `SH2_MATERIAL_UNIFORMS=1` (no resource) keeps every value in the material uniforms (the previous behaviour, A/B).
+#[derive(Resource)]
+pub struct Sh2Dyn {
+    data: Vec<Vec4>,
+    free: Vec<u32>,
+    next: u32,
+    dirty: bool,
+}
+
+impl Default for Sh2Dyn {
+    fn default() -> Self {
+        Sh2Dyn { data: vec![Vec4::ZERO; DYN_SLOTS * DYN_STRIDE], free: Vec::new(), next: 1, dirty: true }
+    }
+}
+
+/// `(ambient, light_dir, light_color, light_dir1, light_color1, light_dir2, light_color2)` exactly as the material uniforms hold them.
+pub fn light_vectors(l: &Sh2SceneLight) -> [Vec4; 7] {
+    let d = |i: usize| (l.dirs[i].normalize_or_zero().extend(0.0), l.colors[i].extend(1.0));
+    let ((d0, c0), (d1, c1), (d2, c2)) = (d(0), d(1), d(2));
+    [l.ambient.extend(1.0), d0, c0, d1, c1, d2, c2]
+}
+
+impl Sh2Dyn {
+    /// A free slot (`None` when all are taken: the caller falls back to the material uniforms).
+    pub fn alloc(&mut self) -> Option<u32> {
+        if let Some(s) = self.free.pop() {
+            return Some(s);
+        }
+        if (self.next as usize) < DYN_SLOTS {
+            self.next += 1;
+            return Some(self.next - 1);
+        }
+        None
+    }
+    fn release(&mut self, slot: u32) {
+        let b = slot as usize * DYN_STRIDE;
+        if slot == 0 || b >= self.data.len() {
+            return;
+        }
+        self.data[b..b + DYN_STRIDE].fill(Vec4::ZERO);
+        self.free.push(slot);
+    }
+    fn put(&mut self, i: usize, v: Vec4) {
+        if self.data[i] != v {
+            self.data[i] = v;
+            self.dirty = true;
+        }
+    }
+    pub fn set_tint(&mut self, slot: u32, tint: Vec4) {
+        let b = slot as usize * DYN_STRIDE;
+        self.put(b, tint);
+        let f = self.data[b + 1];
+        self.put(b + 1, Vec4::new(f.x, 1.0, 0.0, 0.0));
+    }
+    pub fn set_lights(&mut self, slot: u32, l: &[Vec4; 7]) {
+        let b = slot as usize * DYN_STRIDE;
+        for (i, v) in l.iter().enumerate() {
+            self.put(b + 2 + i, *v);
+        }
+        let f = self.data[b + 1];
+        self.put(b + 1, Vec4::new(1.0, f.y, 0.0, 0.0));
+    }
+}
+
+/// The [`Sh2Dyn`] slot of a draw entity (frees the slot when the entity goes away); the entity also carries `MeshTag(slot)`.
+#[derive(Component, Debug, Clone, Copy)]
+#[component(on_remove = dyn_slot_removed)]
+pub struct Sh2DynSlot(pub u32);
+
+fn dyn_slot_removed(mut world: ::bevy::ecs::world::DeferredWorld, ctx: ::bevy::ecs::lifecycle::HookContext) {
+    let Some(s) = world.get::<Sh2DynSlot>(ctx.entity).map(|s| s.0) else { return };
+    if let Some(mut d) = world.get_resource_mut::<Sh2Dyn>() {
+        d.release(s);
+    }
+}
+
+/// The slot of draw entity `e`: `cache` (the caller's copy), or a new one (+ `MeshTag`) inserted through `commands`.
+pub fn dyn_slot(dynamic: &mut Sh2Dyn, commands: &mut Commands, e: Entity, cache: &mut Option<u32>) -> Option<u32> {
+    if let Some(s) = *cache {
+        return Some(s);
+    }
+    let s = dynamic.alloc()?;
+    commands.entity(e).try_insert((Sh2DynSlot(s), ::bevy::mesh::MeshTag(s)));
+    *cache = Some(s);
+    Some(s)
+}
+
+fn setup_dyn_buffer(mut commands: Commands, buffers: Option<ResMut<Assets<::bevy::render::storage::ShaderBuffer>>>) {
+    let Some(mut buffers) = buffers else { return };
+    let zeros = vec![0u8; DYN_SLOTS * DYN_STRIDE * 16];
+    let _ = buffers.insert(SH2_DYN_BUFFER.id(), ::bevy::render::storage::ShaderBuffer::new(&zeros, ::bevy::asset::RenderAssetUsages::default()));
+    if std::env::var_os("SH2_MATERIAL_UNIFORMS").is_none() {
+        commands.init_resource::<Sh2Dyn>();
+    }
+}
+
+/// Upload the buffer when anything changed this frame (slot 0 = the scene light is written by [`sync_material_globals`]).
+fn upload_dyn(dynamic: Option<ResMut<Sh2Dyn>>, buffers: Option<ResMut<Assets<::bevy::render::storage::ShaderBuffer>>>) {
+    let (Some(mut dynamic), Some(mut buffers)) = (dynamic, buffers) else { return };
+    if !dynamic.dirty {
+        return;
+    }
+    let bytes = bytemuck::cast_slice(&dynamic.data).to_vec();
+    if let Some(mut b) = buffers.get_mut(&SH2_DYN_BUFFER) {
+        b.data = Some(bytes);
+        dynamic.dirty = false;
+    };
+}
+
 /// Colour-space mode of the renderer (see the module docs).  `SH2_LINEAR_BLEND=1` in the environment starts with `gamma = false`.
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Sh2ColorSpace {
@@ -196,6 +317,10 @@ pub struct Sh2Material {
     pub own_light: bool,
     /// GS `TEST_1.ZTST = ALWAYS` (0x33001, `FpPrim::setZtest(0)`): the draw ignores the depth buffer (lens flares, screen overlays)
     pub ztest_off: bool,
+    /// The per-draw slots + scene light of [`Sh2Dyn`] (the same buffer for every material: per-frame tints / lights go there instead of
+    /// into the material, so the material is not re-prepared every frame).
+    #[storage(3, read_only, visibility(fragment))]
+    pub dynamic: Handle<::bevy::render::storage::ShaderBuffer>,
 }
 
 impl Default for Sh2Material {
@@ -218,6 +343,7 @@ impl Default for Sh2Material {
             sort_bias: 0.0,
             own_light: false,
             ztest_off: false,
+            dynamic: SH2_DYN_BUFFER,
         }
     }
 }
@@ -344,6 +470,10 @@ impl Material for Sh2Material {
         key: MaterialPipelineKey<Self>,
     ) -> Result<(), SpecializedMeshPipelineError> {
         sh2_specialize(descriptor, key.bind_group_data);
+        // per-draw tint / lights and the scene light from the `Sh2Dyn` buffer (binding 3; `Sh2FxMaterial` shares `sh2.wgsl` without it)
+        if let Some(f) = descriptor.fragment.as_mut() {
+            f.shader_defs.push("SH2_DYN".into());
+        }
         // GPU billboards (`billboard.rs`): skinned meshes with a corner offset in `UV_1`
         if layout.0.contains(Mesh::ATTRIBUTE_UV_1) && layout.0.contains(Mesh::ATTRIBUTE_JOINT_INDEX) {
             descriptor.vertex.shader_defs.push("SH2_BILLBOARD".into());
@@ -578,8 +708,20 @@ pub fn sync_material_globals(
     mut materials: ResMut<Assets<Sh2Material>>,
     mut last_count: Local<usize>,
     mut last_state: Local<Option<(Sh2Fog, Sh2SceneLight, bool)>>,
+    mut dynamic: Option<ResMut<Sh2Dyn>>,
 ) {
     let count = materials.len();
+    // with [`Sh2Dyn`] the scene light lives in its slot 0 (written here, at the same point of the frame the material uniforms were written):
+    // the lit materials hold a constant marker (`ambient.w == 0`, the rest zero) and are not rewritten when the light moves
+    if let Some(d) = dynamic.as_deref_mut() {
+        let l = light_vectors(&light);
+        for (i, v) in l.iter().enumerate() {
+            d.put(2 + i, *v);
+        }
+        d.put(1, Vec4::new(1.0, 0.0, 0.0, 0.0));
+    }
+    let no_light = Sh2SceneLight::default();
+    let light = if dynamic.is_some() { &no_light } else { &*light };
     let state = (*fog, light.clone(), settings.gamma);
     if *last_count == count && last_state.as_ref() == Some(&state) {
         return;
@@ -595,7 +737,7 @@ pub fn sync_material_globals(
     let (d1, c1) = l(1);
     let (d2, c2) = l(2);
     let fog_w = if fog.enabled { 1.0 } else { 0.0 };
-    let lit = (amb, d0, c0, d1, c1, d2, c2);
+    let lit = if dynamic.is_some() { (Vec4::ZERO, Vec4::ZERO, Vec4::ZERO, Vec4::ZERO, Vec4::ZERO, Vec4::ZERO, Vec4::ZERO) } else { (amb, d0, c0, d1, c1, d2, c2) };
     let apply = |m: &mut Sh2Material| {
         m.fog.x = fogv.x;
         m.fog.y = fogv.y;
@@ -627,6 +769,21 @@ pub fn sync_material_globals(
     }
 }
 
+/// The game draws no Bevy light (every `Sh2Material` carries its own PS2 light uniforms), but Bevy clusters lights for every `Camera3d`: on the
+/// GPU that is a z-slice compute pass, two raster passes, two allocation passes and a readback per camera and frame.  CPU clustering with no
+/// light is a no-op, and it still gives every view the `ViewClusterBindings` the mesh view bind group needs (dropping the clustering of one
+/// camera instead removes those bindings: no draws).  `SH2_GPU_CLUSTERING=1` keeps Bevy's GPU clustering.
+fn cpu_light_clustering(settings: Option<ResMut<::bevy::light::cluster::GlobalClusterSettings>>) {
+    if std::env::var_os("SH2_GPU_CLUSTERING").is_some() {
+        return;
+    }
+    if let Some(mut s) = settings {
+        if s.gpu_clustering.is_some() {
+            s.gpu_clustering = None;
+        }
+    }
+}
+
 /// Registers the shader and the material.
 pub struct Sh2MaterialPlugin;
 
@@ -642,7 +799,12 @@ impl Plugin for Sh2MaterialPlugin {
             .add_plugins(MaterialPlugin::<Sh2Material>::default())
             .add_plugins(FullscreenMaterialPlugin::<Sh2GammaDecode>::default())
             .add_systems(PostUpdate, ((setup_gamma_cameras, patch_ui_shaders).chain(), sync_material_globals))
-            .add_systems(Startup, super::model::spawn_skin_joint)
+            .add_systems(Startup, (super::model::spawn_skin_joint, cpu_light_clustering, setup_dyn_buffer))
+            .add_systems(PostUpdate, upload_dyn.after(sync_material_globals).before(::bevy::asset::AssetEventSystems))
+            .add_systems(
+                PostUpdate,
+                super::model::refresh_skin_offsets.after(::bevy::asset::AssetEventSystems).after(::bevy::transform::TransformSystems::Propagate),
+            )
             .add_systems(Update, super::model::drop_unwanted_shadows.before(super::model::animate_models))
             .add_plugins((super::fxquad::Sh2FxQuadPlugin, super::perf::Sh2PerfPlugin, super::shadow::Sh2ShadowPlugin));
     }
@@ -692,5 +854,35 @@ fn fragment(
         assert_eq!(m.test_mode(), TestMode::Low);
         assert_eq!(Sh2Material::default().with_test(TestMode::CutIn, 1.0).test_mode(), TestMode::CutIn);
         assert_eq!(Sh2Material::default().test_mode(), TestMode::Off);
+    }
+
+    #[test]
+    fn dyn_slots_hold_the_material_vectors() {
+        let mut d = Sh2Dyn::default();
+        let a = d.alloc().unwrap();
+        let b = d.alloc().unwrap();
+        assert_eq!((a, b), (1, 2), "slot 0 is the scene light");
+        let l = Sh2SceneLight { ambient: Vec3::splat(0.25), dirs: [Vec3::new(0.0, 2.0, 0.0), Vec3::X, Vec3::Z], colors: [Vec3::ONE, Vec3::ZERO, Vec3::splat(0.5)] };
+        let v = light_vectors(&l);
+        // exactly what `apply_model_light_overrides` / `sync_material_globals` wrote into the uniforms
+        assert_eq!(v[0], Vec4::new(0.25, 0.25, 0.25, 1.0));
+        assert_eq!(v[1], Vec4::new(0.0, 1.0, 0.0, 0.0));
+        assert_eq!(v[2], Vec4::ONE);
+        d.dirty = false;
+        d.set_tint(b, Vec4::new(1.0, 0.5, 0.5, 0.25));
+        d.set_lights(b, &v);
+        let base = b as usize * DYN_STRIDE;
+        assert_eq!(d.data[base], Vec4::new(1.0, 0.5, 0.5, 0.25));
+        assert_eq!(d.data[base + 1], Vec4::new(1.0, 1.0, 0.0, 0.0));
+        assert_eq!(&d.data[base + 2..base + 9], &v[..]);
+        assert!(d.dirty);
+        // unchanged values do not dirty the buffer
+        d.dirty = false;
+        d.set_tint(b, Vec4::new(1.0, 0.5, 0.5, 0.25));
+        assert!(!d.dirty);
+        d.release(b);
+        assert_eq!(d.data[base + 1], Vec4::ZERO);
+        assert_eq!(d.alloc(), Some(b), "released slots are reused");
+        assert_eq!(DYN_SLOTS * DYN_STRIDE * 16, bytemuck::cast_slice::<Vec4, u8>(&d.data).len());
     }
 }

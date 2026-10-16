@@ -269,6 +269,9 @@ pub fn setup_shadow_atlas(mut commands: Commands, mut images: ResMut<Assets<Imag
             Transform::default(),
         ))
         .id();
+    if std::env::var_os("SH2_SHADOW_CORE3D").is_none() {
+        commands.entity(camera).insert(::bevy::render::camera::CameraRenderGraph::new(Sh2ShadowGraph));
+    }
     commands.insert_resource(ShadowAtlas { image, camera, clips });
 }
 
@@ -717,7 +720,34 @@ impl Plugin for Sh2ShadowPlugin {
     fn build(&self, app: &mut App) {
         ::bevy::asset::load_internal_asset!(app, SH2_SHADOW_SHADER, "sh2_shadow.wgsl", ::bevy::shader::Shader::from_wgsl);
         app.add_plugins(MaterialPlugin::<Sh2ShadowMaterial>::default()).add_systems(Startup, setup_shadow_atlas);
+        if let Some(render_app) = app.get_sub_app_mut(::bevy::render::RenderApp) {
+            render_app.add_schedule(shadow_graph_schedule()).add_systems(
+                Sh2ShadowGraph,
+                (
+                    ::bevy::pbr::clear_indirect_parameters_metadata,
+                    ::bevy::pbr::unpack_bins,
+                    ::bevy::pbr::early_gpu_preprocess,
+                    ::bevy::pbr::main_build_indirect_parameters,
+                    ::bevy::core_pipeline::core_3d::main_opaque_pass_3d,
+                    ::bevy::core_pipeline::upscaling::upscaling,
+                )
+                    .chain(),
+            );
+        }
     }
+}
+
+/// The atlas camera's render graph: what `Core3d` does for a view with only opaque draws and no prepass / light / post-process feature --
+/// GPU mesh preprocessing (bin unpacking, culling, indirect parameters), the opaque pass and the blit into the atlas image.  The full
+/// `Core3d` graph cost ~2.4 ms of render thread per frame for this camera (light clustering, prepass / deferred / transparent / OIT / mip
+/// nodes that find nothing to do but still open passes).  `SH2_SHADOW_CORE3D=1` renders the atlas with `Core3d` again (A/B).
+#[derive(::bevy::ecs::schedule::ScheduleLabel, Debug, Clone, PartialEq, Eq, Hash, Default)]
+pub struct Sh2ShadowGraph;
+
+fn shadow_graph_schedule() -> ::bevy::ecs::schedule::Schedule {
+    let mut s = ::bevy::ecs::schedule::Schedule::new(Sh2ShadowGraph);
+    s.set_build_settings(::bevy::ecs::schedule::ScheduleBuildSettings { auto_insert_apply_deferred: false, ..default() });
+    s
 }
 
 #[cfg(test)]

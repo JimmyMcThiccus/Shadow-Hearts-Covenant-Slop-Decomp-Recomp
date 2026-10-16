@@ -389,6 +389,8 @@ struct PartDraw {
     /// per-instance copy of the material, created the first time an alpha event fades this atomic (the cached materials are shared)
     own_material: Option<Handle<Sh2Material>>,
     base_blend: Sh2Blend,
+    /// [`super::material::Sh2Dyn`] slot of this draw (per-frame tint / per-model lights without modifying the material)
+    slot: Option<u32>,
 }
 
 /// Per-model scene light (E2): the lit materials of this [`AnimatedModel`] get their own copy of the material carrying these lights instead of the global
@@ -401,17 +403,25 @@ pub fn apply_model_light_overrides(
     mut q: Query<(&mut AnimatedModel, &ModelLightOverride), Changed<ModelLightOverride>>,
     mut materials: ResMut<Assets<Sh2Material>>,
     mut mat_handles: Query<&mut MeshMaterial3d<Sh2Material>>,
+    mut commands: Commands,
+    mut dynamic: Option<ResMut<super::material::Sh2Dyn>>,
 ) {
     for (mut am, lo) in &mut q {
         let l = &lo.0;
         let amb = l.ambient.extend(1.0);
         let d = |i: usize| (l.dirs[i].normalize_or_zero().extend(0.0), l.colors[i].extend(1.0));
+        let v = super::material::light_vectors(l);
         for part in am.parts.iter_mut().filter(|p| p.lit) {
             for pd in part.draws.iter_mut() {
-                if pd.own_material.is_none() {
+                let fresh = pd.own_material.is_none();
+                if fresh {
                     let Ok(h) = mat_handles.get(pd.entity) else { continue };
-                    let Some(src) = materials.get(&h.0).cloned() else { continue };
+                    let Some(mut src) = materials.get(&h.0).cloned() else { continue };
                     pd.base_blend = src.blend;
+                    // the private copy carries its own light from now on (`sync_material_globals` leaves it alone)
+                    if dynamic.is_some() {
+                        src.own_light = true;
+                    }
                     let own = materials.add(src);
                     pd.own_material = Some(own.clone());
                     if let Ok(mut mh) = mat_handles.get_mut(pd.entity) {
@@ -419,6 +429,19 @@ pub fn apply_model_light_overrides(
                     }
                 }
                 let Some(own) = pd.own_material.clone() else { continue };
+                // `Sh2Dyn`: the lights go into the draw's slot (the shader prefers them over the material's): the material is not modified
+                // every time the fighter moves
+                if let Some(dy) = dynamic.as_deref_mut() {
+                    if let Some(s) = super::material::dyn_slot(dy, &mut commands, pd.entity, &mut pd.slot) {
+                        dy.set_lights(s, &v);
+                        if !fresh && materials.get(&own).is_some_and(|m| !m.own_light) {
+                            if let Some(mut m) = materials.get_mut(&own) {
+                                m.own_light = true;
+                            }
+                        }
+                        continue;
+                    }
+                }
                 // compare first: every `get_mut` re-prepares the material in the render world
                 let (want0, want1, want2) = (d(0), d(1), d(2));
                 let same = materials.get(&own).map(|m| {
@@ -573,7 +596,7 @@ pub fn spawn_animated_model_ex(
             };
             let child = commands.spawn((Mesh3d(mesh.clone()), MeshMaterial3d(mat), Transform::default(), Visibility::default(), NoFrustumCulling)).id();
             commands.entity(holder).add_child(child);
-            draws.push(PartDraw { entity: child, own_material: None, base_blend: Sh2Blend::Opaque });
+            draws.push(PartDraw { entity: child, own_material: None, base_blend: Sh2Blend::Opaque, slot: None });
         } else {
             // GS state of the atomic: PRIM bits (ABE ...) x texture ALPHA_1 / TEST_1 (see `ModelMaterials::plan`)
             let plan = mats.plan(a.texture, a.flags);
@@ -583,7 +606,7 @@ pub fn spawn_animated_model_ex(
                 let base_blend = m.blend;
                 let child = commands.spawn((Mesh3d(mesh.clone()), MeshMaterial3d(gpu.materials.add(m)), Transform::default(), Visibility::default(), NoFrustumCulling)).id();
                 commands.entity(holder).add_child(child);
-                draws.push(PartDraw { entity: child, own_material: None, base_blend });
+                draws.push(PartDraw { entity: child, own_material: None, base_blend, slot: None });
             }
         }
         let bones = primary_bones(a, inst_total);
@@ -744,6 +767,21 @@ fn advance_model(am: &mut AnimatedModel, gt: &GlobalTransform, dt: f32, gpu_on: 
 pub struct NoDropShadow;
 
 /// Removes the shadow of models marked [`NoDropShadow`] (despawning the shadow quad frees its atlas tile).
+/// Bevy re-allocates a skin's joint storage whenever its `SkinnedMeshInverseBindposes` asset changes -- every frame for the GPU skins here
+/// (the palette lives in that asset) -- but a mesh instance only picks up its new joint offset when it is re-extracted (its transform, mesh,
+/// material ... changed).  A skinned draw that does not move (a treasure chest, a fighter standing still, a silhouette twin) then reads
+/// another skin's joints and is drawn displaced.  Until PF2 this was hidden by the per-frame material rewrites (a modified material marks
+/// its meshes changed); now every skinned draw whose palette asset changed this frame is marked for re-extraction explicitly.
+/// `SH2_NO_SKIN_REFRESH=1` turns it off (A/B).
+pub fn refresh_skin_offsets(mut q: Query<&mut GlobalTransform, ::bevy::asset::prelude::AssetChanged<SkinnedMesh>>, mut off: Local<Option<bool>>) {
+    if *off.get_or_insert_with(|| std::env::var_os("SH2_NO_SKIN_REFRESH").is_some()) {
+        return;
+    }
+    for mut gt in &mut q {
+        gt.set_changed();
+    }
+}
+
 pub fn drop_unwanted_shadows(mut commands: Commands, mut models: Query<&mut AnimatedModel, With<NoDropShadow>>) {
     for mut am in &mut models {
         if am.shadow.is_none() {
@@ -775,6 +813,7 @@ pub fn animate_models(
     mut mat_handles: Query<&mut MeshMaterial3d<Sh2Material>>,
     mut tfs: Query<&mut Transform, Without<AnimatedModel>>,
     light: Res<super::material::Sh2SceneLight>,
+    mut dynamic: Option<ResMut<super::material::Sh2Dyn>>,
     shadow_settings: Option<Res<ShadowSettings>>,
     shadow_floor: Option<Res<super::shadow::ShadowFloor>>,
     (cameras, mut shadow_cams, atlas, mut shadow_mats, mut buffers, mut atlas_clips): (
@@ -858,10 +897,15 @@ pub fn animate_models(
                     }
                 }
                 if alpha < 1.0 || tinted || pd.own_material.is_some() {
+                    let tint = if billboard { Vec4::new(1.0, 1.0, 1.0, alpha) } else { Vec4::new(col[0], col[1], col[2], alpha) };
                     if pd.own_material.is_none() {
                         if let Ok(h) = mat_handles.get(pd.entity) {
-                            if let Some(src) = materials.get(&h.0).cloned() {
+                            if let Some(mut src) = materials.get(&h.0).cloned() {
                                 pd.base_blend = src.blend;
+                                // the copy starts with this frame's tint (it is a new asset anyway)
+                                if dynamic.is_some() {
+                                    src.tint = tint;
+                                }
                                 let own = materials.add(src);
                                 pd.own_material = Some(own.clone());
                                 if let Ok(mut mh) = mat_handles.get_mut(pd.entity) {
@@ -873,14 +917,21 @@ pub fn animate_models(
                     if let Some(own) = &pd.own_material {
                         // compare first: a `get_mut` marks the material modified, and the render world then re-prepares its bind group and
                         // re-specialises every entity using it (PF: 48-240 per frame when written blindly)
-                        let tint = if billboard { Vec4::new(1.0, 1.0, 1.0, alpha) } else { Vec4::new(col[0], col[1], col[2], alpha) };
                         if let Some(cur) = materials.get(own) {
                             let (blend, pw) = if alpha < 1.0 {
                                 (if cur.blend == Sh2Blend::Opaque { Sh2Blend::Normal } else { cur.blend }, 1.0)
                             } else {
                                 (pd.base_blend, if pd.base_blend == Sh2Blend::Opaque { 0.0 } else { 1.0 })
                             };
-                            if cur.tint != tint || cur.blend != blend || cur.params.w != pw {
+                            // the tint changes every frame during fades / colour animation: it goes into the draw's `Sh2Dyn` slot (the shader
+                            // prefers it over `material.tint`); the material is only written when the blend state flips, and then carries the
+                            // current tint as well (a frame in which the material is re-prepared draws with the material's values)
+                            let slot = dynamic.as_deref_mut().and_then(|d| {
+                                let s = super::material::dyn_slot(d, &mut commands, pd.entity, &mut pd.slot)?;
+                                d.set_tint(s, tint);
+                                Some(s)
+                            });
+                            if (slot.is_none() && cur.tint != tint) || cur.blend != blend || cur.params.w != pw {
                                 if let Some(mut m) = materials.get_mut(own) {
                                     m.tint = tint;
                                     m.blend = blend;
