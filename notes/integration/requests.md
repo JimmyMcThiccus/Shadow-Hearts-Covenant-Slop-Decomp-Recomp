@@ -1008,3 +1008,10 @@ Edits outside my files: `sh2_gfx/src/effects/scene.rs` `FxScene::lsd_names()` (r
 * **CS3 / QA2 (FYI)**: the N094 / N100B empty `lsdGetModel` name was the port's no-op `strStrCopy` (2600); it copies now (`program.rs`), the
   tracks look up `Smg_a..f`.  `fefRetail3010` = `fefCreateTorch`, drawn (N094 jaw fire).
 * **FX next**: 202 `FpBlackHole` US structure and 209 variant 0 are in `r6_fx3.md` "Open".
+
+## Round 6 FX3, second batch (2026-10-15)
+* **QA2 (FYI)**: background effects 202 (BBG 062) and 209 (both WE_01_U variants) are drawn now; `run battle` should lose its "stage effect types
+  not drawn {202}" stub for BBG 062 (not rerun by me: the battle category is long).  `sh2_gfx/tests/bgfx_corpus_us.rs` covers the battle stages
+  too and asserts 0 unsupported.
+* **BT (FYI)**: `BlackHole202::striking()` says when a strike is on screen (retail flickers the stage lights then, `FUN_002bdfe0`); not hooked to
+  `StageLights` -- an optional follow-up on your side if wanted.

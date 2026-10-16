@@ -129,6 +129,24 @@ impl Thunder {
         }
     }
 
+    /// Place the nodes explicitly (`FpObjectTnderBH2`-style objects compute their own polyline, e.g. the black hole's rings): the strip runs
+    /// `start, nodes[0], ..`; `cam_fwd` = row 2 of the camera matrix (`+0x270`).
+    pub fn set_nodes(&mut self, start: Vec3, nodes: &[Vec3], cam_fwd: Vec3) {
+        self.param.start = start;
+        self.pos.clear();
+        self.pos.extend_from_slice(nodes);
+        self.steps.resize(nodes.len(), Vec3::ZERO);
+        self.nodes = nodes.len();
+        self.cam_fwd = cam_fwd;
+    }
+
+    /// Keep only the first `n` nodes of the current form (a bolt that is still growing: `FpRetailBolt` reveals its nodes over time).
+    pub fn truncated(&self, n: usize) -> Thunder {
+        let mut t = self.clone();
+        t.nodes = n.min(self.nodes);
+        t
+    }
+
     /// Node positions in use (the bolt runs `start, pos[0], .., pos[n-1]`).
     pub fn points(&self) -> &[Vec3] {
         &self.pos[..self.nodes]

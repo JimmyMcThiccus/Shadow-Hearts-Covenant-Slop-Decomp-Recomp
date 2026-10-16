@@ -419,6 +419,7 @@ enum Item {
     Taki(super::bgfx_taki::Taki),
     Drift(super::bgfx_drift::Drift208),
     Storm(Box<super::storm209::Storm209>),
+    BlackHole(Box<super::blackhole202::BlackHole202>),
 }
 
 /// All background effects of one stage / map (`BgEffectMan` set).
@@ -547,7 +548,9 @@ impl BgFx {
                     Some(d) => items.push((r.slot, Item::Drift(d))),
                     None => unsupported.push((r.slot, r.kind)),
                 },
-                // `FpRetailStorm209` (US 0x002e3150): variants 1 / 2 only, see `storm209`
+                // `FpBlackHole` (US 0x002be590, BBG 062), see `blackhole202`
+                202 => items.push((r.slot, Item::BlackHole(Box::new(super::blackhole202::BlackHole202::new(&mut rng))))),
+                // `FpRetailStorm209` (US 0x002e3150), see `storm209`
                 209 => match super::storm209::Storm209::new(rd_u32(&r.param, 0), &mut rng) {
                     Some(s) => items.push((r.slot, Item::Storm(Box::new(s)))),
                     None => unsupported.push((r.slot, r.kind)),
@@ -631,6 +634,7 @@ impl BgFx {
                 Item::Taki(t) => t.step(frames, cam, rng),
                 Item::Drift(d) => d.step(frames, rng),
                 Item::Storm(s) => s.step(frames, cam, rng),
+                Item::BlackHole(b) => b.step(frames, cam, rng),
             }
         }
     }
@@ -699,6 +703,7 @@ impl BgFx {
                 Item::Taki(t) => t.quads(alpha, &mut out),
                 Item::Drift(d) => d.quads(alpha, &mut out),
                 Item::Storm(s) => s.quads(alpha, &mut out),
+                Item::BlackHole(b) => b.quads(alpha, &mut out),
                 Item::Smoke(s) => {
                     for p in s.em.p.iter().filter(|p| p.t > 0.0 && p.t <= p.period) {
                         let h = Vec2::new(p.size[0] * 0.5 * p.scale, p.size[1] * 0.5 * p.scale);

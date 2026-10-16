@@ -1,6 +1,31 @@
 # Round 6 FX3 (effects + renderer), 2026-10-15
 
-## Status (2026-10-15)
+## Status (2026-10-15, second batch after commit da98c3d)
+`cargo check --workspace --all-targets` clean; `cargo test -p sh2_gfx -p sh2_formats` green (sh2_gfx lib 182; `bgfx_corpus_us` now has two
+tests, maps and battle stages, both asserting **0 unsupported records**: maps 3558 records, stages incl. BBG 051 / 062 / 097).  Ghidra
+(SLUS_210.41 on :8192) used under `locks/ghidra.lock`, released, left on SLUS_210.41.  No processes left running.
+1. **209 variant 0** (WE_01_U slot 15) ported (`storm209.rs` `StormV0`, `CalculateFunc` 0x002e3920 and its children): a one-shot ball-lightning
+   sequence on a millisecond clock around `(0, -15, 0)` -- dim ball, strikes from the ball upwards from 0.5 s (strike table 500..5300 ms), at
+   1.9 s the ball grows with three sparks and the `FpFlare` glow, flickers until 5.5 s, shrinks, rises 100 units at 5.9 s, then the
+   `FpRetailLenz6B` sparkles (70, falling, 1 s in / 1 s out) fade until 8.6 s and the prim hides for good.  The six arcs and the full-screen
+   flash prim are created hidden and only the prim's own `+0x3c(1)` (0x002e09a0) would show them, which nothing calls: kept behind
+   `StormV0::all_shown` (false).  Window: `screens/r6_fx3/we01_storm_sheet.png` (`--view-map WE_01_U --cam 72.3,-20,5.1,0,-15,0`, shots at
+   30 / 75 / 120 / 195 / 230 frames: loading, ball + strike, ball, strike, grown ball with sparks + flare).  Ghidra lost part of the ball's
+   part chain: all ten ball parts share scale and position.
+2. **202 `FpBlackHole`** (BBG 062) ported from the US rewrite (`blackhole202.rs`; module notes list every address): the 250-part smoke spiral
+   (`RotX(60) RotZ(angle) (r, 0, h)`, US `FuncPos` / `SetPacket` culling), seven lightning rings (`FpObjectThunder` subclass `0x2c1dd0`: closed
+   loops at height 900 with a bouncing radius walk, drawn with `thunder.rs` strips via the new `Thunder::set_nodes`), the area smoke (JP
+   `FpAreaSmoke` with the US arguments) and the strikes of the retail `FpObjectTnderBH2` (`0x2c1050`: every `20 (0.5 + rand)` frames from a
+   visible rim point outwards or from the sky in front of the camera, revealed over 2.45 frames).  Window: `screens/r6_fx3/bbg062_sheet.png`
+   (`SH2_BATTLE_DEMO=2 SH2_BATTLE_BG=62`): the black sky became a grey storm vortex; `bbg062_cpu_outside.png` (new dev tool
+   `sh2_gfx/examples/bgfx_snap.rs`, CPU splat of the quads, untextured) shows the funnel with the ring on top from outside.
+   Not ported: `FpRetailBolt`'s branch tables (`FUN_002bc420`, one 20-node bolt instead), the stage light flicker during strikes
+   (`FUN_002bdfe0`), the hole's one-corner flash.  Not compared with a live capture (no save state at BBG 062): the near sprites veil the
+   fighters a little when the battle camera sits inside the vortex, which the PS2 (no near clip for sprites) should do too.
+3. `bgfx_corpus_us` sets the US region (the 204 mode-2 waterfall of BBG 097 was "unsupported" only because the test ran with JP rules).
+4. Thunder API: `Thunder::set_nodes` (explicit polyline), `Thunder::truncated` (a growing bolt).
+
+## Status (2026-10-15, first batch)
 `cargo check --workspace --all-targets` clean; `cargo test -p sh2_gfx -p sh2_formats` green (sh2_gfx lib 179 incl. the new `script_torch`,
 `retail_torch_and_field_attach`, `storm209::*`; `bgfx_corpus_us`: unsupported `{209: 1}` (was `{209: 3}`)).  Coverage: `run_all.sh run lsd --fresh
 --jobs 4` **166 / 166 ok** (was 164 / 2 stub), `run_all.sh run fx --fresh --jobs 4` **306 / 306 ok** (was 304 / 2 stub).  Ghidra (SLUS_210.41 on
@@ -37,14 +62,14 @@
    0 panics, 0 slab errors): `screens/r6_fx3/sanity/` (+ `sheet.png`).
 
 ## Open
-* **202 `FpBlackHole`** (BBG 62): not started in code.  The US `Create` (0x002be590) is a rewrite of the JP one: a new object `0x2c0700` (0x3e0
+* (done in the second batch, see the top) **202 `FpBlackHole`** (BBG 62):  The US `Create` (0x002be590) is a rewrite of the JP one: a new object `0x2c0700` (0x3e0
   bytes, 20 parts, `0x2c0d20(param)`), the hole `0x2bf250` (250 parts, as JP `FpObjectBlackHole`), **7** ring objects `0x2c1dd0` / `0x2c1ef0`
   (0x340 bytes; args radius 123 / 110 / 120 / 125 / 130 / 140 / 150, colours `0x04808080` / `0x02aa787d` with the top byte 6 / 4 / 2, part counts
   0x17c..0xec), the `FpAreaSmoke` (`0x2c2a50` / `0x2c2c80`, same arguments as JP) and one `FpRetailBolt` (`0x2bc1d0`, Create `0x2bd690`:
   (0, -1000, 0) -> (0, -1000, 0), colours `0x3cffc896` / `0x1ec88264`, 20 nodes); prim fields `+0x90..+0xbc` as JP `+0x80..+0xac`, `+0xcc` =
   the record's first float.  JP `decomp/D/Fp.c` 14044..17103 covers the hole and the smoke; the ring objects and the new 0x3e0 object need the
   US decompile.  Estimate still ~1 day.
-* 209 variant 0 (WE_01_U slot 15): the storm timeline.
+* 209 variant 0: done in the second batch.
 * SMROOM not seen in a window.
 
 ## Files

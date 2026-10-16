@@ -18,6 +18,7 @@
 //! logic modules produce plain data (vertex positions, UVs, colours) for the Bevy layer ([`render`]).
 
 pub mod bbp;
+pub mod blackhole202;
 pub mod btlin;
 pub mod btlin_boss;
 pub mod hitmark;
