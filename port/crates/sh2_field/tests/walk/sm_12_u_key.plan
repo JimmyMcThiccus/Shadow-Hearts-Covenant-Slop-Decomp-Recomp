@@ -1,0 +1,8 @@
+# Sainte-Marguerite (0x1b) and Cannes 2 (0x1c), from sm_12_u_key.walk (the prison after the reunion, the three key parts in hand: flags
+# 0x94e Adhesive (SM_21_U ev 3), 0x972 Bent Wire (SM_04_U ev 2), 0x973 Fountain Pen (SM_18_U ev 3); Locke met in SM_12_U, box 6 /
+# ev 6 -> 0x94d), resumed at SM_12_U entry 1.  Locke's look point (ev 6, only while 0x94d and not 0x9cd) makes the Handmade Key
+# (0x94f); SM_19_U's door (ev 2) then opens with it -> SM_20_U (Clawed Admirals x3, Godhand) -> 0x1b -> Cannes CA_03_U -> 0x1c.
+# Route from the user's walkthrough reference (lparchive.org Shadow Hearts Covenant, update 36).
+# The walk to here ran with flag 0x24 cleared (`story_walk --flags 0x4=0xef`), see r6_fs2.md batch 4.
+SM_12_U:look 0x1 (ev 6)
+SM_19_U:examine box 1 (ev 2)

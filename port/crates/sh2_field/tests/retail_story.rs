@@ -258,6 +258,32 @@ fn nemeton_exit_plan_sets_the_chapter_flag() {
     assert!(sh2_field::story::flag(&w.game.regs(), 0x18), "{:?}", w.steps.iter().map(|s| &s.what).collect::<Vec<_>>());
 }
 
+/// Sainte-Marguerite (0x1b) and Cannes 2 (0x1c): Locke's Handmade Key and the locked door, from `tests/walk/sm_12_u_key.plan` (the user's
+/// walkthrough reference, update 36).  The walker finds the way from SM_12_U to SM_19_U itself.  Release build, ~3 min:
+/// `cargo test --release -p sh2_field --test retail_story -- --ignored marguerite`.
+#[test]
+#[ignore]
+fn sainte_marguerite_key_plan_sets_both_chapter_flags() {
+    let Some(env) = walk_env() else { return };
+    let (s, _, _) = sh2_field::story::read_checkpoint(&fixture("sm_12_u_key.walk")).unwrap();
+    let g = sh2_field::story::Game::resume_at(&env, s, "SM_12_U", 1).unwrap();
+    assert!(!sh2_field::story::flag(&g.regs(), 0x1b));
+    let mut w = sh2_field::story::Walker::new(&env, g);
+    let plan = std::fs::read_to_string(fixture("sm_12_u_key.plan")).unwrap();
+    w.plan = plan.lines().filter(|l| !l.starts_with('#') && !l.trim().is_empty()).filter_map(|l| l.split_once(':')).map(|(m, t)| (m.to_string(), t.to_string())).collect();
+    for _ in 0..80 {
+        let regs = w.game.regs();
+        if sh2_field::story::flag(&regs, 0x1b) && sh2_field::story::flag(&regs, 0x1c) {
+            break;
+        }
+        w.run(1);
+    }
+    assert!(w.plan.is_empty(), "plan stuck at {:?}", w.plan.front());
+    let regs = w.game.regs();
+    assert!(sh2_field::story::flag(&regs, 0x94f), "no Handmade Key");
+    assert!(sh2_field::story::flag(&regs, 0x1b) && sh2_field::story::flag(&regs, 0x1c), "{:?}", w.steps.iter().rev().take(5).map(|s| &s.what).collect::<Vec<_>>());
+}
+
 /// Todo lab 1, TD_02_U: the corridor gallery (walk-on box 6, event 6) is played -- the walker takes a walk-on box that changes the state
 /// before it leaves the room (in the game the player walks through it) and holds still while the targets come (a press is a miss).
 /// Event 6 sets 0x1c2e and clears 0x1c2f, the flag that TD_06_U's look point set and that TD_02_U's door reads as "wrong way" in the

@@ -1,10 +1,11 @@
 # Round 6 FS2: story to the end, field scripts
 
-## Status (2026-10-16, batch 3)
+## Status (2026-10-16, batch 4)
 
 **Chapters reached (story flags set by walks, union with round 5):**
-- First half: **29 of 34** (0x18 Nemeton ruins new in batch 3; still missing 0x08, 0x19, 0x1a (no constant setter), 0x1b
-  Sainte-Marguerite, 0x1c Cannes 2).
+- First half: **31 of 34** (0x18 Nemeton ruins in batch 3; 0x1b Sainte-Marguerite and 0x1c Cannes 2 in batch 4).  Missing 0x08,
+  0x19 Firenze 4, 0x1a Cannes 1: no script sets, clears or tests them with a constant, and playing Nemeton -> Cannes ->
+  Sainte-Marguerite -> Cannes 2 did not set them (batch 4) -- debug-menu chapter markers, like 0x41 / 0x4d / 0x55.
 - Second half: **23 of 26** (was 14; 0x47 now played): new this round 0x4c Mt. Fuji, 0x4e Inugami 2, 0x4f Foreign cemetery 2, 0x50 Azabu mansion,
   0x51 Inugami 3, 0x52 Queen's garden, 0x53 Wales 3, 0x54 Inugami 4 -- all played (Fuji by the puzzle search, the rest by the novelty
   walk with `--search-on-stall`), and the walk then enters the last dungeon (`AI_05_U` -> `AI_00_U` "Vessel"; its own search: 416
@@ -21,6 +22,23 @@
 `1_post4e_00037_IN_04_U` (Fuji search result) -> `2_post4f_AP_02_A` (+ `--goto KA_09_U:0`) -> `3_post51_IN_02_U` (+ `--goto QG_14_U:0`)
 -> `4_post53_WE_00_U` -> `5_post54_IN_00_U` -> `6_last_dungeon_AI_00_U`.  Logs: `fs2/fu5.err`, `w1.err`, `w2a.err`, `w3a.err`,
 `w4a.err`, `w5.err`, `ai1.err`.
+
+**Batch 4 (2026-10-16): Sainte-Marguerite (0x1b) and Cannes 2 (0x1c) played.**
+- **The key is not Locke-in-Cannes.**  The 0x110 -> 0x111 -> 0x112 -> 0x113 chain (CA_02 / Petrograd / Paris / CA_01) needs flag 0x49
+  (Nihonbashi 2): it is a second-half side story.  In the first half SM_19_U's door (ev 2) opens on flag **0x94f**: Locke in SM_12_U
+  (walk-on box 6 / ev 6 the first time -> 0x94d; then a look point, ev 6, while 0x94d and not 0x9cd) makes the Handmade Key once
+  0x94e (Adhesive, SM_21_U ev 3), 0x972 (Bent Wire, SM_04_U ev 2) and 0x973 (Fountain Pen, SM_18_U ev 3) are set.
+- **Out-of-order save.**  The round-5 first-half walk played 0x1d..0x29 before Nemeton / Cannes, which the story does not allow:
+  SM_00_U's start function sees 0x24 (Goreme Valley 2) and sets **0x9cd**, which hides Locke's look point for good.  The batch-4 walk
+  therefore ran from `chain/7_post18_CA_00_U.walk` with **0x24 cleared** (`--flags 0x4=0xef`); with that the novelty walk met Locke
+  and picked up all three parts by itself (`chain/10_sm_parts_SM_00_U.walk`).  From there (resumed at SM_12_U:1) a 2-step plan:
+  `SM_12_U:look 0x1 (ev 6)` (the key) and `SM_19_U:examine box 1 (ev 2)` -> SM_20_U (Clawed Admirals x3, Godhand, monster sets
+  88 / 89) -> **0x1b** -> world map -> CA_03_U -> **0x1c** (`chain/11_post1c_CA_01_U.walk`).
+- Plan `tests/walk/sm_12_u_key.plan`, fixture `sm_12_u_key.walk`, test `retail_story::sainte_marguerite_key_plan_sets_both_chapter_flags`
+  (ignored, release, ~10 s).  `examples/boxes.rs` takes `--us`.
+- First-half rerun from `chain/11` (400 decisions, `--search-on-stall 300`, `fs2/fh.err`): no new flag.  Every first-half area in
+  `CHAPTER_AREAS` is done, so the walk tours Europe (Russia, Wales, Switzerland, the prison, Nemeton); 0x19 / 0x1a stay unset and
+  0x24 (cleared for the batch-4 run) was not replayed.  Union of all walks: first half 31 / 34, second half 23 / 26.
 
 **Batch 3 (2026-10-16):**
 - **Vessel ring solved.**  The ring registers are bytes **0x3a8..0x3ab** (one per floor, 0..3; the old notes watched 0x3ac..0x3b1).
@@ -53,6 +71,7 @@
     would be over (the start job's step machine runs `AutoMove` then `if (WaitCharacterEx(0, 0x100) == 1) step++`).  The walker
     also presses cross / triangle / square every 5 s when the start job polls the pad behind an open window (SM_11_U's "Hide / Move"
     tutorial waits for `get_pad(0) & cross`).
+  - (Batch 4 corrects the next point: the first-half key is 0x94f from Locke in the prison, not 0x113.)
   - With these the walk plays the stealth section, Oscar and the reunion (SM_08..SM_17, SM_18 / 22 / 23) and reaches SM_19_U, whose
     door (event 2) to SM_20_U (sets 0x1b) needs flag 0x113 = Locke's **Handmade Key** (CA_01_U func 0x5b4d, Locke = slot 14, talk
     event 16; gives the key once register byte 0x208 counts the parts: Bent Wire, Adhesive, Fountain Pen).  Locke only stands in
@@ -119,8 +138,8 @@ result.
 - Not reached this batch: the second-half rerun after the Vessel; the first half 0x18..0x1c.
 
 **Open puzzles:**
-- First half 0x1b / 0x1c: Locke's Handmade Key (batch 3 above): flags 0x111 (Petrograd ev 42) -> 0x112 (Paris PA_03_U ev 28) ->
-  Locke in CA_01_U (slot 14, ev 16) with the three parts -> 0x113 -> SM_19_U door -> SM_20_U (0x1b) -> CA_03_U (0x1c).
+- A first-half walk in story order (0x18..0x1c before 0x1d): the existing chain is out of order (batch 4); a clean run would start
+  from a checkpoint before 0x1d (none of the round-5 checkpoints has one: cp17..cp27 all have 0x1d..0x29).
 - The Vessel's optional chests (Seventh Key, Crucifix) and the good-ending question are not in the plan (it takes the shortest way).
 - `SetSceneInit` 10 / 11 remainders.
 
