@@ -43,25 +43,25 @@ monset 166	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)	
 monset 170	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=26;menus=1;ring_presses=3;effects_started=2;last_stage=left
 monset 174	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=18;menus=0;ring_presses=0;effects_started=0;last_stage=left
 monset 178	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=124;menus=15;ring_presses=39;effects_started=5;last_stage=left
-monset 182	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=40;menus=2;ring_presses=5;effects_started=6;last_stage=left
-monset 186	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=48;menus=4;ring_presses=10;effects_started=3;last_stage=left
+monset 182	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=46;menus=2;ring_presses=5;effects_started=6;last_stage=left
+monset 186	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=51;menus=4;ring_presses=10;effects_started=3;last_stage=left
 monset 190	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=32;menus=2;ring_presses=5;effects_started=0;last_stage=left
 monset 194	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=44;menus=4;ring_presses=10;effects_started=4;last_stage=left
 monset 198	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=59;menus=6;ring_presses=16;effects_started=4;last_stage=left
-monset 202	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=38;menus=2;ring_presses=5;effects_started=5;last_stage=left
+monset 202	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=41;menus=2;ring_presses=5;effects_started=5;last_stage=left
 monset 206	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=37;menus=2;ring_presses=5;effects_started=3;last_stage=left
-monset 210	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=20;menus=0;ring_presses=0;effects_started=4;last_stage=left
-monset 214	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=78;menus=7;ring_presses=18;effects_started=8;last_stage=left
+monset 210	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=21;menus=0;ring_presses=0;effects_started=4;last_stage=left
+monset 214	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=81;menus=7;ring_presses=18;effects_started=8;last_stage=left
 monset 218	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=54;menus=1;ring_presses=2;effects_started=6;last_stage=left
 monset 222	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=28;menus=1;ring_presses=3;effects_started=3;last_stage=left
 monset 226	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=39;menus=4;ring_presses=10;effects_started=1;last_stage=left
 monset 230	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=22;menus=0;ring_presses=0;effects_started=2;last_stage=left
-monset 234	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=103;menus=14;ring_presses=36;effects_started=9;last_stage=left
-monset 238	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=64;menus=4;ring_presses=11;effects_started=8;last_stage=left
+monset 234	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=105;menus=14;ring_presses=36;effects_started=9;last_stage=left
+monset 238	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=66;menus=4;ring_presses=11;effects_started=8;last_stage=left
 monset 242	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=23;menus=1;ring_presses=2;effects_started=0;last_stage=left
 monset 246	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=34;menus=2;ring_presses=4;effects_started=3;last_stage=left
 monset 250	ok	resolved by the harness finisher (1 enemies cut to 1 HP after 240 s; Lv 30 plain attacks were too weak)		scenes=[BootBattleField];battle_secs=246;menus=41;ring_presses=102;effects_started=15;last_stage=left;finisher=1
-monset 254	ok	resolved by the harness finisher (1 enemies cut to 1 HP after 240 s; Lv 30 plain attacks were too weak)		scenes=[BootBattleField];battle_secs=258;menus=43;ring_presses=107;effects_started=15;last_stage=left;finisher=1
+monset 254	ok	resolved by the harness finisher (1 enemies cut to 1 HP after 240 s; Lv 30 plain attacks were too weak)		scenes=[BootBattleField];battle_secs=258;menus=43;ring_presses=106;effects_started=16;last_stage=left;finisher=1
 monset 258	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=80;menus=11;ring_presses=27;effects_started=0;last_stage=left
 monset 262	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=46;menus=5;ring_presses=11;effects_started=0;last_stage=left
 monset 266	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=92;menus=13;ring_presses=28;effects_started=0;last_stage=left
@@ -71,12 +71,12 @@ monset 278	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)	
 monset 282	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=91;menus=13;ring_presses=31;effects_started=0;last_stage=left
 monset 286	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=61;menus=6;ring_presses=15;effects_started=7;last_stage=left
 monset 290	ok	resolved by the harness finisher (1 enemies cut to 1 HP after 240 s; Lv 30 plain attacks were too weak)		scenes=[BootBattleField];battle_secs=252;menus=40;ring_presses=99;effects_started=23;last_stage=left;finisher=1
-monset 294	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=74;menus=7;ring_presses=16;effects_started=4;last_stage=left
+monset 294	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=86;menus=7;ring_presses=16;effects_started=4;last_stage=left
 monset 298	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=25;menus=0;ring_presses=0;effects_started=2;last_stage=left
-monset 302	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=31;menus=0;ring_presses=0;effects_started=7;last_stage=left
+monset 302	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=35;menus=0;ring_presses=0;effects_started=7;last_stage=left
 monset 306	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=30;menus=1;ring_presses=2;effects_started=2;last_stage=left
 monset 310	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=19;menus=0;ring_presses=0;effects_started=3;last_stage=left
-monset 314	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=20;menus=0;ring_presses=0;effects_started=4;last_stage=left
+monset 314	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=22;menus=0;ring_presses=0;effects_started=4;last_stage=left
 monset 318	ok	lost (Game Over) with the autoplayer (party Lv 30, plain attacks)		scenes=[BootBattleGameOver];battle_secs=43;menus=4;ring_presses=9;effects_started=3;last_stage=left
 monset 322	ok			scenes=[BootBattleField];battle_secs=99;menus=16;ring_presses=40;effects_started=1;last_stage=left
 monset 326	ok			scenes=[BootBattleField];battle_secs=69;menus=11;ring_presses=27;effects_started=0;last_stage=left

@@ -132,6 +132,8 @@ fn main() {
         .add_systems(PostUpdate, (delay_delete_flush, frame_stats))
         .add_plugins(MaxSeconds::from_env())
         .add_plugins(perf::PerfPlugin) // SH2_PERF=<file>: per-scene CPU profile (notes/integration/r6_pf.md)
+        .insert_resource_if_env_shot()
+        .add_systems(Last, shot_every.run_if(resource_exists::<ShotEvery>))
         .run();
     // `--autoplay` reports failure (timeout / game over = 2) through `AppExit`: hand it to the shell so harness scripts can detect it
     std::process::exit(match exit {
@@ -187,9 +189,35 @@ fn limit_catch_up(mut time: ResMut<Time<Virtual>>) {
 /// driver, `new SSHSys`, `SSHSys::Initialize`) then `opening()` which sets the
 /// first scene API to `CDMYStage`. All of that is done by `SshSysPlugin`; here
 /// we only request the first scene.
-fn init_instance(mut sys: ResMut<SshSys>, build: Option<Res<sh2_core::boot::ActiveBuild>>) {
+fn init_instance(
+    mut sys: ResMut<SshSys>,
+    build: Option<Res<sh2_core::boot::ActiveBuild>>,
+    session: Option<ResMut<sh2_menu::session::GameSession>>,
+    req: Option<ResMut<sh2_core::game::FieldRequest>>,
+) {
     // headless tests (MinimalPlugins) never insert `ActiveBuild`: that means the JP demo
     sys.retail = build.map(|b| b.0.is_retail()).unwrap_or(false);
+    // dev aid (round 6 QA2): `SH2_START_MAP=<MAP>[:entry]` skips the title and starts a new game in that map (like the title's New Game
+    // with another first map), to look at a map's scripts / effects in a window
+    if let (Some(start), true, Some(mut session), Some(mut req)) = (std::env::var("SH2_START_MAP").ok().filter(|s| !s.is_empty()), sys.retail, session, req) {
+        let (map, entry) = match start.split_once(':') {
+            Some((m, e)) => (m.to_uppercase(), e.parse().unwrap_or(0)),
+            None => (start.to_uppercase(), 0),
+        };
+        info!("SH2_START_MAP: new game in {map} entry {entry}");
+        session.new_game(&map);
+        // `SH2_START_FLAGS=0x942,0x10`: script flag bits to set first (chkFlag / setFlag numbering: word bit >> 5, bit & 31)
+        for f in std::env::var("SH2_START_FLAGS").unwrap_or_default().split(',').filter_map(|f| u32::from_str_radix(f.trim().trim_start_matches("0x"), 16).ok()) {
+            let w = (f >> 5) as usize;
+            if session.regs.len() <= w {
+                session.regs.resize(w + 1, 0);
+            }
+            session.regs[w] |= 1 << (f & 31);
+        }
+        *req = sh2_core::game::FieldRequest { map, entry };
+        sys.set_api(SshApi::FieldSocket);
+        return;
+    }
     // `SH2_MENU_DEV`: menu dev driver (sh2_field::menu_overlay) -- stay out of the title so the menu can be photographed on its own
     if std::env::var_os("SH2_MENU_DEV").is_some() {
         return;
@@ -257,4 +285,34 @@ fn window_size_from_env() -> (u32, u32) {
         .ok()
         .and_then(|v| v.split_once('x').and_then(|(w, h)| Some((w.trim().parse().ok()?, h.trim().parse().ok()?))))
         .unwrap_or((896, 672))
+}
+
+/// dev aid (round 6 QA2): `SH2_SHOT_EVERY=<seconds>` writes a window screenshot every n seconds of real time to `SH2_SHOT_DIR`
+/// (default `notes/integration/screens/shots`) as `<scene>_<seconds>.png` -- to look at a map / effect started with `SH2_START_MAP`
+#[derive(Resource)]
+struct ShotEvery(f64, f64);
+
+trait ShotEveryExt {
+    fn insert_resource_if_env_shot(&mut self) -> &mut Self;
+}
+
+impl ShotEveryExt for App {
+    fn insert_resource_if_env_shot(&mut self) -> &mut Self {
+        if let Some(every) = std::env::var("SH2_SHOT_EVERY").ok().and_then(|v| v.parse::<f64>().ok()).filter(|v| *v > 0.0) {
+            self.insert_resource(ShotEvery(every, every));
+        }
+        self
+    }
+}
+
+fn shot_every(mut commands: Commands, mut st: ResMut<ShotEvery>, time: Res<Time<Real>>, scene: Res<State<Scene>>) {
+    let t = time.elapsed_secs_f64();
+    if t < st.1 {
+        return;
+    }
+    st.1 += st.0;
+    let dir = std::env::var("SH2_SHOT_DIR").unwrap_or_else(|_| "notes/integration/screens/shots".into());
+    let _ = std::fs::create_dir_all(&dir);
+    let path = std::path::Path::new(&dir).join(format!("{:?}_{:04}.png", scene.get(), t as u32));
+    commands.spawn(bevy::render::view::screenshot::Screenshot::primary_window()).observe(bevy::render::view::screenshot::save_to_disk(path));
 }

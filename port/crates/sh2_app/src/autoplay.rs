@@ -102,6 +102,8 @@ pub struct Autoplay {
     ring_zone_ticks: u32,
     /// ticks the battle command menu has been open (round 5 BP: the shot waits for the slide-in, QA12)
     battle_menu_ticks: u32,
+    /// ticks since the battle's result stage began (round 6 QA2: the result window is photographed after it has come up)
+    result_ticks: u32,
     tap: u32,
     battle_seen: bool,
     done_at: Option<u64>,
@@ -152,6 +154,7 @@ impl Plugin for AutoplayPlugin {
             menu_ticks: 0,
             ring_zone_ticks: 0,
             battle_menu_ticks: 0,
+            result_ticks: 0,
             tap: 0,
             battle_seen: false,
             done_at: None,
@@ -681,9 +684,21 @@ fn autoplay_inject(
                 }
             } else {
                 ap.ring_zone_ticks = 0;
+                ap.result_ticks = if battle.result_shown { ap.result_ticks + 1 } else { 0 };
                 if battle.result_shown {
-                    ap.shot("battle_victory");
-                    raw = ap.tap_bits(padbit::CIRCLE);
+                    // win pose first, then the result window: with screenshots on, wait for both before confirming
+                    if ap.result_ticks == 2 {
+                        ap.shot("battle_victory");
+                    }
+                    if ap.result_ticks == 150 {
+                        ap.shot("battle_result");
+                    }
+                    if ap.result_ticks == 330 {
+                        ap.shot("battle_result_2");
+                    }
+                    if ap.opts.shots.is_none() || ap.result_ticks > 340 {
+                        raw = ap.tap_bits(padbit::CIRCLE);
+                    }
                 } else if battle.menu_open && battle.stage == "running" && menu_settled {
                     raw = ap.tap_bits(padbit::CIRCLE);
                 } else if battle.stage == "defeat" {

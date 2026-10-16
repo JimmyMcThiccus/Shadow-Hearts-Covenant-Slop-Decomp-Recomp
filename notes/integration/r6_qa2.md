@@ -25,6 +25,25 @@ Changes this session (all in owned files unless noted):
   failed twice in a row beside the US story test: left `[Boot, Title, GameOver, Field]`; process-wide retail flag).
 * `tools/coverage/notes.md`: top blockers refreshed; `docs/OUTLINE.md` status paragraph.
 
+## Status, second pass (2026-10-16, after BT d1cc3b3, CS3 47694fb, FX3 da98c3d / 8ad677c, FS2 1c99365)
+
+* `run_all.sh run battle battleapp party --fresh --jobs 4`: battles 413 / 413 (stage 062 = BgFx 202 now ok), battle app 327 / 327, party
+  321 / 321.  Then `all --fresh --jobs 4` (field 3126 s); its story step was cut off (empty `story.tsv`, the coordinator saw no processes)
+  and was rerun alone (`run story --fresh`, 71 s).  **3810 items: 3625 ok, 43 stub, 3 fails, 0 timeout, 139 untested** (first round-6
+  pass 3578 / 90 / 3 / 139; round-5 end 3793 / 3543 / 97 / 3 / 150).  Effects 306 / 306, cut scenes 166 / 166, menus 28 / 28; field
+  533 / 559 (SM_13_B now ok).  Against the committed matrix: 4 stub -> ok, nothing worse.  Top blockers refreshed (all FS2).
+* **SMROOM / SMROOM2 in a window** (`screens/r6_qa2/smroom/Field_0032.png`, `_0072.png`): SM_07_U with story flag 0x942 set (byte 0x128
+  bit 2; the start function then plays the electric-chair scene) -- `SMROOM.EFD` x2 / `SMROOM2.EFD` x2 start at 31 / 37 s and 71 / 78 s;
+  blue arcs and glow on both electrode panels (attached to `conpane` / ROOT) plus a spark between them, gone between the bursts.  Looks
+  right.  FYI FS2: both chairs are empty in my start (characters 000 / 021 are loaded, the party is not seated) -- maybe only my shortcut
+  start (no preceding SM_06_U scene); and the radar stays on during the scene.
+* **Battle result screen**: `autoplay` now waits on the result stage (shots at tick 2 / 150 / 330, confirms after 340 when screenshots are
+  on): `screens/r6_qa2/auto2/gp_13_battle_victory.png` (win pose), `gp_14_battle_result.png` (camera, "X: Skip"), `gp_15_battle_result_2.png`
+  ("You Get!" Exp. 4 Cash. 40 Item. None).  Full sanity sheet `auto2/` (16 shots + 37 menu pages): field, battle HUD, ring, result, menus OK.
+* New `sh2_app` dev aids (main.rs): `SH2_START_MAP=<MAP>[:entry]` (+ `SH2_START_FLAGS=0x942,..` script flag bits) starts a new game in that
+  map without the title; `SH2_SHOT_EVERY=<s>` [+ `SH2_SHOT_DIR`] writes a screenshot every n seconds.  Usable with `--autoplay --story`.
+* Final: `cargo check --workspace --all-targets` clean; `cargo test -p sh2_app` 4 passed / 1 ignored.
+
 ## Harness fixes
 
 * `run_all.sh run <unknown>` (and `run` with no category): the coverage binary now checks the category list before any worker

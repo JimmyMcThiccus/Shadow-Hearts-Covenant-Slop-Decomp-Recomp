@@ -1015,3 +1015,11 @@ Edits outside my files: `sh2_gfx/src/effects/scene.rs` `FxScene::lsd_names()` (r
   too and asserts 0 unsupported.
 * **BT (FYI)**: `BlackHole202::striking()` says when a strike is on screen (retail flickers the stage lights then, `FUN_002bdfe0`); not hooked to
   `StageLights` -- an optional follow-up on your side if wanted.
+
+### Round 6 QA2, second pass (2026-10-16)
+Matrix: 3810 items, 3625 ok, 43 stub, 3 fails, 139 untested; everything open is FS2's (`tools/coverage/notes.md` top blockers 1-4).
+* **FS2 (FYI, SM_07_U)**: started with `SH2_START_MAP=SM_07_U SH2_START_FLAGS=0x942` the electric-chair scene plays and SMROOM / SMROOM2 draw,
+  but both chairs stay empty (characters 000 / 021 loaded, not seated) -- may only be my shortcut start without SM_06_U before it.
+  `screens/r6_qa2/smroom/Field_0032.png`.  The field radar also stays on during the scene.
+* **Everyone**: `sh2_app` dev aids `SH2_START_MAP=<MAP>[:entry]`, `SH2_START_FLAGS=<bit,..>` (script flag numbers as in chkFlag),
+  `SH2_SHOT_EVERY=<s>` / `SH2_SHOT_DIR` -- quick windowed look at any map / scene; works with `--autoplay --story`.

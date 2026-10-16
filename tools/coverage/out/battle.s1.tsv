@@ -93,7 +93,7 @@ stage 043	ok			used_by=BBTL56;users=1;bgfx=0
 stage 047	ok			used_by=BBTL53,BBTL54;users=2;bgfx=6
 stage 051	ok			used_by=BBTL59;users=1;bgfx=1
 stage 057	ok			used_by=QG_00_U,QG_02_U,QG_04_U,QG_06_U,QG_07_U,QG_08_U;users=8;bgfx=8
-stage 062	stub	stage effect types not drawn {202}	FX2	used_by=BBTL133;users=1;bgfx=1;missing=bgfx type 202
+stage 062	ok			used_by=BBTL133;users=1;bgfx=1
 stage 066	ok			used_by=BBTL73;users=1;bgfx=0
 stage 072	ok			used_by=BBTL78;users=1;bgfx=6
 stage 077	ok			used_by=AP_02_A,AP_03_A,AP_03_U,AP_04_A,AP_04_U,AP_05_A;users=14;bgfx=2
