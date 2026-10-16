@@ -210,12 +210,50 @@ pub struct UiTextures {
     next: TextureId,
 }
 
+/// Round 6 MN3: give every fully transparent texel next to a visible one the mean colour of its visible neighbours.  The canvas samples
+/// bilinearly with straight alpha, so the RGB of transparent texels bled into the edges: the ELEMENT.MSD name plates (black outline,
+/// transparent texels teal) got a teal fringe the live Graveyard / Library captures do not show.  Alpha is unchanged.
+pub fn bleed_transparent(w: usize, h: usize, rgba: &mut [u8]) {
+    if rgba.len() < w * h * 4 || w == 0 || h == 0 {
+        return;
+    }
+    let src = rgba.to_vec();
+    for y in 0..h {
+        for x in 0..w {
+            let o = (y * w + x) * 4;
+            if src[o + 3] != 0 {
+                continue;
+            }
+            let (mut s, mut n) = ([0u32; 3], 0u32);
+            for (dx, dy) in [(-1i32, 0i32), (1, 0), (0, -1), (0, 1), (-1, -1), (1, -1), (-1, 1), (1, 1)] {
+                let (nx, ny) = (x as i32 + dx, y as i32 + dy);
+                if nx < 0 || ny < 0 || nx >= w as i32 || ny >= h as i32 {
+                    continue;
+                }
+                let q = (ny as usize * w + nx as usize) * 4;
+                if src[q + 3] != 0 {
+                    for c in 0..3 {
+                        s[c] += src[q + c] as u32;
+                    }
+                    n += 1;
+                }
+            }
+            if n > 0 {
+                for c in 0..3 {
+                    rgba[o + c] = (s[c] / n) as u8;
+                }
+            }
+        }
+    }
+}
+
 /// First texture id reserved for [`UiTextures::insert_handle`].
 pub const FIXED_TEXTURE_BASE: TextureId = 0x8000_0000;
 
 impl UiTextures {
-    pub fn add(&mut self, images: &mut Assets<Image>, w: u32, h: u32, rgba: Vec<u8>) -> TextureId {
+    pub fn add(&mut self, images: &mut Assets<Image>, w: u32, h: u32, mut rgba: Vec<u8>) -> TextureId {
         use bevy::asset::RenderAssetUsages;
+        bleed_transparent(w as usize, h as usize, &mut rgba);
         use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
         let img = Image::new(Extent3d { width: w, height: h, depth_or_array_layers: 1 }, TextureDimension::D2, rgba, TextureFormat::Rgba8UnormSrgb, RenderAssetUsages::RENDER_WORLD | RenderAssetUsages::MAIN_WORLD);
         self.next += 1;
@@ -700,7 +738,11 @@ fn expand_text(cmds: Vec<DrawCmd>, bank: &FontBank, pools: &mut SpritePools, tex
                 continue;
             }
             let k = (px_per_unit * scale).ceil().clamp(1.0, 8.0) as u32;
-            let key = (line.to_string(), slot, t.clut_set, t.spacing, k as u8 | (t.proportional as u8) << 7);
+            // round 6 MN3: retail `FontDraw::Order` adds the item's shadow x to the pen of every glyph (hires_fonts.md); fitted on live
+            // captures of narrow menu text (Graveyard notes line 418 vs 397 px, `SE.  0/ 40` 85 vs 75 px: `(width + 1) * 0.8`).  Only the
+            // narrow (`MenuText` flag bit 3) runs take it, the wide HUD / field runs keep their measured layouts.
+            let spacing = t.spacing as i32 + if t.hscale < 1.0 { t.shadow.map(|s| s.0 as i32).unwrap_or(0) } else { 0 };
+            let key = (line.to_string(), slot, t.clut_set, spacing.clamp(-128, 127) as i8, k as u8 | (t.proportional as u8) << 7);
             let frame = pools.frame;
             let entry = match pools.text.get_mut(&key) {
                 Some(e) => {
@@ -708,7 +750,7 @@ fn expand_text(cmds: Vec<DrawCmd>, bank: &FontBank, pools: &mut SpritePools, tex
                     (e.0, e.1, e.2)
                 }
                 None => {
-                    let Some(img) = crate::hifont::render_scaled_layout(font, line, t.clut_set as usize, t.spacing as i32, k, t.proportional) else { continue };
+                    let Some(img) = crate::hifont::render_scaled_layout(font, line, t.clut_set as usize, spacing, k, t.proportional) else { continue };
                     // the bitmap fallback comes back at 1x
                     let f = (img.height / font.cell_h.max(1) as u32).max(1);
                     let (lw, lh) = (img.width / f, img.height / f);
@@ -998,6 +1040,15 @@ impl Plugin for BevyUiPlugin {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn transparent_texels_take_their_neighbours_colour() {
+        // a black opaque texel next to a transparent teal one: the teal must not survive (bilinear fringe)
+        let mut px = vec![0, 0, 0, 255, 0, 200, 200, 0, 0, 200, 200, 0];
+        bleed_transparent(3, 1, &mut px);
+        assert_eq!(&px[4..8], &[0, 0, 0, 0]);
+        assert_eq!(&px[8..12], &[0, 200, 200, 0], "not next to a visible texel");
+    }
 
     /// Round 6 PF: a layer written during the previous rendered frame stays alive even when that frame took longer than the TTL.
     #[test]

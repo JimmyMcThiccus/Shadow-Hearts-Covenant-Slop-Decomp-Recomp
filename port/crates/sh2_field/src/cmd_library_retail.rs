@@ -40,15 +40,18 @@ const TYPE_MS: f32 = 22.0;
 const CHAR_FADE_MS: f32 = 120.0;
 /// Layout measured on the live captures (virtual pixels).
 const NAME_POS: (f32, f32) = (29.0, 71.0);
-/// the name is drawn wider than the narrow description text (live: "Revenant" 56 px)
-const NAME_HS: f32 = 1.1;
+/// round 6 MN3: the name is the field serif (`MFIELD.MSD`, `bevy_ui::FIELD_FONT`), proportional and narrow like every `MenuText` (live
+/// `libr_k`: "Revenant" ink 30..91 = prop x 0.8; it was the menu gothic at 1.1)
+const NAME_HS: f32 = 0.8;
+/// `measure_text` lays out `xo + width`; the field serif's proportional pen is ~0.94 of that for Latin ("Revenant" 79 / 84)
+const NAME_PROP: f32 = 0.94;
 const DESC_HS: f32 = 0.87;
 const RULE_Y: f32 = 113.0;
 const RULE_W: f32 = 208.0;
 const DESC_POS: (f32, f32) = (12.0, 120.5);
 const DESC_PITCH: f32 = 19.7;
 const DESC_W: f32 = 205.0;
-const NUMBER_X: f32 = 166.0;
+const NUMBER_X: f32 = 162.0;
 const LIST_VISIBLE: usize = 10;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -80,6 +83,8 @@ pub struct RetailLibraryPage {
     sc: Arc<CmdScenes>,
     scene: Arc<SceneTex>,
     banner: Option<Arc<SceneTex>>,
+    /// round 6 MN3: LIBRARY.MSD attach 6, the textured `Name` fence of the list (window (38, 80), 144 x 272; live `lv_list`)
+    list_fence: Option<Arc<SceneTex>>,
     elem: Option<crate::cmd_magic::ElemArt>,
     tab: usize,
     entries: [Vec<Entry>; 2],
@@ -109,12 +114,14 @@ impl RetailLibraryPage {
         let sc = env.scenes()?;
         let scene = env.file_scene(PATH)?;
         let banner = env.nested_scene(PATH, 4);
+        let list_fence = env.nested_scene(PATH, 6);
         let elem = crate::cmd_magic::ElemArt::load(env);
         let title_img = scene.t(0).map(|t| (t, scene.tex_size(0)));
         let mut p = RetailLibraryPage {
             sc,
             scene,
             banner,
+            list_fence,
             elem,
             tab: 0,
             entries: [Vec::new(), Vec::new()],
@@ -419,7 +426,10 @@ impl Page for RetailLibraryPage {
         if self.mode != Mode::List && self.cur().is_some() {
             crate::menu_model::draw_model_view(g, a);
         }
-        self.draw_banner(g, a);
+        // live `lv_list` (round 6 MN3): the list hides the banner
+        if self.mode != Mode::List {
+            self.draw_banner(g, a);
+        }
         let tabs: Vec<String> = (0..2).map(|i| self.scene.msd.text(i).map(sj).unwrap_or_default()).collect();
         draw_menu_column(g, (380.0, 25.0), &None, &tabs, Some(self.tab), &[], a);
         match self.cur() {
@@ -463,7 +473,9 @@ impl RetailLibraryPage {
             text_run_h(g, ox + nx, oy + 0.0, &m.resource_bytes(3).map(sj).unwrap_or_else(|| "No.".into()), 2, lav, Some((1, 0)), hs);
             let no = self.cur().map(|e| e.no).unwrap_or(1);
             let fmt = self.scene.msd.resource_bytes(40).map(sj).unwrap_or_else(|| "%3d".into());
-            text_run_h(g, NUMBER_X, oy + 0.0, &cfmt(&fmt, &[(no as i32).into()]), 2, white(a), None, 1.0);
+            // round 6 MN3: live `libr_k` draws the number in the narrow menu gothic with a shadow ("1" ink at x 181, 14 px high), not the
+            // big font 2
+            text_run_h(g, NUMBER_X, oy + 1.0, &cfmt(&fmt, &[(no as i32).into()]), 0, white(a), Some((1, 1)), 0.8);
         }
     }
 
@@ -471,12 +483,26 @@ impl RetailLibraryPage {
         // name with the paging arrows (common attach 4, cells left / right)
         let (nx, ny) = NAME_POS;
         let hs = NAME_HS;
-        text_run_h(g, nx, ny, &e.name, 0, white(a), Some((1, 1)), hs);
+        let font = sh2_menu::bevy_ui::FIELD_FONT;
+        g.draw(DrawCmd::Text(TextRun {
+            pos: bevy::math::Vec2::new(nx, ny),
+            text: sh2_menu::sjis::encode(&e.name),
+            font_number: font,
+            clut_set: 0,
+            spacing: 0,
+            color: white(a),
+            shadow: Some((0, 1)),
+            glyph_alpha: Vec::new(),
+            visible: usize::MAX,
+            hscale: hs,
+            proportional: true,
+        }));
         if self.entries[self.tab].len() > 1 {
             if let Some(t) = self.sc.cmn.s.t(4) {
-                let (tw, _) = g.measure_text(0, &sh2_menu::sjis::encode(&e.name));
-                blit(g, Some(t), nx - 26.0, ny, 24.0, 22.0, (0.0, 2.0 * 22.0, 24.0, 3.0 * 22.0), white(a));
-                blit(g, Some(t), nx + tw * hs + 2.0, ny, 24.0, 22.0, (0.0, 3.0 * 22.0, 24.0, 4.0 * 22.0), white(a));
+                let (tw, _) = g.measure_text(font, &sh2_menu::sjis::encode(&e.name));
+                // live `libr_k`: arrow ink at x 4 and 8 px after the name (the cells carry ~7 / ~3 px of margin)
+                blit(g, Some(t), nx - 35.0, ny, 24.0, 22.0, (0.0, 2.0 * 22.0, 24.0, 3.0 * 22.0), white(a));
+                blit(g, Some(t), nx + tw * hs * NAME_PROP + 4.0, ny, 24.0, 22.0, (0.0, 3.0 * 22.0, 24.0, 4.0 * 22.0), white(a));
             }
         }
         // the rule (CBMAGIC / EQUIP explain scene polygons: (130, 125, 150) solid to x 100, then fading out to x 208, y 113..117)
@@ -538,17 +564,23 @@ impl RetailLibraryPage {
         }
     }
 
-    /// `CmdLibraryList` (window 1 (46, 124), 10 rows of 21): `No.` and name, the selected one cyan.
+    /// `CmdLibraryList` (window 1 (46, 124), 10 rows of 21): the textured `Name` fence of attach 6 and the names, the selected one cyan
+    /// (round 6 MN3, live `lv_list`: no number column, no banner; was a general frame with `No.` + name).
     fn draw_list(&self, g: &mut dyn MenuGfx, a: u8) {
         let (wx, wy) = self.scene.msd.window(1).map(|w| (w.x, w.y)).unwrap_or((46.0, 124.0));
-        general_frame(g, &self.sc.cmn, wx - 12.0, wy - 12.0, 300.0, LIST_VISIBLE as f32 * 21.0 + 24.0, a);
+        match &self.list_fence {
+            Some(f) => {
+                let (fx, fy) = f.msd.window(0).map(|w| (w.x, w.y)).unwrap_or((38.0, 80.0));
+                draw_fence_tex(g, f, self.sc.fence_tex, fx, fy, a, true);
+            }
+            None => general_frame(g, &self.sc.cmn, wx - 12.0, wy - 12.0, 300.0, LIST_VISIBLE as f32 * 21.0 + 24.0, a),
+        }
         for (slot, e) in self.entries[self.tab].iter().skip(self.list.top).take(LIST_VISIBLE).enumerate() {
             let y = wy + slot as f32 * 21.0;
             let c = if self.list.top + slot == self.list.sel { rgb(CYAN, a) } else { white(a) };
-            text_run_h(g, wx, y, &cfmt("%3d", &[(e.no as i32).into()]), 0, c, None, 0.8);
-            text_run_h(g, wx + 40.0, y, &e.name, 0, c, None, 0.8);
+            text_run_h(g, wx, y - 1.0, &e.name, 0, c, None, 0.8);
         }
-        draw_scroll_marks(g, wx + 130.0, wy, wy + LIST_VISIBLE as f32 * 21.0, self.list.can_scroll_up(), self.list.can_scroll_down(), self.time, a);
+        draw_scroll_marks(g, wx + 62.0, wy, wy + LIST_VISIBLE as f32 * 21.0, self.list.can_scroll_up(), self.list.can_scroll_down(), self.time, a);
         // the cursor tip on the selected row
         let tip = (wx - 5.0, wy + self.list.slot() as f32 * 21.0 + 10.0);
         let mut c = self.cursor.clone();

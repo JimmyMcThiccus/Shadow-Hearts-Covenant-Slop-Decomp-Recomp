@@ -7,7 +7,7 @@
 | 1. combo switch bit | **fixed** (both sides) | see "Combo switch" below: bit 0 = the battle's `Combo` command, bit 1 = the shortcut switch, copied from `MENU+0x276` at each battle start |
 | 2. shortcut setting overlay (mode 0x18) | **done** | `sh2_battle/src/shortcut.rs` (`setting_row`, `SettingMenu`, `write_row`, `draw_setting`) + `plugin.rs` `run_shortcut_setting` hook; shots `screens/r6_mn3/shortcut_setting.png`, `shortcut_set.png` |
 | 3. title Options / Theater hi-res | **checked + fixed** | text crisp at 1440x1080; Theater hints rebuilt as retail (3 lines + pad icons), title texts proportional + 0.8 narrow, Options cursor stuck on Vibration fixed, Sound box 6 px lower |
-| 4. MN2 open items | not reached | Personal Sword Arts already uses `skill_mask` (MN2 item 2 half done); Library list / data view, soul charge 3D, live re-checks still open |
+| 4. MN2 open items (second pass) | **Graveyard / Combo Magic / Library checked against live, fixed** | see "Task 4" below; Library data view and the soul charge 3D still not compared live |
 
 `cargo check --workspace --all-targets` clean; `cargo test -p sh2_menu -p sh2_battle` green (262 + 88 + 4), `cargo test -p sh2_field --lib cmd_` green.
 Autoplay sanity (`sh2_app --us --autoplay --boost 80`): title, field, battle menu / ring / victory, the in-game menu tour all render
@@ -60,6 +60,29 @@ Retail (JP BtlMenu.c 6435 polling, 14876 `SetComboShortCutSettingMenu`; US 0x60f
   `title_options_before.png`).  Drive: `SH2_CUTSCENE=off SH2_WINDOW=1440x1080 SH2_THEATER_UNLOCK=all SH2_DRIVE="w200 p:S w100 p:S w60
   u:screen=Title w30 p:S u:screen=Menu w60 p:D w20 p:D w20 p:O u:screen=Theater w90 s:th0 ..."` (Options: `... u:screen=Menu w60 p:U w20
   p:R w20 p:O w90 s:opt0`).
+
+## Task 4 (second pass, 2026-10-16): Graveyard, Combo Magic, Library vs live
+
+Live references: MN2's captures (`gy_c`, `cmg_a`, `libr_k`, `lchar_b`, session cdb345cf scratchpad) and two new ones from the main PCSX2
+(pad only, menu opened and closed again, the user's state untouched): `screens/r6_mn3/live_library.png`, `live_library_list.png`.
+Port shots 1440 x 1080 with `SH2_SCREEN_DEV=menu:AP_02_U SH2_BATTLE_SAVE=f43:ff,f63:ff SH2_BATTLE_MENU=340:01` (monsters defeated /
+snapped, combo 0 seen) and `goto:grave / combomagic / library`; before / after in `screens/r6_mn3/t4_*`.
+
+* **Narrow menu text was ~5 % too narrow everywhere** (Graveyard notes line 397 vs live 418 px, `SE.  0/ 40` 75 vs 85): retail
+  `FontDraw::Order` adds the item's shadow x to the pen of each glyph.  `bevy_ui::expand_text` now adds `shadow.x` to the spacing of every
+  narrow (`hscale < 1`) run; the wide HUD / field runs are unchanged.  Fitted by `examples/mn3_text_width.rs` (sh2_menu): `(width + 1) * 0.8`
+  matches both lines.  `measure_text` still measures without it (right-aligned narrow text can sit ~1 px per glyph off).
+* **Teal fringe around the element name plates** (Light / Fire ... on the Graveyard, Library, Magic): the plate's transparent texels are
+  teal and the canvas samples bilinearly with straight alpha.  `UiTextures::add` now bleeds the neighbours' colour into fully transparent
+  texels (`bevy_ui::bleed_transparent`, test); every menu texture benefits.
+* **Library**: the entry name is the field serif (`FIELD_FONT`, proportional, x 0.8; was the gothic at 1.1), the arrows moved to the live
+  spots; the number after `No.` is the narrow gothic with a shadow at x 162 (was font 2 at 166).  The list (start) is LIBRARY.MSD attach 6's
+  textured `Name` fence at (38, 80) with the names only and no banner (was a general frame with `No.` + name under the banner).
+* **Combo Magic**: matches live (`cmg_a`) once a combination is seen; no change.  The root list beside it shows page 1 in `goto` drives
+  (the menu tour enters pages directly), not a page bug.
+* Still different: the lavender `GRADE.` / `No.` / `Monsters` labels are thinner in the hi-res face than the live bitmap (colour equal),
+  the Library report's first line has a `:` after the START icon (live none), Library data view not compared (no live capture with Snap
+  Shot data).
 
 ## Open (priority order)
 
