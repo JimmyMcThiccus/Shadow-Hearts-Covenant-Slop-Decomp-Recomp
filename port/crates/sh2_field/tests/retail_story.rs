@@ -216,3 +216,18 @@ fn mikasa_security_keys_plan_reaches_the_boss() {
     assert!(w.plan.is_empty(), "plan stuck at {:?}", w.plan.front());
     assert!(sh2_field::story::flag(&w.game.regs(), 0x3f), "{:?}", w.steps.iter().rev().take(5).map(|s| &s.what).collect::<Vec<_>>());
 }
+
+/// Todo lab 1, TD_02_U: the corridor gallery (walk-on box 6, event 6) is played -- the walker takes a walk-on box that changes the state
+/// before it leaves the room (in the game the player walks through it) and holds still while the targets come (a press is a miss).
+/// Event 6 sets 0x1c2e and clears 0x1c2f, the flag that TD_06_U's look point set and that TD_02_U's door reads as "wrong way" in the
+/// lab-2 escape (with it still set the escape dead-ends at TD_02_U).
+#[test]
+fn td_02_u_lab1_gallery_clears_the_wrong_way_flag() {
+    let Some(env) = walk_env() else { return };
+    let g = sh2_field::story::Game::resume(&env, &fixture("td_02_u_lab1.walk")).unwrap();
+    assert!(sh2_field::story::flag(&g.regs(), 0x1c2f));
+    let mut w = sh2_field::story::Walker::new(&env, g);
+    w.run(2);
+    let regs = w.game.regs();
+    assert!(sh2_field::story::flag(&regs, 0x1c2e) && !sh2_field::story::flag(&regs, 0x1c2f), "{:?}", w.steps.iter().map(|s| &s.what).collect::<Vec<_>>());
+}

@@ -1,15 +1,15 @@
 # Round 6 FS2: story to the end, field scripts
 
-## Status (2026-10-15, after the coordinator pause)
+## Status (2026-10-16, batch 2)
 
 **Chapters reached (story flags set by walks, union with round 5):**
 - First half: 28 of 34 (unchanged: 0x08 and 0x18..0x1c missing).
-- Second half: **22 of 26** (was 14): new this round 0x4c Mt. Fuji, 0x4e Inugami 2, 0x4f Foreign cemetery 2, 0x50 Azabu mansion,
+- Second half: **23 of 26** (was 14; 0x47 now played): new this round 0x4c Mt. Fuji, 0x4e Inugami 2, 0x4f Foreign cemetery 2, 0x50 Azabu mansion,
   0x51 Inugami 3, 0x52 Queen's garden, 0x53 Wales 3, 0x54 Inugami 4 -- all played (Fuji by the puzzle search, the rest by the novelty
   walk with `--search-on-stall`), and the walk then enters the last dungeon (`AI_05_U` -> `AI_00_U` "Vessel"; its own search: 416
   states, closed, see below).  Missing: 0x41 Mikasa 2, 0x4d Graveyard 2, 0x55 Last dungeon -- **no script references these three flags
   at all** (`flag_xref --flags`: no set / clr / chk with a constant; the same holds for 0x08 and 0x19), so they are probably debug-menu
-  chapter markers that the story never sets.  0x47 (Todo lab 2) is set by hand (`--flags 0x47`) and not counted; 0x3f is now played
+  chapter markers that the story never sets.  0x47 (Todo lab 2) is now played too (batch 2, below); 0x3f is played
   (Mikasa plan below, no more `--goto MI_16_U`).
 - Hidden: 0 of 6.
 
@@ -44,30 +44,44 @@ MI_15_U examine box 1 -> MI_16_U boss -> 0x3f, and the walk goes on through Todo
 `retail_story::mikasa_security_keys_plan_reaches_the_boss` (ignored, release).  The blind search before it: 616 states in 2290 s, no
 result.
 
+**Batch 2 (2026-10-16):**
+- **QA2's field blockers**: none is an engine wait that never ends.  Answers per map in `requests.md` "Round 6 FS2" (pad-polling altar
+  loop in AI_01..03, debug pad loop DB_00, timed key hunt SM_15, bss dispatcher loops behind `WaitModel`, a `PathMove` patrol in CA_01,
+  an absent NPC's talk event in PA_02_A, RU_04's message-typing wait needing circle presses).  The `--story` autopilot stall did not
+  reproduce in a 300 s run.
+- **Todo lab 2 (0x47) is now played.**  The dead end was a walker artifact from lab 1, not the lab-2 route: TD_06_U's look point
+  (event 16) sets flag 0x1c2f, which TD_02_U's door (event 1) reads as "you're going the wrong way".  In lab 1 the player walks through
+  TD_02_U's walk-on box 6 (event 6, enabled while reg 0x338 = 0xd): a shooting gallery that sets 0x1c2e and clears 0x1c2f.  The walker
+  teleported past it.  Fixes in `story.rs`:
+  - `Walker::score`: a walk-on box that changes the state (`Enter`, Free, novel > 0) gets +250, so it beats a jump into a new map.
+  - `minigame_press`: TD_02_U's gallery holds still while event 6 runs (it shows no lane tables; a press is a miss), see
+    `SHOOTING_MAPS`.
+  - Test `td_02_u_lab1_gallery_clears_the_wrong_way_flag` (fixture `tests/walk/td_02_u_lab1.walk`, from the Mikasa plan run).
+  - From `fs2/chain/td_22_u_power.walk`, with the lab-1 flags as the gallery leaves them (`--flags 0x385=0x40`), the novelty walk
+    plays the whole escape: TD_15 -> TD_02 -> TD_01 -> TD_14 range -> TD_03..05 -> TD_20 -> TD_06 -> TD_17 -> TD_07..13 stairs -> TD_00
+    lobby -> boss (monster set 164) -> **0x47**.  No hand-set 0x47 any more.  The fixture itself was made before the fix and still has
+    0x1c2f set.
+- **Plans can press buttons**: a plan step `text|c1,c2|pads` plays the action whose name contains `text` with those answers and the
+  buttons `pads` (`L,R,U,D,O,X,T,S`; `Policy::pads`, pressed every 20 ticks while no window is waiting, or while only a fully typed
+  window is open).  `press pad 0x20||` synthesises any button.  `walk_probe --pads R,R,O` tries them.
+- **Vessel ring: not solved.**  Floor 1: `look 0x1 (ev 15)` (switch) then `look 0x3 (ev 72)` -> AI_01_U (floor 2).  The altar,
+  `look 0x1 (ev 70)` answer 0, explains the control ("rotate with left / right, circle to confirm, cross to cancel").  Then the event
+  ends and the start job's loop at 0x3495 polls the pad (`get_pad & 0x1000` -> func 0x33fb, func 0x337f each round).  These all left
+  regs 0x3ac..0x3b1 unchanged:
+  - Left / right / circle / triangle sequences sent through the event's pads.
+  - The same presses as separate free-control pad steps.
+
+  Next: read funcs 0x337f / 0x33fb (which pad mode / bits they test, where the ring angle lives -- probably bss).
+- Not reached this batch: the second-half rerun after the Vessel; the first half 0x18..0x1c.
+
 **Open puzzles:**
-- Todo lab 2 (0x47), from `fs2/chain/td_22_u_power.walk` (moved out of `tests/walk`, no test uses it yet): the search (world map off)
-  closes after 419 states in 70 s.  Probed route (`walk_probe`, register byte 0x33b): TD_22_U examine box 5 (beat the guards, 1 -> 2),
-  examine box 1 -> TD_00_U, enter box 8 ("You're Stag Team", 2 -> 3), examine box 1 -> TD_21_U (-> 4), examine box 1 -> TD_16_U (the
-  experiment, -> 5, back in TD_21_U), the elevator (TD_21_U examine box 0) "power is off", examine box 2 -> TD_15_U (robot room: Evasion
-  Down 3 / Thera Root; examine box 4 sets 0x325 bit 0x10), examine box 1 -> TD_02_U = "wrong way" dead end.  The walkthrough (lparchive
-  update 91, "Escaping the Lab") goes TD_15 "exit on the lower level" -> Dragonsword chest room -> shooting range -> galleries -> Kato's
-  lab -> stairs B7..1 -> lobby -> Hojo boss.  TD_15_U enter boxes 2 / 3 do nothing for the walker: probably the lower-level exit needs
-  the player on the lower floor (height) -- check how `Action::Enter` places the player against the box's floor.
-- Last dungeon (`AI_00_U` Vessel): the search from `6_last_dungeon_AI_00_U` without the world map closes after 416 states (AI_00 / 01 /
-  05, GY_05_F).  Walkthrough (lparchive update 135, "Inside the Vessel"): each floor's altar has a **ring that is turned** to line up
-  colours (floor 2: match the second ring with green in front; floor 3: yellow then green; floor 4: yellow -> blue, then green), which
-  moves the light elevators; the Seventh Key / Crucifix chests, then the light elevator to Kato and the final question (top choice =
-  good ending).  The walker tries only two answers of the first two prompts, so the ring turns (AI_01_U look 0x1 ev 70, 3 answers,
-  probably repeated) need a `walk_probe` session and a plan like Mikasa's.  0x55 itself is never set by a script.
+- Vessel ring (above).  Walkthrough route (lparchive update 135): floor 2 match the second ring with green in front; floor 3 yellow
+  then green; floor 4 yellow -> blue, then green; Seventh Key / Crucifix chests; the light elevator to Kato; final question (top =
+  good ending).  0x55 itself is never set by a script.
+- First half 0x18..0x1c (Nemeton's stone sled; use `--search-world 0` and the walkthrough).
+- `SetSceneInit` 10 / 11 remainders.
 
-**Next steps:**
-1. Todo lab 2: the TD_15_U lower exit (above), then a plan file like Mikasa's; drop the `--flags 0x47` skip.
-2. Vessel ring puzzle with `walk_probe` + a plan (the route above), then ED_00_U from the walk.
-3. First half 0x18..0x1c (ND_14_U via Nemeton's stone sled; the ND_07 / ND_09 search explodes with the world map on -- use
-   `--search-world 0`, and the walkthrough for the sled).
-4. `SetSceneInit` 10 (key items / skill bits of record 1, 0x003be870) and 11 (the stash list) on the retail-shaped save.
-
-**Files (this session):** `sh2_field/src/story.rs` (plan, world-map choice, area hint, queue cap, `minigame_press`, `wm_seen` init),
+**Files (batch 1):** `sh2_field/src/story.rs` (plan, world-map choice, area hint, queue cap, `minigame_press`, `wm_seen` init),
 `host.rs` (`pit_fight_field`), `party.rs` (`merge_bag`), `examples/story_walk.rs` (`--points`, `--search-world`), new
 `examples/walk_probe.rs`, `tests/retail_story.rs` (GT_10 table test, Mikasa plan test), `tests/walk/mi_02_u_keys.plan`;
 `cmd.rs` / `cscript.rs` / `memory.rs` line endings only.

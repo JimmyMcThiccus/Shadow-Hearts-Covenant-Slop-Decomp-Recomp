@@ -188,6 +188,9 @@ pub struct Policy {
     pub seen: Vec<usize>,
     /// result the field ring reports (`RingControl`), `None` = the host default (first area's colour)
     pub ring: Option<i32>,
+    /// buttons pressed one by one (every 20 ticks) while no message / selection window is open -- a pad-driven gimmick inside an event
+    /// (the Vessel's altar ring: left / right, then circle); the scripted presses replace the default circle presses until used up
+    pub pads: Vec<u16>,
 }
 
 /// What ended a run of ticks.
@@ -233,12 +236,18 @@ pub struct Game {
 /// you're aiming at?!"), so while the range runs nothing else is pressed.  The range runs while some lane state is non-zero (traced:
 /// all lanes are 0 before the first target and after the last, at least one is non-zero in between).  `None` = not a minigame moment
 /// (normal circle presses), `Some(0)` = hold still.
+/// Maps with the Todo lab shooting gallery code (the same lane tables): the range TD_14_U and the corridor gallery of TD_02_U (event 6,
+/// the walk-on box 6 of lab 1 -- it also clears the "wrong way" flag 0x1c2f that the lab-2 escape checks at TD_02_U's door).
+pub const SHOOTING_MAPS: [&str; 2] = ["TD_14_U", "TD_02_U"];
+
 pub fn minigame_press(rt: &FieldRuntime) -> Option<u16> {
-    if rt.map != "TD_14_U" || rt.st.msg_active() || rt.st.ui.select.active {
+    if !SHOOTING_MAPS.contains(&rt.map.as_str()) || rt.st.msg_active() || rt.st.ui.select.active {
         return None;
     }
     let r = |o: u32| rt.vm.mem.r32(sh2_script::memory::SEG_BSS + o).unwrap_or(0);
-    if (0..8).all(|i| r(0x98 + 4 * i) == 0) {
+    // TD_02_U's gallery (event 6) shows its targets without the lane tables: hold still while it runs (a press is a miss)
+    let gallery = rt.map == "TD_02_U" && rt.vm.top_event() == Some(6);
+    if !gallery && (0..8).all(|i| r(0x98 + 4 * i) == 0) {
         return None;
     }
     for i in 0..8 {
@@ -399,6 +408,10 @@ impl Game {
             press |= self.pad;
             self.pad = 0;
         }
+        // (a fully typed help window may stay up while the gimmick runs: the presses go on then)
+        if !policy.pads.is_empty() && (!rt.st.msg_active() || Self::msg_settled(&rt.st)) && !rt.st.ui.select.active {
+            press = if t % 20 == 0 { policy.pads.remove(0) } else { 0 };
+        }
         if let Some(b) = minigame_press(rt) {
             press = if t % 12 == 0 { b } else { 0 };
         }
@@ -450,9 +463,9 @@ impl Game {
                 }
             }
         }
-        if std::env::var_os("SH2_WALK_LANES").is_some() && rt.map == "TD_14_U" && (rt.st.ticks % 6 == 0 || press != 0) {
+        if std::env::var_os("SH2_WALK_LANES").is_some() && SHOOTING_MAPS.contains(&rt.map.as_str()) && (rt.st.ticks % 6 == 0 || press != 0) {
             let r = |o: u32| rt.vm.mem.r32(sh2_script::memory::SEG_BSS + o).unwrap_or(0);
-            eprintln!("  [TD_14_U t{}] press {press:#x} lanes {:?} masks {:x?}", rt.st.ticks, (0..8).map(|i| r(0x98 + 4 * i)).collect::<Vec<_>>(), (0..8).map(|i| r(0xf8 + 4 * i)).collect::<Vec<_>>());
+            eprintln!("  [{} t{}] press {press:#x} lanes {:?} masks {:x?}", rt.map, rt.st.ticks, (0..8).map(|i| r(0x98 + 4 * i)).collect::<Vec<_>>(), (0..8).map(|i| r(0xf8 + 4 * i)).collect::<Vec<_>>());
         }
         if std::env::var("SH2_WALK_TEXT").map(|m| m == rt.map).unwrap_or(false) {
             // debugging: the text of the open windows when it changes
@@ -525,7 +538,7 @@ impl Game {
             if let Some(s) = self.tick(policy) {
                 return (s, n);
             }
-            if n > 2 && self.is_free() {
+            if n > 2 && policy.pads.is_empty() && self.is_free() {
                 return (Stop::Free, n);
             }
         }
@@ -1025,11 +1038,16 @@ impl<'e> Walker<'e> {
     }
 
     pub fn try_action_ring(&self, a: &Action, choices: Vec<usize>, ring: Option<i32>) -> (Outcome, Game) {
+        self.try_action_pads(a, choices, ring, vec![])
+    }
+
+    /// [`Walker::try_action_ring`] with scripted button presses ([`Policy::pads`]).
+    pub fn try_action_pads(&self, a: &Action, choices: Vec<usize>, ring: Option<i32>, pads: Vec<u16>) -> (Outcome, Game) {
         let mut g = self.game.clone();
         let before = g.regs();
         let save_before = g.session.0.save.btl.data.clone();
         let field_before = g.session.0.save.field.clone();
-        let mut pol = Policy { choices, seen: vec![], ring };
+        let mut pol = Policy { choices, seen: vec![], ring, pads };
         g.rt.st.ring_override = ring;
         g.start(a);
         let (stop, ticks) = g.settle(&mut pol, self.max_action);
@@ -1069,6 +1087,12 @@ impl<'e> Walker<'e> {
             Stop::Ending => s += 1_000_000,
             Stop::Timeout => s -= 50_000,
             Stop::Free => {}
+        }
+        // a walk-on box whose event changes the state (a flag) before the walker leaves the room: in the game the player walks through
+        // it on the way (TD_02_U box 6, event 6, lab 1: sets 0x1c2e and clears the "wrong way" flag 0x1c2f that the lab-2 escape checks);
+        // the walker teleports, so it has to take such boxes on purpose -- ahead of a jump into a new map
+        if matches!(o.action, Action::Enter { .. }) && o.stop == Stop::Free && o.novel > 0 {
+            s += 250;
         }
         // the next chapter is in another area: head for it (a jump into that area; else the world map beats a jump into a new map)
         if let Some(area) = next_chapter_area(&self.game.regs()) {
@@ -1165,8 +1189,27 @@ impl<'e> Walker<'e> {
                 outs.iter().position(|(_, o, _)| format!("{} {:?}", o.action, o.policy.choices).contains(t))
             })
         });
-        // the scripted route: the next step on this map
-        let planned = match self.plan.front() {
+        // the scripted route: the next step on this map.  `text|c1,c2|pads` = the action whose name contains `text`, played with those
+        // answers and the buttons `pads` (L R U D, O = circle, X = cross, T = triangle, S = square; see `Policy::pads`)
+        let mut scripted: Option<usize> = None;
+        if let Some((m, t)) = self.plan.front().cloned().filter(|(m, t)| m == self.game.map() && t.contains('|')) {
+            let mut parts = t.split('|');
+            let name = parts.next().unwrap_or("").trim().to_string();
+            let choices: Vec<usize> = parts.next().unwrap_or("").split(',').filter_map(|c| c.trim().parse().ok()).collect();
+            let pads = parse_pads(parts.next().unwrap_or(""));
+            // `press pad 0x20|..`: any button, also one the map's code does not test with the pattern `Game::actions` looks for
+            let synth = name.strip_prefix("press pad 0x").and_then(|h| u16::from_str_radix(h, 16).ok()).map(|bits| Action::Pad { bits });
+            if let Some(a) = acts.iter().find(|a| a.to_string().contains(&name)).cloned().or(synth) {
+                let (o, g) = self.try_action_pads(&a, choices, None, pads);
+                self.trial_ticks += o.ticks as u64;
+                let sc = self.score(&o);
+                outs.push((sc, o, g));
+                scripted = Some(outs.len() - 1);
+            } else {
+                self.log(format!("plan step {m}:{t}: no action {name:?} here"));
+            }
+        }
+        let planned = if scripted.is_some() { scripted } else { match self.plan.front() {
             Some((m, t)) if m == self.game.map() => {
                 let i = outs.iter().position(|(_, o, _)| format!("{} {:?}", o.action, o.policy.choices).contains(t.as_str()));
                 if i.is_none() {
@@ -1176,7 +1219,7 @@ impl<'e> Walker<'e> {
                 i
             }
             _ => None,
-        };
+        } };
         if planned.is_some() {
             let (m, t) = self.plan.pop_front().unwrap();
             self.log(format!("plan step {m}:{t} ({} left)", self.plan.len()));
@@ -1627,12 +1670,29 @@ struct WalkerView {
 impl WalkerView {
     fn trial(&self, game: &Game, a: &Action, choices: Vec<usize>, ring: Option<i32>) -> (Outcome, Game) {
         let mut g = game.clone();
-        let mut pol = Policy { choices, seen: vec![], ring };
+        let mut pol = Policy { choices, seen: vec![], ring, pads: vec![] };
         g.rt.st.ring_override = ring;
         g.start(a);
         let (stop, ticks) = g.settle(&mut pol, self.max_action);
         (Outcome { action: a.clone(), stop, ticks, novel: 0, new_flags: vec![], changed_bytes: 0, save_changed: 0, picked_up: false, policy: pol }, g)
     }
+}
+
+/// Button names of a plan step / `walk_probe --pads`: `L,R,U,D` (d-pad), `O` circle, `X` cross, `T` triangle, `S` square.
+pub fn parse_pads(s: &str) -> Vec<u16> {
+    s.split(',')
+        .filter_map(|c| match c.trim() {
+            "L" => Some(padbit::LEFT),
+            "R" => Some(padbit::RIGHT),
+            "U" => Some(padbit::UP),
+            "D" => Some(padbit::DOWN),
+            "O" => Some(padbit::CIRCLE),
+            "X" => Some(padbit::CROSS),
+            "T" => Some(padbit::TRIANGLE),
+            "S" => Some(padbit::SQUARE),
+            _ => None,
+        })
+        .collect()
 }
 
 /// `f` over `items` on at most `SH2_WALK_THREADS` (default 8) worker threads, results in order.
