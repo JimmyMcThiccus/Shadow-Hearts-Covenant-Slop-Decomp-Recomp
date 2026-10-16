@@ -205,6 +205,8 @@ struct Cursors {
     mesh: Option<bevy::ecs::message::MessageCursor<AssetEvent<Mesh>>>,
     cmat: Option<bevy::ecs::message::MessageCursor<AssetEvent<ColorMaterial>>>,
     smat: Option<bevy::ecs::message::MessageCursor<AssetEvent<sh2_gfx::bevy::material::Sh2Material>>>,
+    /// last seen value of every modified `Sh2Material` (Debug text): tells real changes from writes that changed nothing
+    smat_last: HashMap<AssetId<sh2_gfx::bevy::material::Sh2Material>, String>,
 }
 
 fn perf_frame(world: &mut World, mut cur: Local<Cursors>) {
@@ -213,7 +215,8 @@ fn perf_frame(world: &mut World, mut cur: Local<Cursors>) {
     let (im, ia) = count(world, &mut cur.img, &mut iids);
     let (mm, ma) = count(world, &mut cur.mesh, &mut mids);
     let (cm, _) = count(world, &mut cur.cmat, &mut Vec::new());
-    let (sm, _) = count(world, &mut cur.smat, &mut Vec::new());
+    let mut sids = Vec::new();
+    let (sm, _) = count(world, &mut cur.smat, &mut sids);
     // what is being re-uploaded: modified images by size, modified meshes by vertex count
     let mut kinds: Vec<String> = Vec::new();
     if let Some(imgs) = world.get_resource::<Assets<Image>>() {
@@ -249,6 +252,48 @@ fn perf_frame(world: &mut World, mut cur: Local<Cursors>) {
                 let b = if v <= 4 { "<=4".to_string() } else if v <= 64 { "5..64".into() } else if v <= 1024 { "65..1024".into() } else { ">1024".into() };
                 kinds.push(format!("mesh {b} verts [{}]", owner.get(id).map(String::as_str).unwrap_or("?")));
             }
+        }
+    }
+    // which entity draws each modified `Sh2Material` (a material modified = bind group re-prepared + its entities re-specialised)
+    for _ in 0..cm {
+        kinds.push("material 2d".to_string());
+    }
+    if !sids.is_empty() {
+        let mut q = world.query::<(&bevy::pbr::MeshMaterial3d<sh2_gfx::bevy::material::Sh2Material>, Option<&Name>, Option<&ChildOf>)>();
+        let mut found: HashMap<AssetId<sh2_gfx::bevy::material::Sh2Material>, (Option<String>, Option<Entity>)> = HashMap::new();
+        for (m, n, p) in q.iter(world) {
+            if sids.contains(&m.0.id()) {
+                found.entry(m.0.id()).or_insert((n.map(|n| n.as_str().to_string()), p.map(|p| p.parent())));
+            }
+        }
+        let mats = world.get_resource::<Assets<sh2_gfx::bevy::material::Sh2Material>>();
+        let mut same = Vec::with_capacity(sids.len());
+        for id in &sids {
+            let now = mats.and_then(|m| m.get(*id)).map(|m| format!("{m:?}")).unwrap_or_default();
+            let prev = cur.smat_last.insert(*id, now.clone());
+            // `SH2_PERF_MATLOG=1`: print the fields that changed (the words of the Debug text that differ), for finding who writes a material
+            if std::env::var_os("SH2_PERF_MATLOG").is_some() {
+                if let Some(p) = &prev {
+                    let (a, b): (Vec<&str>, Vec<&str>) = (p.split(", ").collect(), now.split(", ").collect());
+                    let d: Vec<String> = a.iter().zip(&b).filter(|(x, y)| x != y).map(|(x, y)| format!("{x} -> {y}")).take(4).collect();
+                    bevy::log::info!("perf matlog {id:?} drawn={}: {}", found.contains_key(id), d.join(" | "));
+                }
+            }
+            same.push(match prev {
+                Some(p) if p == now => " unchanged",
+                Some(_) => "",
+                None => " first",
+            });
+        }
+        for (id, tag) in sids.iter().zip(same) {
+            let o = match found.get(id) {
+                Some((n, p)) => {
+                    let pn = p.and_then(|p| world.get::<Name>(p)).map(|n| n.as_str().to_string());
+                    format!("{}/{}", pn.unwrap_or_default(), n.clone().unwrap_or_default())
+                }
+                None => "unused".to_string(),
+            };
+            kinds.push(format!("sh2material{tag} [{o}]"));
         }
     }
     let entities = world.query::<()>().iter(world).count() as u32;
@@ -330,7 +375,7 @@ fn write_report(st: &PerfState) {
         );
         let mut up: Vec<_> = seg.uploads.iter().collect();
         up.sort_by(|a, b| b.1.cmp(a.1));
-        let _ = writeln!(s, "  uploads/frame: {}", up.iter().take(12).map(|(k, v)| format!("{k} {:.2}", **v as f64 / n)).collect::<Vec<_>>().join(", "));
+        let _ = writeln!(s, "  uploads/frame: {}", up.iter().take(16).map(|(k, v)| format!("{k} {:.2}", **v as f64 / n)).collect::<Vec<_>>().join(", "));
         let mut top: Vec<_> = seg
             .spans
             .iter()
@@ -343,7 +388,9 @@ fn write_report(st: &PerfState) {
             let _ = writeln!(s, "  {:>8.3} ms/f  {:>6.1}/f  [{}] {}", *ns as f64 / n / 1e6, *cnt as f64 / n, CLASSES[*c], l);
         }
         let _ = writeln!(s, "  -- systems / spans");
-        for ((l, c), (ns, cnt)) in top.iter().take(30) {
+        // `SH2_PERF_TOP=<n>`: list more than the top 30 spans
+        let top_n = std::env::var("SH2_PERF_TOP").ok().and_then(|v| v.parse().ok()).unwrap_or(30);
+        for ((l, c), (ns, cnt)) in top.iter().take(top_n) {
             let _ = writeln!(s, "  {:>8.3} ms/f  {:>6.1}/f  [{}] {}", *ns as f64 / n / 1e6, *cnt as f64 / n, CLASSES[*c], l);
         }
         s.push('\n');

@@ -1023,3 +1023,7 @@ Matrix: 3810 items, 3625 ok, 43 stub, 3 fails, 139 untested; everything open is 
   `screens/r6_qa2/smroom/Field_0032.png`.  The field radar also stays on during the scene.
 * **Everyone**: `sh2_app` dev aids `SH2_START_MAP=<MAP>[:entry]`, `SH2_START_FLAGS=<bit,..>` (script flag numbers as in chkFlag),
   `SH2_SHOT_EVERY=<s>` / `SH2_SHOT_DIR` -- quick windowed look at any map / scene; works with `--autoplay --story`.
+
+## Round 6 PF2 (performance, 2026-10-16)
+* `sh2_app/src/perf.rs` (QA2's crate, PF's profiler): the report lists modified `Sh2Material`s by drawing entity (`sh2material [parent/name]`, `unused`, `first` / `unchanged` tags), `material 2d` for `ColorMaterial`; new `SH2_PERF_MATLOG=1` (log the changed fields of each modified material) and `SH2_PERF_TOP=<n>`.  Only active with `SH2_PERF`.  No other file outside my notes changed.
+* GP's round-6 work already covered PF requests 3-5 (one shadow atlas pass, parallel `animate_models`, GPU billboards); numbers in `r6_pf2.md`.  FYI for whoever owns the cameras: GPU light clustering runs for every `Camera3d` (game uses no Bevy lights, ~0.5 ms prepare + compute passes + readback per camera); a per-camera opt-out breaks the mesh view bindings, a global one is untested.
