@@ -1,0 +1,13 @@
+# The Vessel (last dungeon, AI_00..03_U) ring altars, from ai_00_u_vessel.walk: one walker step per line, MAP:text[|answers|buttons].
+# Route from the user's walkthrough reference (lparchive.org Shadow Hearts Covenant, update 135).  The altar (event 70, answer 0 =
+# "control the ring") runs AI_01_U func 0x42d0: get_pad(0) each round, left / right turn the floor's ring (register byte 0x3a8 + floor
+# index, 0..3), circle confirms, cross cancels.  Floor 2 = 3 (green in front), floor 3 = 2, floor 4 = 1 (flash back to floor 1).
+# Use: SH2_WALK_PLAN="$(grep -v '^#' FILE | paste -sd';')" story_walk --load ai_00_u_vessel.walk
+AI_00_U:look 0x1 (ev 15)
+AI_00_U:look 0x3 (ev 72)
+AI_01_U:look 0x1 (ev 70)|0|L,L,L,O
+AI_01_U:look 0x2 (ev 71)
+AI_02_U:look 0x1 (ev 70)|0|L,L,O
+AI_02_U:look 0x4 (ev 73)
+AI_03_U:look 0x1 (ev 70)|0|L,O
+AI_00_U:look 0x6 (ev 75)

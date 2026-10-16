@@ -217,6 +217,47 @@ fn mikasa_security_keys_plan_reaches_the_boss() {
     assert!(sh2_field::story::flag(&w.game.regs(), 0x3f), "{:?}", w.steps.iter().rev().take(5).map(|s| &s.what).collect::<Vec<_>>());
 }
 
+/// The Vessel (last dungeon): the ring altars of floors 2 / 3 / 4, played from `tests/walk/ai_00_u_vessel.plan` (the route of the user's
+/// walkthrough reference, update 135).  The altar's loop (AI_01_U func 0x42d0) reads the raw pad itself; the walker's scripted presses
+/// (`Policy::pads`) go in while the event polls.  After floor 4's ring the light to the heavens (AI_00_U event 75) leads to the last
+/// fights and the walk reaches the ending hand-over.  Release build, ~20 s:
+/// `cargo test --release -p sh2_field --test retail_story -- --ignored vessel`.
+#[test]
+#[ignore]
+fn vessel_ring_plan_reaches_the_ending() {
+    let Some(env) = walk_env() else { return };
+    let g = sh2_field::story::Game::resume(&env, &fixture("ai_00_u_vessel.walk")).unwrap();
+    let mut w = sh2_field::story::Walker::new(&env, g);
+    let plan = std::fs::read_to_string(fixture("ai_00_u_vessel.plan")).unwrap();
+    w.plan = plan.lines().filter(|l| !l.starts_with('#') && !l.trim().is_empty()).filter_map(|l| l.split_once(':')).map(|(m, t)| (m.to_string(), t.to_string())).collect();
+    assert_eq!(w.plan.len(), 8);
+    w.run(64);
+    assert!(w.plan.is_empty(), "plan stuck at {:?}", w.plan.front());
+    // the floor rings as the plan leaves them (floor 2 / 3 / 4 = register bytes 0x3a9 / 0x3aa / 0x3ab)
+    let b: Vec<u8> = w.game.regs().iter().flat_map(|r| r.to_le_bytes()).collect();
+    assert_eq!(&b[0x3a9..0x3ac], &[3, 2, 1]);
+    assert!(w.battles.iter().any(|b| b.1 == 302 && b.2), "final boss: {:?}", w.battles);
+    assert!(w.ended, "{:?}", w.steps.iter().rev().take(5).map(|s| &s.what).collect::<Vec<_>>());
+}
+
+/// Nemeton ruins (flag 0x18): the exit of the last block level (ND_08_U) and the sentry in ND_14_U, from `tests/walk/nd_08_u_exit.plan`.
+/// ND_14_U's start function plays the Karin scene (and sets 0x18) only on the entry after the sentry fight (flags 0x156 / 0x157 / 0x15c,
+/// see the plan).  Release build, ~10 s: `cargo test --release -p sh2_field --test retail_story -- --ignored nemeton`.
+#[test]
+#[ignore]
+fn nemeton_exit_plan_sets_the_chapter_flag() {
+    let Some(env) = walk_env() else { return };
+    let g = sh2_field::story::Game::resume(&env, &fixture("nd_08_u_exit.walk")).unwrap();
+    assert!(!sh2_field::story::flag(&g.regs(), 0x18));
+    let mut w = sh2_field::story::Walker::new(&env, g);
+    let plan = std::fs::read_to_string(fixture("nd_08_u_exit.plan")).unwrap();
+    w.plan = plan.lines().filter(|l| !l.starts_with('#') && !l.trim().is_empty()).filter_map(|l| l.split_once(':')).map(|(m, t)| (m.to_string(), t.to_string())).collect();
+    w.run(4);
+    assert!(w.plan.is_empty(), "plan stuck at {:?}", w.plan.front());
+    assert!(w.battles.iter().any(|b| b.1 == 74), "sentry: {:?}", w.battles);
+    assert!(sh2_field::story::flag(&w.game.regs(), 0x18), "{:?}", w.steps.iter().map(|s| &s.what).collect::<Vec<_>>());
+}
+
 /// Todo lab 1, TD_02_U: the corridor gallery (walk-on box 6, event 6) is played -- the walker takes a walk-on box that changes the state
 /// before it leaves the room (in the game the player walks through it) and holds still while the targets come (a press is a miss).
 /// Event 6 sets 0x1c2e and clears 0x1c2f, the flag that TD_06_U's look point set and that TD_02_U's door reads as "wrong way" in the

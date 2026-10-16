@@ -354,6 +354,8 @@ fn drive_field_effects(rt: Option<ResMut<FieldRuntime>>, runner: Option<ResMut<s
             Some(h) => {
                 runner.set_env(h, gen, tar);
                 e.state = match runner.state(h) {
+                    Some(RunState::Loading | RunState::Running) if e.child => 1,
+                    Some(RunState::Finished) | None if e.child => 2,
                     Some(RunState::Loading) => 1,
                     Some(RunState::Running) => 3,
                     Some(RunState::Finished) | None => 0,

@@ -495,6 +495,10 @@ pub struct EffectSlot {
     pub runner: Option<u32>,
     /// the renderer looked at this slot already (started it, or found no program)
     pub runner_tried: bool,
+    /// an instance made by `EffectControl(h, 2, flags, gen, tar)` from a loaded effect (US FIELD.BIN 0x51dd70: a node linked under the
+    /// parent with its own generating / target sets).  Its state is 1 while it plays and 2 once it has ended (SM_07_U's perfume scene
+    /// waits `while (EffectControl(child, 0) != 2)`)
+    pub child: bool,
 }
 
 /// Where an effect is generated / aimed.
@@ -1080,6 +1084,14 @@ impl FieldHost<'_> {
             0x1a => {
                 let slot = ctx.arg_i32(0);
                 let mode = if ctx.argc > 1 { ctx.arg_i32(1) } else { 0 };
+                // mode | 0x100: a poll that does not block -- 1 when the wait would be over, else 0 (Sainte-Marguerite's stealth maps
+                // SM_11..14: the start job's step machine runs `AutoMove(..)` and then `if (WaitCharacterEx(0, 0x100) == 1) step++`
+                // once per tick)
+                if mode & 0x100 != 0 {
+                    let done = self.st.actors.wait_char_ex(slot, mode & 0xff);
+                    ctx.set_ret(done as u32);
+                    return ExResult::Int;
+                }
                 if self.st.actors.wait_char_ex(slot, mode) {
                     ExResult::Void
                 } else {
@@ -1612,7 +1624,7 @@ impl FieldHost<'_> {
                 };
                 let gen = read(ctx, ctx.arg(2), flags & 0xff, (flags >> 16) & 0xf);
                 let tar = read(ctx, ctx.arg(3), (flags >> 8) & 0xff, (flags >> 20) & 0xf);
-                self.st.effect_list.push(EffectSlot { name, flags, state: 1, ticks: 0, gen, tar, runner: None, runner_tried: false });
+                self.st.effect_list.push(EffectSlot { name, flags, state: 1, ticks: 0, gen, tar, runner: None, runner_tried: false, child: false });
                 ctx.set_ret(self.st.effect_list.len() as u32);
                 ExResult::Int
             }
@@ -1624,14 +1636,43 @@ impl FieldHost<'_> {
                     None => -1,
                     Some(state) => match ctx.arg_i32(1) {
                         1 => {
-                            // RemoveEffect unlinks the node: later handles shift down
-                            let e = self.st.effect_list.remove(idx);
-                            if let Some(h) = e.runner {
+                            // RemoveEffect: the retail handles are node pointers, so the other handles stay valid (SM_07_U removes two
+                            // effects and then instances a third by its handle); the slot stays as an ended, empty one
+                            let e = &mut self.st.effect_list[idx];
+                            e.state = 0;
+                            e.runner_tried = true;
+                            e.gen.clear();
+                            e.tar.clear();
+                            if let Some(h) = e.runner.take() {
                                 self.st.effect_removed.push(h);
                             }
                             0
                         }
                         0 => state as i32,
+                        2 => {
+                            // a new instance of the loaded effect h: (h, 2, flags, gen*, tar*) -> handle (see `EffectSlot::child`)
+                            let read = |p: u32, n: u32, kind: u32| -> Vec<EffPlace> {
+                                if p == 0 {
+                                    return vec![];
+                                }
+                                (0..n.min(16))
+                                    .map(|i| {
+                                        if kind == 0 {
+                                            EffPlace::Model(ctx.mem.r8(p + i).unwrap_or(0) as i8 as i32)
+                                        } else {
+                                            let f = |k: u32| f32::from_bits(ctx.mem.r32(p + i * 12 + k * 4).unwrap_or(0));
+                                            EffPlace::Pos([f(0), f(1), f(2)])
+                                        }
+                                    })
+                                    .collect()
+                            };
+                            let flags = ctx.arg(2);
+                            let gen = if ctx.argc > 3 { read(ctx.arg(3), flags & 0xff, (flags >> 16) & 0xf) } else { vec![] };
+                            let tar = if ctx.argc > 4 { read(ctx.arg(4), (flags >> 8) & 0xff, (flags >> 20) & 0xf) } else { vec![] };
+                            let name = self.st.effect_list[idx].name.clone();
+                            self.st.effect_list.push(EffectSlot { name, flags, state: 1, ticks: 0, gen, tar, runner: None, runner_tried: false, child: true });
+                            self.st.effect_list.len() as i32
+                        }
                         _ => -1,
                     },
                 };
@@ -3161,7 +3202,11 @@ pub fn tick_state(st: &mut ScriptState, sim: &mut FieldSim) {
     // effects
     for e in st.effect_list.iter_mut().filter(|e| e.state != 0 && e.runner.is_none()) {
         e.ticks += 1;
-        if e.ticks == EFFECT_LOAD_TICKS {
+        if e.child {
+            if e.ticks >= EFFECT_LOAD_TICKS + EFFECT_RUN_TICKS {
+                e.state = 2;
+            }
+        } else if e.ticks == EFFECT_LOAD_TICKS {
             e.state = 3; // US EffectControl(h, 0) = node+0x14 & 7: scripts wait for 3 once the .EFD is loaded and playing (HE_24_N `while (EffectControl(h, 0) != 3)`)
         } else if e.ticks >= EFFECT_LOAD_TICKS + EFFECT_RUN_TICKS {
             e.state = 0;

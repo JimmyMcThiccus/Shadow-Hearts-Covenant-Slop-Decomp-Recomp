@@ -145,10 +145,21 @@ pub fn story_flags(regs: &[u32]) -> Vec<u32> {
 const CHAPTER_AREAS: [(u32, &str); 11] =
     [(0x18, "ND"), (0x1b, "SM"), (0x1c, "CA"), (0x4c, "FU"), (0x4e, "IN"), (0x4f, "GB"), (0x50, "KA"), (0x51, "IN"), (0x52, "QG"), (0x53, "WE"), (0x54, "IN")];
 
-/// The area of the next chapter after the highest one reached (see [`CHAPTER_AREAS`]); `None` when it is not known.
+/// The area of the next chapter (see [`CHAPTER_AREAS`]): the lowest one not reached in the half of the highest chapter reached;
+/// `None` when it is not known.  The first half branches (the walk can finish Wales 2 .. Apoina Tower 2, 0x1d..0x28, before Nemeton /
+/// Cannes / Sainte-Marguerite, 0x18..0x1c), so "the next one after the highest" would send a walk that took that branch to Mt. Fuji.
 pub fn next_chapter_area(regs: &[u32]) -> Option<&'static str> {
     let top = story_flags(regs).into_iter().filter(|&f| f < 0x64 && story_flag_name(f).is_some()).max()?;
-    CHAPTER_AREAS.iter().find(|(f, _)| *f > top && !flag(regs, *f)).map(|x| x.1)
+    let half = if top >= 0x3c { 0x3c..0x64 } else { 0..0x3c };
+    CHAPTER_AREAS.iter().find(|(f, _)| half.contains(f) && !flag(regs, *f)).map(|x| x.1)
+}
+
+/// Areas reached only through another one: Sainte-Marguerite (SM) by Nelson's boat from Cannes (CA_02_U -> SM_00_U).
+const AREA_GATEWAYS: [(&str, &str); 1] = [("SM", "CA")];
+
+/// `map` belongs to the chapter area `area` or to the area the walker has to go through to get there ([`AREA_GATEWAYS`]).
+pub fn in_chapter_area(map: &str, area: &str) -> bool {
+    map.starts_with(area) || AREA_GATEWAYS.iter().any(|(a, g)| *a == area && map.starts_with(g))
 }
 
 /// Disc data the walker needs.
@@ -227,8 +238,17 @@ pub struct Game {
     quiet: u32,
     last_calls: u64,
     /// last window text printed (`SH2_WALK_TEXT=MAP`)
-    last_txt: String,    /// `CScript::pad_reads` at the last tick (scripted pads, `Policy::pads`)
+    last_txt: String,
+    /// `CScript::pad_reads` at the last tick (scripted pads, `Policy::pads`)
     pad_reads: u64,
+    /// ticks since an event job last read the pad (`get_pad`), saturating
+    pad_age: u32,
+    /// ticks left before the next scripted press (the gimmick's animation after a press)
+    pad_gap: u32,
+    /// ticks since any job last read the pad, saturating
+    pad_any_age: u32,
+    /// ticks the start job has polled the pad behind an open window
+    help_wait: u32,
 }
 
 /// Button minigames the walker plays like a player who reads the screen.  TD_14_U (Todo lab shooting range, "destroy the 30 targets"):
@@ -335,7 +355,7 @@ impl Game {
         let prev = std::mem::replace(&mut session.map, map.to_string());
         let mut rt = crate::plugin::build_runtime_carry(&env.pkb, None, Some(env.tables.clone()), map, entry, &session, carry)?;
         rt.st.prev_map = if prev != map { prev } else { session.chr_pos.as_ref().map(|_| String::new()).unwrap_or_default() };
-        Some(Game { rt, session: GameSessionBox(session), battle: env.battle.clone(), party_log: vec![], idle_root: 0, no_ctrl: 0, pad: 0, quiet: 0, last_calls: 0, last_txt: String::new(), pad_reads: 0 })
+        Some(Game { rt, session: GameSessionBox(session), battle: env.battle.clone(), party_log: vec![], idle_root: 0, no_ctrl: 0, pad: 0, quiet: 0, last_calls: 0, last_txt: String::new(), pad_reads: 0, pad_age: u32::MAX, pad_gap: 0, pad_any_age: u32::MAX, help_wait: 0 })
     }
 
     /// Resume a walk checkpoint ([`read_checkpoint`]): the resumed map has no models from the previous one, so the player (slot 0 = the
@@ -409,18 +429,6 @@ impl Game {
             press |= self.pad;
             self.pad = 0;
         }
-        // only while the script itself polls the pad (`get_pad` since the last tick), so that messages and prompts before the gimmick
-        // are answered as usual; one scripted press per 20 ticks, nothing in between
-        let polled = rt.vm.pad_reads != self.pad_reads;
-        self.pad_reads = rt.vm.pad_reads;
-        if !policy.pads.is_empty() && polled && !rt.st.ui.select.active {
-            // held for 8 ticks (the gimmick reads the raw pad once per animation step), then released until the next 20-tick slot
-            let p = policy.pads[0];
-            press = if t % 20 < 8 { p } else { 0 };
-            if t % 20 == 19 {
-                policy.pads.remove(0);
-            }
-        }
         if let Some(b) = minigame_press(rt) {
             press = if t % 12 == 0 { b } else { 0 };
         }
@@ -436,6 +444,32 @@ impl Game {
             self.quiet = 0;
         }
         self.last_calls = rt.st.calls;
+        // the start job polls the pad behind an open help window (SM_11_U, Blanca's stealth tutorial: `get_pad(0) & cross` -- "hide" --
+        // under the "Hide / Move" window, while it calls the engine every tick): the same cross / triangle / square round, every 5 s.
+        // Not while the player has pad control (AI_00_U's start job polls triangle for the ring camera behind the floor's name window)
+        let manual = rt.st.actors.get(rt.st.actors.ctrl as i32).map(|a| a.manual).unwrap_or(false);
+        if rt.vm.top_event().is_none() && rt.st.msg_active() && !manual && self.pad_any_age < 30 && !rt.st.ui.select.active {
+            self.help_wait += 1;
+            if self.help_wait % 300 == 0 {
+                const OTHER: [u16; 3] = [padbit::CROSS, padbit::TRIANGLE, padbit::SQUARE];
+                press = OTHER[((self.help_wait / 300 - 1) % 3) as usize];
+            }
+        } else {
+            self.help_wait = 0;
+        }
+        // scripted presses (`Policy::pads`) only while an event job itself polls the pad (`get_pad` within the last 30 ticks; the start
+        // job, which also polls in free control, does not run under an event), so that messages and prompts before the gimmick are
+        // answered as usual.  Each press is held until the script has read it once, then nothing for 20 ticks (the Vessel altar ring,
+        // AI_01_U func 0x42d0: get_pad(0) each round, left / right turn the ring, circle confirms, cross cancels).
+        let gimmick = !policy.pads.is_empty() && self.pad_age < 30 && rt.vm.top_event().is_some() && !rt.st.ui.select.active;
+        if gimmick {
+            if self.pad_gap > 0 {
+                self.pad_gap -= 1;
+                press = 0;
+            } else {
+                press = policy.pads[0];
+            }
+        }
         rt.st.press = press;
         crate::host::tick_state(&mut rt.st, &mut rt.sim);
         rt.sim.update_camera();
@@ -448,6 +482,18 @@ impl Game {
         let idle = rt.vm.poll(&mut FieldHost { st: &mut rt.st, sim: &mut rt.sim, session: Some(session) });
         if idle {
             rt.st.event_running = false;
+        }
+        let read = rt.vm.pad_reads != self.pad_reads;
+        self.pad_reads = rt.vm.pad_reads;
+        self.pad_any_age = if read { 0 } else { self.pad_any_age.saturating_add(1) };
+        if read && rt.vm.top_event().is_some() {
+            if gimmick && self.pad_gap == 0 && !policy.pads.is_empty() {
+                policy.pads.remove(0);
+                self.pad_gap = 20;
+            }
+            self.pad_age = 0;
+        } else {
+            self.pad_age = self.pad_age.saturating_add(1);
         }
         rt.st.faders.clear();
         rt.st.audio.clear();
@@ -1026,7 +1072,7 @@ impl<'e> Walker<'e> {
                 let v = *self.visits.get(&p.map).unwrap_or(&0) as i64;
                 // changed: the WM byte differs from the last look (or from the walk's start)
                 let changed = self.wm_seen.get(&e.id).map(|b| *b != byte(e.id as usize)).unwrap_or(true);
-                let goal = next_area.map(|a| p.map.starts_with(a)).unwrap_or(false);
+                let goal = next_area.map(|a| in_chapter_area(&p.map, a)).unwrap_or(false);
                 let score = if changed { 8_000_000 } else { 0 } + if goal { 4_000_000 } else { 0 } + if here { 2_000_000 } else { 0 } + if st == 2 { 1_000_000 } else { 0 } + if self.since_progress.contains(&p.map) { 0 } else { 1000 } - v * 10;
                 if best.as_ref().map(|b| score > b.0).unwrap_or(true) {
                     best = Some((score, p.map.clone(), (p.entry & 0xff) as i32));
@@ -1105,9 +1151,9 @@ impl<'e> Walker<'e> {
         }
         // the next chapter is in another area: head for it (a jump into that area; else the world map beats a jump into a new map)
         if let Some(area) = next_chapter_area(&self.game.regs()) {
-            if !self.game.map().starts_with(area) {
+            if !in_chapter_area(self.game.map(), area) {
                 match &o.stop {
-                    Stop::Jump(m, _) if m.starts_with(area) => s += 300,
+                    Stop::Jump(m, _) if in_chapter_area(m, area) => s += 300,
                     Stop::WorldMap(..) => s += 250,
                     _ => {}
                 }

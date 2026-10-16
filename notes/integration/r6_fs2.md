@@ -1,9 +1,10 @@
 # Round 6 FS2: story to the end, field scripts
 
-## Status (2026-10-16, batch 2)
+## Status (2026-10-16, batch 3)
 
 **Chapters reached (story flags set by walks, union with round 5):**
-- First half: 28 of 34 (unchanged: 0x08 and 0x18..0x1c missing).
+- First half: **29 of 34** (0x18 Nemeton ruins new in batch 3; still missing 0x08, 0x19, 0x1a (no constant setter), 0x1b
+  Sainte-Marguerite, 0x1c Cannes 2).
 - Second half: **23 of 26** (was 14; 0x47 now played): new this round 0x4c Mt. Fuji, 0x4e Inugami 2, 0x4f Foreign cemetery 2, 0x50 Azabu mansion,
   0x51 Inugami 3, 0x52 Queen's garden, 0x53 Wales 3, 0x54 Inugami 4 -- all played (Fuji by the puzzle search, the rest by the novelty
   walk with `--search-on-stall`), and the walk then enters the last dungeon (`AI_05_U` -> `AI_00_U` "Vessel"; its own search: 416
@@ -11,6 +12,9 @@
   at all** (`flag_xref --flags`: no set / clr / chk with a constant; the same holds for 0x08 and 0x19), so they are probably debug-menu
   chapter markers that the story never sets.  0x47 (Todo lab 2) is now played too (batch 2, below); 0x3f is played
   (Mikasa plan below, no more `--goto MI_16_U`).
+- Second half after batch 3: still 23 of 26, but the walk now **plays the whole last dungeon and the ending**: from
+  `fs2/chain/6_last_dungeon_AI_00_U.walk` with the Vessel plan, AI_00..03 rings -> AI_06_U (boss, monster set 217) -> GY_00_D ->
+  AI_04_U -> ED_00_U (final boss 302) -> `SpecialMenu(7)` "THE END" in 41 steps / 17 s.  0x55 is never set by a script (see above).
 - Hidden: 0 of 6.
 
 **Second-half chain** (checkpoints in `fs2/chain/`, resume with `story_walk --load F [--goto MAP:ENTRY]`):
@@ -18,7 +22,47 @@
 -> `4_post53_WE_00_U` -> `5_post54_IN_00_U` -> `6_last_dungeon_AI_00_U`.  Logs: `fs2/fu5.err`, `w1.err`, `w2a.err`, `w3a.err`,
 `w4a.err`, `w5.err`, `ai1.err`.
 
-**This session:**
+**Batch 3 (2026-10-16):**
+- **Vessel ring solved.**  The ring registers are bytes **0x3a8..0x3ab** (one per floor, 0..3; the old notes watched 0x3ac..0x3b1).
+  The altar (event 70, answer 0) runs AI_01_U func 0x42d0: `get_pad(0, 0)` (raw) each round, 0x80 (left) / 0x20 (right) turn the
+  floor's ring, 0x2000 (circle) confirms, 0x4000 (cross) cancels; func 0x5acf compares the rings' colours (func 0x4c5b) and opens
+  the elevators (bytes 0x38c / 0x38d).  The start job's loop at 0x347b (`get_pad & 0x1000` = triangle -> funcs 0x33fb / 0x337f) is
+  only the ring camera.  Why the old pads did nothing: `Policy::pads` only pressed on the tick after a pad read, which never lined up
+  with the loop's next read.  Now (`Game::tick`): while an **event job** read the pad within 30 ticks, the next scripted button is held
+  until the script has read it once, then nothing for 20 ticks (`pad_age`, `pad_gap`).
+  Plan `sh2_field/tests/walk/ai_00_u_vessel.plan` (8 steps, from lparchive update 135): floor 2 `L,L,L,O` (3), floor 3 `L,L,O` (2),
+  floor 4 `L,O` (1) -> flash back to floor 1 -> `look 0x6 (ev 75)` "the light shines to the heavens" -> the ending (above).
+  Test `retail_story::vessel_ring_plan_reaches_the_ending` (ignored, release, ~17 s; fixture `tests/walk/ai_00_u_vessel.walk`).
+  Note for `sdis.py`-style disassemblers: expression op **0x79 is `&&`, 0x7a is `||`** (the scratch `sdis.py` had them swapped).
+- **Nemeton ruins (0x18) played.**  The round-5 walk had reached ND_08_U (the last block level) many times; the exit (event 2, walk-on
+  box 1) only jumps while register byte 0x68 is 0, which event 4 (box 3, preloads ND_14_U) sets.  ND_14_U's start function: flag
+  0x156 (the sentry fight, box 1 / event 2, monster set 74) and not 0x157 -> scene that sets 0x157 and goes through GY_04_U back into
+  ND_14_U, where 0x157 and not 0x15c -> the Karin scene (func 0x2fa8) sets 0x18.  Plan `tests/walk/nd_08_u_exit.plan` (3 steps) on
+  fixture `nd_08_u_exit.walk` (= round-5 `cp27/04343_ND_08_U.walk`); test `retail_story::nemeton_exit_plan_sets_the_chapter_flag`
+  (ignored, release).
+- **Cannes / Sainte-Marguerite (0x1b / 0x1c): reached SM_19_U, blocked on the Handmade Key.**  Fixes on the way:
+  - `next_chapter_area`: the lowest chapter of `CHAPTER_AREAS` not reached **in the half of the highest flag** (a walk that took the
+    other first-half branch had 0x1d..0x28 set and was sent to Mt. Fuji); `AREA_GATEWAYS` / `in_chapter_area`: SM is reached through
+    CA (Nelson's boat, CA_02_U -> SM_00_U).
+  - SM_05_U's dial lock = 8-6-4 (`examine box 1 (ev 2)|0,8,6,4`; register byte 0x128).
+  - SM_07_U (Veronica's perfume scene) hung in `while (EffectControl(child, 0) != 2)`: **`EffectControl(h, 2, flags, gen*, tar*)`**
+    creates an instance of a loaded effect (US FIELD.BIN 0x51dd70: a node under the parent with its own generating / target sets;
+    `EffectSlot::child`, state 1 while it plays, 2 once ended), and **handles stay valid after `EffectControl(h, 1)`** (retail handles are
+    node pointers; the port used to shift later handles down -- SM_07_U removes two effects and then instances a third).
+  - SM_11..14 (Blanca's stealth section): **`WaitCharacterEx(slot, mode | 0x100)`** is a non-blocking poll returning 1 when the wait
+    would be over (the start job's step machine runs `AutoMove` then `if (WaitCharacterEx(0, 0x100) == 1) step++`).  The walker
+    also presses cross / triangle / square every 5 s when the start job polls the pad behind an open window (SM_11_U's "Hide / Move"
+    tutorial waits for `get_pad(0) & cross`).
+  - With these the walk plays the stealth section, Oscar and the reunion (SM_08..SM_17, SM_18 / 22 / 23) and reaches SM_19_U, whose
+    door (event 2) to SM_20_U (sets 0x1b) needs flag 0x113 = Locke's **Handmade Key** (CA_01_U func 0x5b4d, Locke = slot 14, talk
+    event 16; gives the key once register byte 0x208 counts the parts: Bent Wire, Adhesive, Fountain Pen).  Locke only stands in
+    Cannes after flag 0x112 (PA_03_U event 28, Paris), which needs 0x111 (PE_00/01/02_N event 42, Petrograd).  So 0x1b / 0x1c need a
+    world-map side trip (Petrograd -> Paris -> Cannes) plus the three parts: next step, as a plan (the LP's update 36 has the key).
+  - Checkpoints: `fs2/chain/7_post18_CA_00_U.walk` (after 0x18), `8_sm_05_dial.walk`, `9_sm_17_veronica.walk`; `fs2/cpsm3/` has the
+    stealth walk (`00319_SM_19_U.walk` at the locked door, `00375_CA_01_U.walk` back in Cannes).
+- Ghidra: instance :8192 now has **FIELD.BIN** open (was SLUS_210.41); raw at 0, US address - 0x45ea80.
+
+**Batch 1:**
 - GPA review fixes: the GT_10_U test now checks the pit-fight table directly (`host::pit_fight_field`, `GetRegDat(0x53)` answers for
   every record; no talk on a fresh GT_10_U reaches `GetFieldData(0x26)` -- the old assertion could never match); `SH2_WALK_QUEUE`
   default 256 (~1.3 GB) and a dropped state is no longer marked seen; `minigame_press` only takes over TD_14_U while a lane is non-zero
@@ -64,7 +108,7 @@ result.
 - **Plans can press buttons**: a plan step `text|c1,c2|pads` plays the action whose name contains `text` with those answers and the
   buttons `pads` (`L,R,U,D,O,X,T,S`; `Policy::pads`, pressed every 20 ticks while no window is waiting, or while only a fully typed
   window is open).  `press pad 0x20||` synthesises any button.  `walk_probe --pads R,R,O` tries them.
-- **Vessel ring: not solved.**  Floor 1: `look 0x1 (ev 15)` (switch) then `look 0x3 (ev 72)` -> AI_01_U (floor 2).  The altar,
+- **Vessel ring: not solved in batch 2 (solved in batch 3, above).**  Floor 1: `look 0x1 (ev 15)` (switch) then `look 0x3 (ev 72)` -> AI_01_U (floor 2).  The altar,
   `look 0x1 (ev 70)` answer 0, explains the control ("rotate with left / right, circle to confirm, cross to cancel").  Then the event
   ends and the start job's loop at 0x3495 polls the pad (`get_pad & 0x1000` -> func 0x33fb, func 0x337f each round).  These all left
   regs 0x3ac..0x3b1 unchanged:
@@ -75,11 +119,15 @@ result.
 - Not reached this batch: the second-half rerun after the Vessel; the first half 0x18..0x1c.
 
 **Open puzzles:**
-- Vessel ring (above).  Walkthrough route (lparchive update 135): floor 2 match the second ring with green in front; floor 3 yellow
-  then green; floor 4 yellow -> blue, then green; Seventh Key / Crucifix chests; the light elevator to Kato; final question (top =
-  good ending).  0x55 itself is never set by a script.
-- First half 0x18..0x1c (Nemeton's stone sled; use `--search-world 0` and the walkthrough).
+- First half 0x1b / 0x1c: Locke's Handmade Key (batch 3 above): flags 0x111 (Petrograd ev 42) -> 0x112 (Paris PA_03_U ev 28) ->
+  Locke in CA_01_U (slot 14, ev 16) with the three parts -> 0x113 -> SM_19_U door -> SM_20_U (0x1b) -> CA_03_U (0x1c).
+- The Vessel's optional chests (Seventh Key, Crucifix) and the good-ending question are not in the plan (it takes the shortest way).
 - `SetSceneInit` 10 / 11 remainders.
+
+**Files (batch 3):** `sh2_field/src/story.rs` (scripted pads held until read, `pad_age` / `pad_gap`, help-window presses,
+`next_chapter_area` per half, `AREA_GATEWAYS`, lone CR fixed), `host.rs` (`EffectControl` mode 2 + stable handles, `WaitCharacterEx`
+0x100), `plugin.rs` (child effect states), `sh2_script/src/cscript.rs` (`pad_reads`), `examples/walk_probe.rs` (branch runs),
+`tests/retail_story.rs` (Vessel + Nemeton plan tests), `tests/walk/ai_00_u_vessel.{plan,walk}`, `tests/walk/nd_08_u_exit.{plan,walk}`.
 
 **Files (batch 1):** `sh2_field/src/story.rs` (plan, world-map choice, area hint, queue cap, `minigame_press`, `wm_seen` init),
 `host.rs` (`pit_fight_field`), `party.rs` (`merge_bag`), `examples/story_walk.rs` (`--points`, `--search-world`), new

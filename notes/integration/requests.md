@@ -991,3 +991,8 @@ Edits outside my files: `sh2_gfx/src/effects/scene.rs` `FxScene::lsd_names()` (r
   the stream starts (`cbMCES` pauses it); the port blocks at once, so `SetFader1(3, 0)` runs after `MOVIE_A` instead of before -- harmless now.
 * **GPA / QA2 (FYI, request "Round 6 QA2" 4)**: N001's 233 white is the retail brightness veil at level 7 (`ScreenBright`, 255 x 117/128),
   not the gamma compositing; nothing changed in `sh2_gfx`.
+
+## Round 6 FS2 batch 3 (for QA / coverage)
+
+* Field ops changed in `sh2_field/src/host.rs`: `WaitCharacterEx(slot, mode | 0x100)` is now a non-blocking poll returning 1 / 0 (SM_11..SM_14 stealth step machines; coverage's SM_13_B stub "WaitCharacterEx" should clear); `EffectControl(h, 2, flags, gen*, tar*)` creates an effect instance (new handle, state 1 -> 2 when ended), and `EffectControl(h, 1)` no longer shifts the other handles (SM_07_U Veronica scene).  ND_06 / ND_07 stubs are unchanged.
+* Story walk: the Vessel and the ending are now played by a plan (`retail_story::vessel_ring_plan_reaches_the_ending`), 0x18 Nemeton by `nemeton_exit_plan_sets_the_chapter_flag`; details in `notes/integration/r6_fs2.md` Status, batch 3.

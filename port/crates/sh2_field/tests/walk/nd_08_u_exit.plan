@@ -1,0 +1,8 @@
+# Nemeton ruins (flag 0x18), from nd_08_u_exit.walk (ND_08_U, the fourth block level, as the round-5 walk left it): one walker step per line.
+# ND_08_U event 4 (walk-on box 3) preloads ND_14_U and clears register byte 0x68, the guard event 2 (box 1, the exit) tests.  ND_14_U's
+# start function: flag 0x156 (the sentry beaten, box 1 / event 2) and not 0x157 -> the scene that sets 0x157 and goes on through GY_04_U
+# back into ND_14_U; there 0x157 and not 0x15c -> the Karin scene (func 0x2fa8) that sets 0x18.
+# Use: SH2_WALK_PLAN="$(grep -v '^#' FILE | paste -sd';')" story_walk --load nd_08_u_exit.walk
+ND_08_U:enter box 3 (ev 4)
+ND_08_U:enter box 1 (ev 2)
+ND_14_U:enter box 1 (ev 2)
