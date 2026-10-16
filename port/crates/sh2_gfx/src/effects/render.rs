@@ -521,6 +521,14 @@ fn sync_view(
                     }
                 }
             }
+            None if m.clone.is_some() => {
+                // `mdlCreateMemory` copy of a battle character (FX2 hook): the character's model with the copy's motions, not cached per section
+                let Some((model, motions)) = m.clone.clone() else { continue };
+                let mut gpu = GpuCtx { meshes: &mut *meshes, images: &mut *images, materials: &mut *mats, filter: settings.filter };
+                let mm = ModelMaterials::new(&model, &mut gpu);
+                let e = spawn_animated_model_ex(commands, root, model, motions, &mm, &mut gpu, tf, &format!("fx_clone_{}", m.handle), false);
+                ents.models.insert(m.handle, e);
+            }
             None => {
                 let key = (view.assets.id, m.section);
                 if !ents.cache.contains_key(&key) {
@@ -754,5 +762,5 @@ pub fn fx_actor_of(am: &AnimatedModel, gt: &GlobalTransform, height: f32) -> sup
         fm.w_axis = (pose * bone.bind).to_glam().w_axis;
         bones.push((bone.name.clone(), world * fm));
     }
-    super::scene::FxActor { pos: world.w_axis.truncate(), world, bones, height, ..Default::default() }
+    super::scene::FxActor { pos: world.w_axis.truncate(), world, bones, height, model: Some(am.inst.model.clone()), ..Default::default() }
 }

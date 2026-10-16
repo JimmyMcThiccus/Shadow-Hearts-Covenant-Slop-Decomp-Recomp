@@ -2773,7 +2773,7 @@ fn snapshot_actors(
                 }
             }
         }
-        rt.actors[i] = Some(FxActor { pos: world.w_axis.truncate(), world, bones, radius: r, height: h, char_no, model_no });
+        rt.actors[i] = Some(FxActor { pos: world.w_axis.truncate(), world, bones, radius: r, height: h, char_no, model_no, model: anims.get(m.holder).ok().map(|am| am.inst.model.clone()) });
     }
     if rt.scene_lights.is_empty() {
         if let Some(l) = light {

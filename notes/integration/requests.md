@@ -779,6 +779,22 @@ Requests for **GP** (your files; measured in AP_02_U / battle, dev profile, see 
 * **Coordinator / QA**: Mikasa (0x3f) is played from `sh2_field/tests/walk/mi_02_u_keys.plan` (route from the user's lparchive reference);
   `Walker::plan` / `SH2_WALK_PLAN=MAP:text;..` scripts any puzzle the same way, `examples/walk_probe` finds the action names.
 
+* **QA2 (your item 2, field "blockers", checked one by one with `map_trace` / `walk_probe`)**: none of them is an engine wait that never
+  ends; all are script loops that wait for the player or run forever by design, so the harness should count them as idle:
+  - AI_01_U..AI_03_U (Vessel): `SpecialMenu(1, 0)` / `(0, 0)` only set the command-menu mask and return at once.  The start job then loops
+    at 0x3495..0x34a2 polling the pad (`get_pad & 0x1000` triangle -> func 0x33fb): the altar-ring control.  DB_00_U: the debug menu's
+    pad loop.  SM_15_U: a timed key hunt ("be quick or the guards will come back": `wait(1)` + a bss counter).  YO_02_U: PathMove NPCs.
+  - `WaitModel` GI_01_N / GI_03_N / SO_00_U / RU_01_U: the start jobs are dispatcher loops on a bss flag that events set (GI_01_N 0x7050:
+    `while !bss[0x8e80]`); `PathMove` CA_01_U: a patrol -- event 0x11 (arrival) issues the next `PathMove`, the bss loop at 0x5a03 waits.
+  - PA_02_A event 0xd: the talk event of slot 5, an NPC the start script only loads in another story state; `GetCharacterInfo(5, 0xd)`
+    = -1 is what retail returns for an empty slot too.  The event is not reachable when slot 5 is absent.
+  - RU_04_U event 0x10: `while GetFieldData(0x23)` = "the current window's message is still typing"; with circle presses the scene runs
+    to its end (`map_trace --event 16:1` shows the whole Joachim / sister dialogue).  The explore inputs do not press circle often enough.
+* **QA2 (item 3, autopilot)**: the stall did not reproduce here (`--story --boost 80`, 300 s: AP_02_U -> 2 battles -> AP_10_U -> AP_02_U).
+  Battle #1 again sat at "turn 0" for ~60 s (battle side, BT).  `sh2_field::autopilot::Pilot` (mine) taps circle while any message is
+  open; if you catch the two-window state again, the pilot's trace line (`windows [...]`) plus `rt.st.log` tail would tell which event
+  waits.
+
 ## Round 6 MN2 (menus / meta screens, 2026-10-15)
 Small hooks in files other agents own (please keep them):
 * **FS2 `sh2_field/src/lib.rs`**: `pub mod menu_model; cmd_library_retail; cmd_ring_retail; cmd_sechar;`.
@@ -949,3 +965,12 @@ Edits outside my files: `sh2_gfx/src/effects/scene.rs` `FxScene::lsd_names()` (r
   frame from `home_rot = (-30 deg, 55 deg, 0)`; the first drawn frame is therefore tilted ~(15 deg, 55 deg), not face-on.  A face-on start
   needs the retail matrix order / wrap of `JRing+0x70` during state 3 -- a live read of `JRing+0x70..0x7c` on the first intro frames would
   settle it.  `hud_hits::draw_ring` only applies `r.rot` (Y * X * Z).
+
+## Round 6 FX2, third batch (2026-10-15)
+* **BT (one field in your `plugin.rs`, compile-required)**: `snapshot_actors` fills the new `FxActor::model` (`am.inst.model.clone()`); please keep
+  it.  096 / 131 now end in the app (523 / 350 ticks, `SH2_BATTLE_DEMO=2 SH2_BATTLE_FXLIST=96,131`) and the caster's `mdlCreateMemory` copy is
+  drawn with the effect's `sp*` motions.  **UNION**: its program spawns one thread per *extra* generator unit and waits for them; with the single
+  generator `ExtraFx::start` passes, the port now ends it at the deadlock (t102) -- pass the whole party as `gen` for the real sequence.
+* **GP (FYI, additive hook in `effects/render.rs`)**: `sync_fx` has a `None if m.clone.is_some()` branch that spawns an `mdlCreateMemory` copy with
+  the character's model (uncached); `fx_actor_of` sets `FxActor::model`.
+* **QA2**: 096 / 131 / UNION (and the party Inferno 1096 / Ecstasy 1131) are ok in `run fx` (304 ok / 2 stub).

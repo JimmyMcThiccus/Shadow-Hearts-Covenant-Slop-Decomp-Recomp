@@ -519,6 +519,23 @@ pub fn is_model(data: &[u8]) -> bool {
 }
 
 impl Model {
+    /// A model with no frames and no geometry (a motion clock: e.g. an effect's `mdlCreateMemory` copy of a character whose model is unknown).
+    pub fn empty() -> Model {
+        Model {
+            header: ModelHeader::default(),
+            extra_frames: 0,
+            frames: vec![],
+            atomics: vec![],
+            textures: vec![],
+            bounds: vec![],
+            texanim_raw: None,
+            texanims: vec![],
+            extensions: vec![],
+            blend_shapes: vec![],
+            warnings: vec![],
+        }
+    }
+
     /// Parse a model from the bytes of one `mdl` entry (the slice may extend beyond the
     /// model; trailing data is ignored).
     pub fn parse(d: &[u8]) -> Result<Model> {

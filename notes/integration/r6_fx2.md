@@ -1,5 +1,27 @@
 # Round 6 FX2 (effects + renderer), 2026-10-14
 
+## Status (2026-10-15, third batch after commit 6711da0)
+`cargo check --workspace --all-targets` clean; `cargo test -p sh2_gfx -p sh2_formats -p sh2_battle` green (new: `tests/fx_programs_end_us.rs`,
+`thunder` unit tests).  Ghidra not used this batch.
+1. **096 (Inferno) / 131 (Ecstasy) / UNION end** (were cut at `MAX_TICKS` = 750 ticks headless and in the app; coverage stubs, QA2's
+   "Inferno / Ecstasy" are the same programs, ids 1096 / 1131 = 96 / 131).  Two causes, section 12:
+   * `mdlCreateMemory` copies had no instance: `FxActor::model` (new) carries the character's model (filled by BT's `snapshot_actors` in
+     `plugin.rs` and by `render::fx_actor_of`, one field each); the copy gets a `ModelInstance` of it (a frameless `Model::empty()` clock when
+     unknown) plus the effect's motions, so `mdlWaitMotion*` on it wait for real.  The copy is now **drawn** too (`FxModelView::clone`,
+     render.rs spawns the character's model with the copy's motions): `screens/r6_fx2/fx096_131_sheet.png`.
+   * retail-exact `waitthr` deadlocks: 131 waits (t350) for tag 18, which it spawned ~155 ticks earlier and which ended at frame 17 of its
+     motion; UNION's tag-10 thread waits for tag-6 threads that are spawned once per *extra* generator unit (none with one generator).  The
+     retail VEC yields forever there and the battle deletes the effect.  `FxProgram::deadlocked()` (fixpoint over the waiting threads) now
+     ends a program when every live thread waits for a tag that has no thread that could still end; it fires for 131 and UNION only (all 280
+     battle programs checked with `fx_threads`).
+   * App check (`SH2_BATTLE_DEMO=2 SH2_BATTLE_FXLIST=96,131`): "effect 096 ended after 523 ticks", "effect 131 ended after 350 ticks".
+     Coverage fx: 304 ok / 2 stub (SMROOM / SMROOM2 `fldAttachBG2`).  Census: 137 / 249 / 259 now run 401 ticks (were 219): their copies'
+     motion waits now last the motions.
+2. **`FpThunder`** ported as geometry (`effects/thunder.rs`: param block, symmetric / free jitter, `ChangeForm`, `SetPos`, the two strips with
+   their alphas, `BgQuad` triangles); no consumer yet -- 202 / 209 still open (section 7 has their structure).
+3. Dev aids: `fx_threads <id|disc path>` (`FX_DIS=a..b|spawn` disassembles the VSM code, `FX_MOTIONS=1` lists motions), `FxProgram::code()`,
+   `SH2_FX_TRACE=<n>` keeps n trace lines (default 4000).
+
 ## Status (2026-10-15, resumed after the coordinator pause)
 Everything compiles; tests: see "Verification" at the end.  Ghidra lock released, no processes left running.
 Done in this session (details in sections 6..11 below):
@@ -132,3 +154,14 @@ battle's hit code (not ported); that is the next piece to find.
 * Windows: `BtlInBoss` test sheet, HitMark ring (`SH2_HITRING_TEST`), EffMdl light (BBG 030), battle demo set 2 / set 4 + BBG 077 (0 slab errors),
   `--us --autoplay --boost 80` (title, world map, AP_00_U / AP_02_U, encounter shatter ends, battle, victory, menu tour; exit 0, 0 slab errors).
 * Coverage `run_all.sh run fx --fresh --jobs 6`: Effect programs 301 ok / 5 stub (096, 131, UNION, SMROOM, SMROOM2).
+
+## 12. 096 / 131 / UNION, the fix (third batch)
+* `scene.rs` `918 mdlCreateMemory(kind, idx, ..)`: instance of `env.actor(kind, idx).model` (or `Model::empty()`), with the effect's motions;
+  `mdlCreateMotion` / `mdlSetMotion` / `mdlWaitMotion*` then work on it like on any effect model.  `view()` emits it with `section = 0xff`
+  and `clone = (model, motions)`; `render.rs` (GP's file, additive branch) spawns it uncached.
+* `program.rs` `deadlocked()`: a live thread is stuck when it is in a `waitthr` that does not release on the next slice (`any_started &&
+  thread_count == 0`) and every not-unlinked thread with its tag is itself stuck (fixpoint); all live threads stuck -> the program ends
+  (`FxProgram::ended_deadlocked`).  131: tag 18 = `SPAWN 6500` at ip 7235 (3 copies, `mdlWaitMotionFrame(.., 17)`, `EXIT`), main reaches
+  `WAITTHR 18` at ip 7321 after `CALL 44(60)` / `CALL 44(95)` waits.  UNION: thread 10 (ip 5846) spawns tag 6 for `i in 1..gen count`
+  (`CALL 1379(0)`) and waits for tag 6 at ip 5957; main waits for tag 10.  With a full party as generators UNION runs its normal course
+  (BT: `ExtraFx::start` passes one generator today).

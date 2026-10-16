@@ -172,6 +172,11 @@ impl ModelInstance {
         }
     }
 
+    /// Every motion the instance knows (any order).
+    pub fn motion_list(&self) -> Vec<Arc<Motion>> {
+        self.motions.values().cloned().collect()
+    }
+
     /// Does the instance know a main motion called `name`?
     pub fn has_motion(&self, name: &str) -> bool {
         self.motions.get(name).map(|m| m.is_main()).unwrap_or(false)

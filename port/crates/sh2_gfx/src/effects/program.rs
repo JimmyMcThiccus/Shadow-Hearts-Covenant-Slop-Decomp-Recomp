@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use glam::Vec3;
 use sh2_script::efmg::{kind, Efmg, Heco};
-use sh2_script::vsm::{Machine, SysCalls, Vec3 as VmCtx};
+use sh2_script::vsm::{Machine, RunState, SysCalls, Vec3 as VmCtx};
 
 use super::scene::{FxActor, FxAssets, FxEnv, FxEvent, FxScene, FxView};
 
@@ -84,7 +84,8 @@ impl FxHost {
 impl SysCalls for FxHost {
     fn syscall(&mut self, vm: &mut VmCtx<'_>, id: i32, a: &[u32]) {
         if let Some(t) = self.trace.as_mut() {
-            if t.len() < 4000 {
+            // `SH2_FX_TRACE=<n>`: keep the first n lines (default 4000)
+            if t.len() < std::env::var("SH2_FX_TRACE").ok().and_then(|s| s.parse::<usize>().ok()).filter(|n| *n > 1).unwrap_or(4000) {
                 let args: Vec<String> = a.iter().map(|&o| {
                     let (i, f) = (vm.read_i32(o), vm.read_f32(o));
                     if f.is_finite() && f.abs() > 1e-6 && f.abs() < 1e7 && (i.abs() > 0x10000) { format!("{f:.3}") } else { format!("{i}") }
@@ -188,6 +189,8 @@ pub struct FxProgram {
     pub host: FxHost,
     pub ticks: u32,
     pub finished: bool,
+    /// the program was ended by [`Self::deadlocked`]
+    pub ended_deadlocked: bool,
 }
 
 impl FxProgram {
@@ -200,7 +203,7 @@ impl FxProgram {
             Machine::new(&heco)
         };
         let assets = Arc::new(FxAssets::new(id, file));
-        Ok(FxProgram { id, assets: assets.clone(), machine, host: FxHost::new(ctx, assets), ticks: 0, finished: false })
+        Ok(FxProgram { id, assets: assets.clone(), machine, host: FxHost::new(ctx, assets), ticks: 0, finished: false, ended_deadlocked: false })
     }
 
     /// Replace the environment (positions, skeletons, scene lights) before a step.
@@ -225,13 +228,54 @@ impl FxProgram {
         }
         let alive = self.machine.frame(&mut self.host);
         // `btlSetWait` + polling `btlGetWait`: the retail battle deletes the program on `BattleNext` (CBattle +0x25 bit 7) -- end it here
-        if !alive || self.ticks >= MAX_TICKS || self.host.scene.parked {
+        let deadlocked = alive && self.deadlocked();
+        if !alive || self.ticks >= MAX_TICKS || self.host.scene.parked || deadlocked {
+            self.ended_deadlocked = deadlocked;
             self.finished = true;
             self.machine.kill_all();
         }
         let mut ev = std::mem::take(&mut self.host.events);
         ev.extend(std::mem::take(&mut self.host.scene.events));
         ev
+    }
+
+    /// Every live thread sits in a `waitthr` for a tag that has no thread left, so nothing can ever run again (only a new thread of that tag could
+    /// release them, and only a running thread can start one).  Retail programs reach this: 131 (Ecstasy) spawns tag 18 (three clones, wait for
+    /// frame 17, exit) and ~150 ticks later waits for it; 096 (Inferno) the same with tag 11 when the caster copy's motions are short.  The retail
+    /// `VEC` yields forever there (JP `DecodeVSM` 132..142) and the battle deletes the effect when the action ends (the program has already sent
+    /// its `btlComboStopOff`); the port ends the program at that point instead of running into [`MAX_TICKS`].
+    pub fn deadlocked(&self) -> bool {
+        let t = &self.machine.threads;
+        let live = |s: RunState| matches!(s, RunState::Idle | RunState::Running | RunState::WaitFrame);
+        // candidates: live threads in a `waitthr` that is not released on the next slice; a candidate stays stuck while every thread of its
+        // tag (not yet unlinked) is itself stuck (UNION: main waits for tag 10, which waits for a tag 6 that is only spawned per extra
+        // generator unit)
+        let mut stuck: Vec<bool> = t.iter().map(|th| live(th.state) && th.wait_threads && !(th.any_started && th.thread_count == 0)).collect();
+        loop {
+            let mut changed = false;
+            for i in 0..t.len() {
+                if stuck[i] && t.iter().enumerate().any(|(j, o)| o.tag == t[i].wait_tag && o.state != RunState::Removed && !stuck[j]) {
+                    stuck[i] = false;
+                    changed = true;
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+        let mut any = false;
+        for (i, _) in t.iter().enumerate().filter(|(_, th)| live(th.state)) {
+            any = true;
+            if !stuck[i] {
+                return false;
+            }
+        }
+        any
+    }
+
+    /// Diagnostics: the program's VSM code.
+    pub fn code(&self) -> Arc<Vec<sh2_script::efmg::Insn>> {
+        self.machine.code.clone()
     }
 
     /// Diagnostics: one line per VM thread (tag, run state, ip, what it waits on).

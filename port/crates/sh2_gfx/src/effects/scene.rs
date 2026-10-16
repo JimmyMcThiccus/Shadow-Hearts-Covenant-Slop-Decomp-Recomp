@@ -126,11 +126,14 @@ pub struct FxActor {
     pub height: f32,
     pub char_no: i32,
     pub model_no: i32,
+    /// the character's model (`mdlCreateMemory` copies it: the copy plays the effect's own `sp*` motions on this skeleton); `None` = unknown, the copy
+    /// is then a frameless motion clock (its motion waits still last the motions' length)
+    pub model: Option<Arc<Model>>,
 }
 
 impl Default for FxActor {
     fn default() -> Self {
-        FxActor { pos: Vec3::ZERO, world: Mat4::IDENTITY, bones: vec![], radius: 8.0, height: 34.0, char_no: 0, model_no: 0 }
+        FxActor { pos: Vec3::ZERO, world: Mat4::IDENTITY, bones: vec![], radius: 8.0, height: 34.0, char_no: 0, model_no: 0, model: None }
     }
 }
 
@@ -534,6 +537,8 @@ pub struct FxModelView {
     pub alpha: f32,
     pub motion: Option<String>,
     pub motion_time: f32,
+    /// `mdlCreateMemory` copy of a battle character: the character's model (drawn instead of `section`) and the motions the copy was given
+    pub clone: Option<(Arc<Model>, Vec<Arc<Motion>>)>,
 }
 
 #[derive(Clone, Debug)]
@@ -1092,13 +1097,18 @@ impl FxScene {
             if !m.visible || m.deleted {
                 continue;
             }
-            let Some(section) = m.section else { continue };
+            // a copy of a character (`mdlCreateMemory`) is drawn with the character's model when the battle gave it (`FxActor::model`)
+            let clone = match (m.section, m.clone_of, &m.inst) {
+                (None, Some(_), Some(i)) if !i.model.frames.is_empty() => Some((i.model.clone(), i.motion_list())),
+                _ => None,
+            };
+            let Some(section) = m.section.or(clone.as_ref().map(|_| u8::MAX)) else { continue };
             let world = self.model_world(env, m.handle);
             let (motion, t) = match &m.inst {
                 Some(i) => (i.current_name().map(str::to_owned), i.time()),
                 None => (None, 0.0),
             };
-            models.push(FxModelView { handle: m.handle, section, world, alpha: m.alpha, motion, motion_time: t });
+            models.push(FxModelView { handle: m.handle, section, world, alpha: m.alpha, motion, motion_time: t, clone });
         }
         let mut lights = vec![];
         for l in &self.lights {
@@ -1401,8 +1411,18 @@ impl FxScene {
                 // mdlCreateMemory(kind, idx, a, b, flag, out): a copy of a battle character's model
                 let (k, i) = (ai(v, a, 0), ai(v, a, 1));
                 let h = self.new_model(None, false);
+                // the copy gets an instance of the character's model (or a frameless clock): `mdlCreateMotion` / `mdlSetMotion` then give it the
+                // effect's motions and `mdlWaitMotion` waits for them -- without it the waits returned at once and 096 / 131 / UNION ran into a
+                // `waitthr` for a thread that had already ended (deadlock until MAX_TICKS)
+                let model = env.actor(k, i).and_then(|act| act.model.clone()).unwrap_or_else(|| Arc::new(Model::empty()));
+                let mut inst = ModelInstance::new(model);
+                for mo in self.assets.motions().iter() {
+                    inst.add_motion(mo.clone());
+                }
+                inst.update_pose();
                 if let Some(m) = self.model_mut(h) {
                     m.clone_of = Some((k, i));
+                    m.inst = Some(inst);
                 }
                 out_u32(v, a, 5, h);
             }
