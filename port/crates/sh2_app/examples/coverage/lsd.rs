@@ -198,9 +198,11 @@ fn check(disc: &sh2_core::fileio::Disc, path: &str, decode_all: bool) -> Row {
     // effect tracks
     let mut fx_bad = 0;
     // what the cut scene player gives the effect tracks to look up by name: its models (`cutscene_plugin` fills `named_models` from `data.models`)
-    let named: Vec<String> = data.models.iter().map(|m| m.name.clone()).collect();
-    // the map tracks' names (`lsdGetModel` looks maps up too: 30 scenes ask for their map by name, round 6 QA2)
+    let mut named: Vec<String> = data.models.iter().map(|m| m.name.clone()).collect();
+    // the map tracks' names (`lsdGetModel` looks maps up too: 30 scenes ask for their map by name, round 6 QA2); the player registers them
+    // too (round 6 CS3, `cutscene_plugin` `map_actor`)
     let map_names: Vec<String> = data.map_tracks.iter().filter_map(|&t| data.content.tracks.get(t)).map(|h| h.body_str(0)).collect();
+    named.extend(map_names.iter().cloned());
     for &t in &data.efd_tracks {
         let Some(raw) = data.content.raw(t) else { continue };
         match super::fx::run_program(2000 + t as i32, raw.to_vec(), 1, &named) {

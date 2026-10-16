@@ -253,6 +253,9 @@ struct Active {
     bg_alpha: Vec<(i32, f32, f32)>,
     script: Option<ScriptRun>,
     fader: Fader,
+    /// round 6 CS3: the scene plays from the field and `fader` *is* the field's fader slot 1 (retail `LSDScrEx` case 0 drives
+    /// `CFieldSocket::SetFader(1, ..)`, there is one fader): taken from the field by `field_bridge` with the request, handed back at the end
+    fader_shared: bool,
     cine: bool,
     overlay: Vec<Entity>,
     camera_saved: Vec<(Entity, Option<RenderLayers>)>,
@@ -310,8 +313,10 @@ struct Active {
     invoke_battle: bool,
 }
 
+/// `.1`: the field's fader slot 1 handed back when a scene started from the field ends, `.2`: the same slot taken from the field when it
+/// requests the scene (round 6 CS3, see [`Active::fader_shared`])
 #[derive(Resource, Default)]
-struct CutsceneRuntime(Option<Active>);
+struct CutsceneRuntime(Option<Active>, Option<Fader>, Option<Fader>);
 
 /// Set by the bridge when the field started the scene: the result goes back into `McesState`.
 #[derive(Resource, Default, Debug, Clone, PartialEq)]
@@ -515,7 +520,8 @@ fn begin(
         shown_map: None,
         bg_alpha: Vec::new(),
         script,
-        fader: Fader::default(),
+        fader: if from_field { rt.2.unwrap_or_default() } else { Fader::default() },
+        fader_shared: from_field && rt.2.take().is_some(),
         cine: false,
         overlay,
         camera_saved,
@@ -1097,6 +1103,17 @@ fn drive(
                 let gt = gts.get(inst.holder).ok()?;
                 Some((m.name.clone(), sh2_gfx::effects::render::fx_actor_of(am, gt, 30.0)))
             })
+            .chain(a.data.map_tracks.iter().filter_map(|&t| {
+                // round 6 CS3: `lsdGetModel` finds the scene's maps by their `MPS ` track name too (23 US scenes, e.g. N009 `Do_06_u`, N016
+                // `Bo_02_u`); every `lsdAttach` on a map uses its `ROOT` frame = the map's origin (`cs_lsd_names --us`).  A map not spawned
+                // yet sits at the PS2 origin like every spawned one (`spawn_ps2_root`).
+                let name = a.data.content.tracks.get(t)?.body_str(0);
+                let world = match a.maps.get(&t).and_then(|m| gts.get(m.root).ok()) {
+                    Some(gt) => Mat4::from_diagonal(Vec4::new(1.0, -1.0, -1.0, 1.0)) * gt.to_matrix(),
+                    None => Mat4::IDENTITY,
+                };
+                Some((name, sh2_gfx::effects::scene::FxActor { pos: world.w_axis.truncate(), world, height: 0.0, ..Default::default() }))
+            }))
             .collect();
         for f in a.fx.values_mut() {
             f.prog.host.scene.named_models = named.clone();
@@ -1364,6 +1381,9 @@ fn drive(
     let _ = rate;
     if a.head.finished() || a.finished || skipped {
         let mut a = rt.0.take().unwrap();
+        if a.from_field && a.fader_shared {
+            rt.1 = Some(a.fader);
+        }
         a.pause.close(&mut commands);
         if let Some(live) = live.as_mut() {
             live.0 = None;
@@ -1946,7 +1966,7 @@ fn field_bridge(
     mut commands: Commands,
     rt: Option<ResMut<crate::plugin::FieldRuntime>>,
     disc: Option<Res<Sh2Disc>>,
-    cut: Res<CutsceneRuntime>,
+    mut cut: ResMut<CutsceneRuntime>,
     mut bridge: ResMut<FieldMcesBridge>,
     pending_req: Option<Res<CutsceneRequest>>,
     movie: Option<Res<sh2_menu::movie::MovieStatus>>,
@@ -1954,6 +1974,19 @@ fn field_bridge(
     mut flags: TheaterFlags,
 ) {
     let Some(mut rt) = rt else { return };
+    let rt = &mut *rt;
+    // round 6 CS3: retail has one scene fader, the field's slot 1 (`LSDScrEx` case 0 = `CFieldSocket::SetFader(1, ..)`).  A scene started
+    // from the field takes over its state (e.g. `OP_00_U` sets it to full white with `SetFader1(3, 0)` around `MOVIE_A`; N001's own fade-in
+    // then clears it -- the port's separate scene fader left the field's white over N001 and M01) and hands the end state back.
+    if let Some(f) = cut.1.take() {
+        rt.faders[1] = f;
+    }
+    // a request that never became a scene (`begin` failed): the field keeps its fader
+    if cut.0.is_none() && pending_req.is_none() && !bridge.pending {
+        if let Some(f) = cut.2.take() {
+            rt.faders[1] = f;
+        }
+    }
     // a bridged movie ends with its `MovieStatus`
     if let (Some(g), Some(m)) = (bridge.movie_gen, movie.as_ref()) {
         if m.generation > g || (m.generation == g && m.is_over() && movie_req.is_none()) {
@@ -1998,6 +2031,9 @@ fn field_bridge(
         bridge.pending = true;
         bridge.event = m.event;
         commands.insert_resource(CutsceneRequest::new(m.name.clone()));
+        // the scene's fader starts from the field's (taken over in `begin`, before the scene's first script event)
+        cut.2 = Some(rt.faders[1]);
+        rt.faders[1] = crate::socket::Fader::default();
     }
 }
 
