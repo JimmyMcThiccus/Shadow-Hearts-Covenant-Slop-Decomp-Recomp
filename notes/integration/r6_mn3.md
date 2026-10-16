@@ -7,6 +7,7 @@
 | 1. combo switch bit | **fixed** (both sides) | see "Combo switch" below: bit 0 = the battle's `Combo` command, bit 1 = the shortcut switch, copied from `MENU+0x276` at each battle start |
 | 2. shortcut setting overlay (mode 0x18) | **done** | `sh2_battle/src/shortcut.rs` (`setting_row`, `SettingMenu`, `write_row`, `draw_setting`) + `plugin.rs` `run_shortcut_setting` hook; shots `screens/r6_mn3/shortcut_setting.png`, `shortcut_set.png` |
 | 3. title Options / Theater hi-res | **checked + fixed** | text crisp at 1440x1080; Theater hints rebuilt as retail (3 lines + pad icons), title texts proportional + 0.8 narrow, Options cursor stuck on Vibration fixed, Sound box 6 px lower |
+| 6. fourth pass (shops live) | **shop done; Solomon / tailor not reachable live** | see "Fourth pass" |
 | 5. third pass (measure / weight / Game Over) | **done** | see "Third pass"; shops / Solomon / tailor not compared live (no capture reachable) |
 | 4. MN2 open items (second pass) | **Graveyard / Combo Magic / Library checked against live, fixed** | see "Task 4" below; Library data view and the soul charge 3D still not compared live |
 
@@ -108,6 +109,25 @@ snapped, combo 0 seen) and `goto:grave / combomagic / library`; before / after i
   so they were only re-shot at 1440 x 1080 (`t5_shop_buy_1440.png`, `t5_tailor_1440.png`); fixed the Solomon menu's "Solomon's Decipher
   Text" overflowing its window (narrow like a `MenuText`).  A live check needs a state at a shop / Solomon / tailor (coordinator).
 * **Zodiac tile names**: no FS2 request in requests.md yet.
+
+## Fourth pass (2026-10-16): shops live (debug room)
+
+* Live: DB_00_U, Circle + Square > ショップ, shop number 6 (`La Cage Aux Songes`); captures `screens/r6_mn3/live_shop_main.png`,
+  `live_shop_buy.png`.  Nothing bought; the game is back on the debug room floor (menu closed).
+* **Solomon / tailor not captured**: the debug menus have no launcher for them; reaching them needs a map jump out of DB_00_U, and the
+  debug menu only works on the debug map, so the game could not be brought back without a state load.  Left for a session with a save
+  state at Paris (PA_03_U).
+* **Shop, retail layout rebuilt** (`shop.rs` `draw_main_retail` / `draw_list_retail`, the demo layout kept): the US `primWin`s are built
+  with style 0 (no panel; US `buildWin` args from FIELD 0x5258e8..0x52bc40), so the port's blue boxes went.  Main page: shop name and
+  Buy / Sell / Equip / Leave Shop in the field serif (proportional, x 0.8), no menu box, the command cursor; the Point Card is a
+  `MenuWindowGeneral` with the white title and the text in the serif with cyan `%p7` highlights (body squeezed to 0.725, fitted on live).
+  Goods list: the rank banner is the `MenuWindowCompact` capsule (red `%p1` discount), rows of 21 px with item icons, cyan selected row,
+  `x` quantities, `n/m` page and scroll mark; the right column without boxes between two lavender rules; medallions lower; `L2 R2 : Scroll`
+  with the pad icons; one-line `Notes`; `Cash` at the bottom right (no Time in shops).  Positions measured on the live captures (mapping
+  live px -> virtual: x / 1.707, (y + 33) / 1.463).
+* **Common frames**: `compact_frame` / `note_frame` used the wrong texture (attach 14 / 1); their records' UVs address the 88 x 120 sheet
+  of attach 8: the capsule now renders.
+* Not compared live: the query / discount / ring / result windows (they keep their port panels), the Sell list.
 
 ## Open (priority order)
 

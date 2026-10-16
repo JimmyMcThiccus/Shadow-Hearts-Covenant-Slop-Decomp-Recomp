@@ -153,7 +153,8 @@ impl MenuGfx for LayerGfx<'_> {
         if let Some(b) = &self.fonts {
             let (slot, scale) = font_slot(b, font_number);
             if let Some(f) = b.get(slot) {
-                let (prop, extra) = crate::gfx::run_layout(false, hscale, shadow);
+                // the field serif is always laid out proportionally (field windows, the retail shop's main page)
+                let (prop, extra) = crate::gfx::run_layout(font_number == FIELD_FONT, hscale, shadow);
                 let s = sjis::strip_codes(&sjis::decode(text));
                 let w = s.lines().map(|l| f.measure_layout(l, extra, prop)).fold(0.0f32, f32::max);
                 return w * scale * hscale;

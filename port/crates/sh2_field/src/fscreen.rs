@@ -432,6 +432,12 @@ pub fn palette(n: u8, base: Rgba) -> Rgba {
 /// widest line width.  `line_h` is the line pitch.
 #[allow(clippy::too_many_arguments)]
 pub fn coded_text(g: &mut dyn MenuGfx, x: f32, y: f32, s: &str, font: u8, base: Rgba, line_h: f32, shadow: bool) -> f32 {
+    coded_text_h(g, x, y, s, font, base, line_h, shadow, 1.0, palette)
+}
+
+/// Round 6 MN3: [`coded_text`] with a width factor (`hscale`, narrow retail `MenuText`s) and the build's palette for the `%pN` codes.
+#[allow(clippy::too_many_arguments)]
+pub fn coded_text_h(g: &mut dyn MenuGfx, x: f32, y: f32, s: &str, font: u8, base: Rgba, line_h: f32, shadow: bool, hscale: f32, palette: fn(u8, Rgba) -> Rgba) -> f32 {
     let mut col = base;
     let (mut px, mut py, mut maxw) = (x, y, 0.0f32);
     let cs: Vec<char> = s.chars().collect();
@@ -441,9 +447,9 @@ pub fn coded_text(g: &mut dyn MenuGfx, x: f32, y: f32, s: &str, font: u8, base: 
         if seg.is_empty() {
             return;
         }
-        text_run(g, *px, py, seg, font, col, if shadow { Some((1, 1)) } else { None });
-        let (w, _) = g.measure_text(font, &sh2_menu::sjis::encode(seg));
-        *px += w;
+        let sh = if shadow { Some((1, 1)) } else { None };
+        crate::cmd_ui::text_run_h(g, *px, py, seg, font, col, sh, hscale);
+        *px += crate::cmd_ui::run_width(g, font, seg, hscale, sh);
         seg.clear();
     };
     while i < cs.len() {

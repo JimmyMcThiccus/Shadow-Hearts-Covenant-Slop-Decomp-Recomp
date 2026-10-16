@@ -207,7 +207,9 @@ pub fn message_frame(g: &mut dyn MenuGfx, cmn: &CommonScene, x: f32, y: f32, w: 
 pub fn compact_frame(g: &mut dyn MenuGfx, cmn: &CommonScene, x: f32, y: f32, w: f32, alpha: u8) {
     let wp = (w - 44.0).max(0.0);
     let (ox, oy) = (x + 18.0, y + 6.0);
-    let tex = cmn.s.t(14);
+    // round 6 MN3: the records' UVs (u 48..74, v 84..118) address the 88 x 120 frame sheet of attach 8 (the `MenuWindowGeneral` one), not
+    // attach 14 (32 x 96): the capsule drew as untextured dark quads
+    let tex = cmn.s.t(8);
     cmn_sprite(g, cmn, tex, 0x18, ox, oy, 0.0, 0.0, Some(20.0 + wp), None, alpha);
     for i in [0x1busize, 0x1c] {
         cmn_sprite(g, cmn, tex, i, ox, oy, 0.0, 0.0, Some(wp + 2.0), None, alpha);
@@ -221,7 +223,8 @@ pub fn compact_frame(g: &mut dyn MenuGfx, cmn: &CommonScene, x: f32, y: f32, w: 
 pub fn note_frame(g: &mut dyn MenuGfx, cmn: &CommonScene, x: f32, y: f32, w: f32, alpha: u8) {
     let wp = (w - 89.0).max(0.0);
     let (ox, oy) = (x + 28.0, y + 13.0);
-    let tex = cmn.s.t(1);
+    // round 6 MN3: UVs (u 1..46, v 33..57) on the 88 x 120 sheet of attach 8 as well (attach 1 is 32 x 18)
+    let tex = cmn.s.t(8);
     cmn_sprite(g, cmn, tex, 0, ox, oy, 0.0, 0.0, Some(46.0 + wp), None, alpha);
     for i in [5usize, 6] {
         cmn_sprite(g, cmn, tex, i, ox, oy, 0.0, 0.0, Some(wp + 1.0), None, alpha);

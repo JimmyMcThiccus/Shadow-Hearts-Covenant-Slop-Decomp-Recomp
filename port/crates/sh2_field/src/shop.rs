@@ -1269,14 +1269,21 @@ impl FieldScreen for ShopScreen {
             blit(g, Some(t), 16.0, 12.0, w as f32, h as f32, (0.0, 0.0, w as f32, h as f32), Rgba::new(0x80, 0x80, 0x80, (128.0 * a) as u8));
         }
         if matches!(self.phase, Phase::FadeIn | Phase::Main | Phase::Leaving) {
-            label(g, 24.0, 52.0, &self.name.0, a);
-            label_c(g, 24.0, 70.0, &self.name.1, 14, Rgba::new(0x70, 0xc0, 0xff, (128.0 * a) as u8));
+            if self.d.retail {
+                // live (debug-room shop tester, `screens/r6_mn3/live_shop_main.png`): the name alone, narrow, at (94, 74)
+                stext(g, 94.0, 74.0, &self.name.0, Rgba::new(0x80, 0x80, 0x80, (128.0 * a) as u8));
+            } else {
+                label(g, 24.0, 52.0, &self.name.0, a);
+                label_c(g, 24.0, 70.0, &self.name.1, 14, Rgba::new(0x70, 0xc0, 0xff, (128.0 * a) as u8));
+            }
         }
         self.draw_cash(g, a);
         match self.phase {
+            Phase::FadeIn | Phase::Main | Phase::Leaving if self.d.retail => self.draw_main_retail(g, a),
             Phase::FadeIn | Phase::Main | Phase::Leaving => self.draw_main(g, a),
             // the ring and the result window are alone on the screen
             Phase::RingIntro | Phase::Ring | Phase::RingEnd | Phase::Result => {}
+            _ if self.d.retail => self.draw_list_retail(g, a),
             _ => self.draw_list(g, a),
         }
         match self.phase {
@@ -1300,12 +1307,171 @@ impl ShopScreen {
 
     fn draw_cash(&self, g: &mut dyn MenuGfx, a: f32) {
         let c = Rgba::new(0x80, 0x80, 0x80, (128.0 * a) as u8);
+        if self.d.retail {
+            // US `shopCash::mSetupCash` (FIELD 0x531030): window (330, 392); live: the `Cash` half of the `Cash Time` label (no time in a
+            // shop) at x 333..370, y 393..411 and the amount right-aligned at x 481 on the same row
+            if let Some((t, (_, h))) = self.tex.cash_label {
+                blit(g, Some(t), 330.0, 390.0, 46.0, h as f32, (0.0, 0.0, 46.0, h as f32), c);
+            }
+            let s = format!("{}", self.cash);
+            let wpx = self.digits.width(&s);
+            self.digits.draw(g, 482.0 - wpx, 390.0, &s, c);
+            return;
+        }
         if let Some((t, (w, h))) = self.tex.cash_label {
             blit(g, Some(t), 330.0, 14.0, w as f32, h as f32, (0.0, 0.0, w as f32, h as f32), c);
         }
         let s = format!("{}", self.cash);
         let wpx = self.digits.width(&s);
         self.digits.draw(g, 492.0 - wpx, 34.0, &s, c);
+    }
+
+    /// Retail main page (live debug-room shop tester): the menu has no window (US `mSetupMainMenuWin` builds it with style 0), rows at
+    /// (190, 117 + 26 i); the rank card is a `MenuWindowGeneral` (style 6) at (96, 272, 320, 80) with the white title at x 198 and the
+    /// text in white with cyan `%p7` highlights.
+    fn draw_main_retail(&self, g: &mut dyn MenuGfx, a: f32) {
+        let al = (128.0 * a) as u8;
+        let white = Rgba::new(0x80, 0x80, 0x80, al);
+        for (i, s) in self.d.text.main_menu.iter().take(4).enumerate() {
+            let sel = i == self.main_sel && self.phase == Phase::Main;
+            stext(g, 190.0, 117.0 + 26.0 * i as f32, s, if sel { Rgba::new(0x00, 0x80, 0x80, al) } else { white });
+        }
+        if self.phase == Phase::Main {
+            self.sc_cursor(g, 184.0, 117.0 + 26.0 * self.main_sel as f32 + 10.0);
+        }
+        // (outer frame on screen 77..432 x 255..363, live)
+        crate::cmd_common::general_frame(g, &self.sc.cmn, 94.0, 261.0, 327.0, 98.0, al);
+        let card = if self.rank >= 4 && self.d.retail { 1 } else { 0 };
+        let mut title = self.d.text.card.get(card).cloned().unwrap_or_default();
+        if title.is_empty() {
+            title = self.d.text.title.clone();
+        }
+        stext(g, 198.0, 270.0, &title, white);
+        let pop = self.d.text.popup.get(self.rank.min(4)).cloned().unwrap_or_default();
+        serif_coded(g, 98.0, 298.0, &pop, white, 21.0);
+    }
+
+    /// Retail goods list (live debug-room shop tester `live_shop_buy.png`; US `mSetupBuySellWin` FIELD 0x5279f0): every `primWin` here is
+    /// built with style 0 (no frame) except the rank banner (`MenuWindowNote`, style 3).  Rows of the goods window (40, 72) are 21 apart
+    /// with the item icon at the row origin, the name at +18, `%7d` at +160 and `x %2d` at +224; the right column holds the points / rank
+    /// and the counts between two lavender rules; the party medallions and the P-ATK .. S-DEF block sit lower; the note is the plain
+    /// `Notes` line at the bottom, `L2 R2 : Scroll` above the cash.
+    fn draw_list_retail(&self, g: &mut dyn MenuGfx, a: f32) {
+        let t = &self.d.text;
+        let al = (128.0 * a) as u8;
+        let white = Rgba::new(0x80, 0x80, 0x80, al);
+        let grey = Rgba::new(0x50, 0x50, 0x50, al);
+        let cyan = Rgba::new(0x00, 0x80, 0x80, al);
+        // rank banner (live outer 102..349 x 26..57, text from x 128)
+        // (US style code 3; on screen it is the 34 px capsule with round ends of `MenuWindowCompact`)
+        crate::cmd_common::compact_frame(g, &self.sc.cmn, 102.0, 24.0, 247.0, al);
+        let title = if self.buy { &t.title_buy_rank } else { &t.title_sell_rank };
+        crate::fscreen::coded_text_h(g, 128.0, 32.0, title.get(self.rank.min(4)).map(|s| s.as_str()).unwrap_or(""), 0, white, 20.0, true, sh2_menu::gfx::NARROW, retail_palette);
+        // goods
+        for (vi, row) in self.rows.iter().enumerate().skip(self.top).take(VISIBLE_ROWS) {
+            let y = 72.0 + 21.0 * (vi - self.top) as f32;
+            let sel = vi == self.sel;
+            let dim = row.limit <= 1 && self.buy || row.price == -1 && !self.buy;
+            let c = if sel { cyan } else if dim { grey } else { white };
+            let cell = match row.kind {
+                2 => self.sc.mdt.mdt_data(8, row.idx).first().copied().unwrap_or(9) as usize,
+                3 => 15,
+                4 => 16,
+                6 => 13,
+                _ => 12,
+            };
+            crate::cmd_common::draw_icon(g, &self.sc.cmn, cell, 40.0, y, al);
+            let name = crate::shop::display_name_cache(self, row);
+            ntext(g, 58.0, y, &name, c);
+            let price = if row.price == -1 { "      -".to_string() } else { cfmt("%7d", &[A::I(row.price as i64)]) };
+            ntext(g, 200.0, y, &price, c);
+            ntext(g, 264.0, y, &cfmt("\u{d7} %2d", &[A::I(row.qty as i64)]), c);
+        }
+        let pages = self.rows.len().div_ceil(VISIBLE_ROWS);
+        if pages > 1 {
+            crate::cmd_common::draw_scroll_marks(g, 199.0, 64.0, 182.0, self.top > 0, self.top + VISIBLE_ROWS < self.rows.len(), self.anim, al);
+            ntext(g, 285.0, 179.0, &cfmt("%2d/%2d", &[A::I((self.sel / VISIBLE_ROWS + 1) as i64), A::I(pages as i64)]), white);
+        }
+        // right column: total (only while something is chosen), points / next rank, counts, between two rules
+        let i = &t.info;
+        let get = |k: usize| i.get(k).cloned().unwrap_or_default();
+        let rule = |g: &mut dyn MenuGfx, y: f32| {
+            use sh2_menu::gfx::{Blend, DrawCmd};
+            let c0 = Rgba::new(0x3b, 0x39, 0x44, 0);
+            let c1 = Rgba::new(0x3b, 0x39, 0x44, al);
+            let v = crate::cmd_ui::vtx;
+            g.draw(DrawCmd::Quad { tex: None, v: [v(300.0, y, 0.0, 0.0, c0), v(300.0, y + 4.0, 0.0, 0.0, c0), v(410.0, y, 0.0, 0.0, c1), v(410.0, y + 4.0, 0.0, 0.0, c1)], blend: Blend::Alpha });
+            fill(g, 410.0, y, 102.0, 4.0, c1);
+        };
+        let amount = self.shown_amount();
+        if self.total > 0 {
+            ntext(g, 333.0, 62.0, &get(0), white);
+            rtext(g, 497.0, 62.0, &cfmt("%d", &[A::I(amount as i64)]), white);
+        }
+        rule(g, 85.0);
+        let lines: Vec<String> = get(1).split('$').map(str::to_string).collect();
+        ntext(g, 333.0, 97.0, lines.first().map(|s| s.as_str()).unwrap_or(""), white);
+        ntext(g, 333.0, 117.0, lines.get(1).map(|s| s.as_str()).unwrap_or(""), white);
+        rtext(g, 497.0, 97.0, &cfmt("%d", &[A::I(self.points as i64)]), white);
+        let next = if self.rank < self.d.tables.max_rank { cfmt("%d", &[A::I(self.to_next.max(0) as i64)]) } else { "------".into() };
+        rtext(g, 497.0, 117.0, &next, white);
+        rule(g, 145.0);
+        if let Some(r) = self.rows.get(self.sel) {
+            let lines: Vec<String> = get(2).split('$').map(str::to_string).collect();
+            ntext(g, 352.0, 157.0, lines.first().map(|s| s.as_str()).unwrap_or(""), white);
+            ntext(g, 352.0, 177.0, lines.get(1).map(|s| s.as_str()).unwrap_or(""), white);
+            rtext(g, 501.0, 157.0, &format!("{}", r.equipped), white);
+            rtext(g, 501.0, 177.0, &format!("{}", r.owned), white);
+        }
+        // party medallions (live: x 61..117, y 214..289) with the comparison values under them
+        for (i, p) in self.pcs.iter().enumerate() {
+            let x = 62.0 + 54.0 * i as f32;
+            let fi = if p.face >= 6 { p.face as usize - 6 } else { p.face as usize };
+            if let Some(Some(f)) = self.tex.faces.get(fi) {
+                blit(g, Some(*f), x + 1.0, 236.0, 50.0, 54.0, (0.0, 0.0, 56.0, 70.0), white);
+            }
+            if let Some((fr, (w, h))) = self.tex.frame {
+                blit(g, Some(fr), x - 3.0, 231.0, 58.0, 60.0, (0.0, 0.0, w as f32, h as f32), white);
+            }
+            if self.equipped_here.get(i).copied().unwrap_or(false) {
+                label_c(g, x + 34.0, 224.0, &self.d.text.equip_mark, 2, Rgba::new(0xff, 0xd0, 0x40, 0x80));
+            }
+            let dim = !self.can_equip.get(i).copied().unwrap_or(false);
+            if let Some(cells) = self.cmp.get(i) {
+                for (k, (v, d)) in cells.iter().enumerate() {
+                    let col = if dim && self.rows.get(self.sel).map(|r| matches!(r.kind, 2..=4)).unwrap_or(false) {
+                        grey
+                    } else if *d > 0 {
+                        Rgba::new(0x80, 0x68, 0x20, al)
+                    } else if *d < 0 {
+                        Rgba::new(0x38, 0x50, 0x80, al)
+                    } else {
+                        white
+                    };
+                    rtext(g, x + 33.0, 291.0 + 20.0 * k as f32, &format!("{v}"), col);
+                }
+            }
+        }
+        for (k, s) in t.status.iter().take(4).enumerate() {
+            label_c(g, 7.0, 290.0 + 20.0 * k as f32, s, 2, crate::cmd_retail::rgb(crate::cmd_retail::LAVENDER, al));
+        }
+        // scroll hint: L2 / R2 icons of the common sheet, then `: Scroll`
+        if let Some(tex) = self.sc.cmn.s.t(6) {
+            for (k, cx) in [0.0f32, 16.0].into_iter().enumerate() {
+                blit(g, Some(tex), 382.0 + cx, 370.0, 16.0, 20.0, (k as f32 * 16.0, 20.0, k as f32 * 16.0 + 16.0, 40.0), white);
+            }
+        }
+        ntext(g, 414.0, 372.0, get(3).trim_start(), white);
+        // note: the `Notes` label and the first line of the description
+        if let Some((nt, (w, h))) = self.tex.note {
+            blit(g, Some(nt), 12.0, 390.0, w as f32, h as f32, (0.0, 0.0, w as f32, h as f32), white);
+        }
+        if let Some(l) = self.desc.lines().next() {
+            ntext(g, 23.0, 418.0, &sh2_menu::sjis::strip_codes(l), white);
+        }
+        if self.phase == Phase::List {
+            self.sc_cursor(g, 40.0, 72.0 + 21.0 * (self.sel - self.top) as f32 + 10.0);
+        }
     }
 
     fn draw_main(&self, g: &mut dyn MenuGfx, a: f32) {
@@ -1336,6 +1502,13 @@ impl ShopScreen {
     }
 
     fn sc_cursor(&self, g: &mut dyn MenuGfx, x: f32, y: f32) {
+        // retail: the command menu's cursor (arrow + flare, spinning), as live
+        if self.d.retail {
+            let mut c = crate::cmd_page::CmdCursor::new(x, y);
+            c.angle = (self.anim * 0.5) % 360.0;
+            c.draw(g, &self.sc.cmn, 0x80);
+            return;
+        }
         if let Some(t) = self.sc.cmn.s.t(2) {
             let k = (self.anim * 0.012).sin().abs().max(0.4);
             blit(g, Some(t), x - 22.0, y - 10.0 * k, 20.0, 20.0 * k, (0.0, 0.0, 20.0, 20.0), Rgba::new(0x80, 0x80, 0x80, 0x80));
@@ -1549,6 +1722,75 @@ impl ShopScreen {
 }
 
 /// Name of a list row.
+/// Narrow menu text with the 1 px shadow (a retail `MenuText`).
+fn ntext(g: &mut dyn MenuGfx, x: f32, y: f32, s: &str, c: Rgba) {
+    crate::cmd_ui::text_run_h(g, x, y, s, 0, c, Some((1, 1)), sh2_menu::gfx::NARROW);
+}
+
+/// The field serif (`MFIELD.MSD`, `bevy_ui::FIELD_FONT`) the retail shop's main page uses (live: shop name, Buy / Sell / Equip / Leave
+/// Shop and the rank card), proportional and narrow like the field windows.
+fn stext(g: &mut dyn MenuGfx, x: f32, y: f32, s: &str, c: Rgba) {
+    stext_h(g, x, y, s, c, sh2_menu::gfx::NARROW);
+}
+
+fn stext_h(g: &mut dyn MenuGfx, x: f32, y: f32, s: &str, c: Rgba, hscale: f32) {
+    g.draw(sh2_menu::gfx::DrawCmd::Text(sh2_menu::gfx::TextRun {
+        pos: bevy::math::Vec2::new(x, y),
+        text: sh2_menu::sjis::encode(s),
+        font_number: sh2_menu::bevy_ui::FIELD_FONT,
+        clut_set: 0,
+        spacing: 0,
+        color: c,
+        shadow: Some((0, 1)),
+        glyph_alpha: Vec::new(),
+        visible: usize::MAX,
+        hscale,
+        proportional: true,
+    }));
+}
+
+/// The rank card's body runs narrower than the title (live: line 1 ink 99..360 = 0.906 of the 0.8 layout); fitted, cause not decompiled.
+const CARD_HS: f32 = 0.725;
+
+/// [`stext`] with the `%pN` colour codes ([`retail_palette`]) and `$` line breaks.
+fn serif_coded(g: &mut dyn MenuGfx, x: f32, y: f32, s: &str, base: Rgba, line_h: f32) {
+    for (li, line) in s.replace('\n', "$").split('$').enumerate() {
+        let (mut px, py) = (x, y + li as f32 * line_h);
+        let mut col = base;
+        let mut rest = line;
+        while !rest.is_empty() {
+            if let Some(r) = rest.strip_prefix("%p") {
+                let n = r.chars().next().and_then(|c| c.to_digit(10)).unwrap_or(0) as u8;
+                col = retail_palette(n, base);
+                rest = r.get(1..).unwrap_or("");
+                rest = rest.strip_prefix('\\').unwrap_or(rest);
+                continue;
+            }
+            let end = rest.find("%p").unwrap_or(rest.len());
+            let seg = rest[..end].replace("%%", "%").replace('\\', "");
+            stext_h(g, px, py, &seg, col, CARD_HS);
+            px += g.measure_run(sh2_menu::bevy_ui::FIELD_FONT, &sh2_menu::sjis::encode(&seg), CARD_HS, Some((0, 1)));
+            rest = &rest[end..];
+        }
+    }
+}
+
+/// [`ntext`] right-aligned at `xr`.
+fn rtext(g: &mut dyn MenuGfx, xr: f32, y: f32, s: &str, c: Rgba) {
+    let w = crate::cmd_ui::run_width(g, 0, s, sh2_menu::gfx::NARROW, Some((1, 1)));
+    ntext(g, xr - w, y, s, c);
+}
+
+/// The US shop texts' palette codes (`SHOP.DAT` msg: `%p7` = the cyan highlight of the rank card, `%p1` = the red discount of the banner).
+fn retail_palette(n: u8, base: Rgba) -> Rgba {
+    match n {
+        1 => Rgba::new(0x70, 0x14, 0x1c, base.a),
+        7 => Rgba::new(0x00, 0x80, 0x80, base.a),
+        0 => base,
+        _ => crate::fscreen::palette(n, base),
+    }
+}
+
 pub fn display_name_cache(s: &ShopScreen, row: &Row) -> String {
     s.names.get(&(row.kind, row.idx)).cloned().unwrap_or_default()
 }
