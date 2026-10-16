@@ -418,6 +418,7 @@ enum Item {
     Rain(super::rain206::Rain206),
     Taki(super::bgfx_taki::Taki),
     Drift(super::bgfx_drift::Drift208),
+    Storm(Box<super::storm209::Storm209>),
 }
 
 /// All background effects of one stage / map (`BgEffectMan` set).
@@ -467,6 +468,20 @@ impl BgFx {
         let mut rng = super::jring::XorShift((seed.max(1) as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
         let em = super::fp::SmokeEmitter::create(par, true, &mut rng);
         BgFx { items: vec![(0, Item::Smoke(Smoke { em }))], unsupported: vec![], rng, alpha: 1.0, visible: true, fades: vec![] }
+    }
+
+    /// The retail `fefCreateTorch` (VEC 3010 -> `FpTorch::CreateFromParam` 0x002a1850 -> `FpTorch::Create(pos, c1, c2, c3, size)`): one torch flame,
+    /// colours already on the 0..128 scale.
+    pub fn from_torch(pos: Vec3, c: [Vec4; 3], size: f32, seed: u32) -> BgFx {
+        let mut rng = super::jring::XorShift((seed.max(1) as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
+        let mut pos = pos;
+        pos.y -= size / 4.0;
+        let n = Flame::TORCH_COUNT;
+        let mut f = Flame { candle: false, pos, c, size, parts: vec![FpData::default(); n] };
+        for i in 0..n {
+            f.create_data(i, true, &mut rng);
+        }
+        BgFx { items: vec![(0, Item::Flame(f))], unsupported: vec![], rng, alpha: 1.0, visible: true, fades: vec![] }
     }
 
     /// An effect script's `fefCreateFlare` (JP 0x00325940 -> `FpFlare::CreateEffect(FpFlareParam*)`).
@@ -530,6 +545,11 @@ impl BgFx {
                 201 => items.push((r.slot, Item::Funsui(super::bgfx_misc::Funsui::new(&mut rng)))),
                 208 => match super::bgfx_drift::Drift208::new(rd_f32(&r.param, 0) as i32, &mut rng) {
                     Some(d) => items.push((r.slot, Item::Drift(d))),
+                    None => unsupported.push((r.slot, r.kind)),
+                },
+                // `FpRetailStorm209` (US 0x002e3150): variants 1 / 2 only, see `storm209`
+                209 => match super::storm209::Storm209::new(rd_u32(&r.param, 0), &mut rng) {
+                    Some(s) => items.push((r.slot, Item::Storm(Box::new(s)))),
                     None => unsupported.push((r.slot, r.kind)),
                 },
                 204 => match super::bgfx_taki::Taki::new(rd_f32(&r.param, 0) as i32, &mut rng) {
@@ -610,6 +630,7 @@ impl BgFx {
                 Item::Rain(r) => r.step(frames, rng),
                 Item::Taki(t) => t.step(frames, cam, rng),
                 Item::Drift(d) => d.step(frames, rng),
+                Item::Storm(s) => s.step(frames, cam, rng),
             }
         }
     }
@@ -677,6 +698,7 @@ impl BgFx {
                 Item::Rain(r) => r.quads(alpha, &mut out),
                 Item::Taki(t) => t.quads(alpha, &mut out),
                 Item::Drift(d) => d.quads(alpha, &mut out),
+                Item::Storm(s) => s.quads(alpha, &mut out),
                 Item::Smoke(s) => {
                     for p in s.em.p.iter().filter(|p| p.t > 0.0 && p.t <= p.period) {
                         let h = Vec2::new(p.size[0] * 0.5 * p.scale, p.size[1] * 0.5 * p.scale);
@@ -800,6 +822,19 @@ mod tests {
         assert_eq!(h.pos, Vec3::new(-102.0, -44.0, -49.5));
         let h2 = FpHeader::parse(&vec![0u8; 0x40]);
         assert_eq!((h2.payload, h2.flags2), (0x10, 1));
+    }
+
+    /// Retail `fefCreateTorch` (VEC 3010, round 6 FX3): one torch flame with the call's colours at the call's position.
+    #[test]
+    fn script_torch() {
+        let c = [Vec4::new(70.0, 40.0, 8.0, 120.0), Vec4::new(64.0, 16.0, 0.0, 90.0), Vec4::new(12.0, 7.0, 0.0, 40.0)];
+        let mut fx = BgFx::from_torch(Vec3::new(90.0, 0.0, 200.0), c, 60.0, 5);
+        for _ in 0..30 {
+            fx.step(1.0, Vec3::ZERO);
+        }
+        let q = fx.quads();
+        assert_eq!(q.len(), 40);
+        assert!(q.iter().all(|q| q.tex == tex::TORCH && q.additive && (q.center.x - 90.0).abs() < 30.0 && q.rgba.w <= 120.0 + 1e-3));
     }
 
     /// JP 0x0029f2e0 / 0x0029fa10: 40 particles, period <= 35, colour c1 -> c2 -> c3, the flame sits `size / 4` below the record's position.

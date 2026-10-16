@@ -48,5 +48,6 @@ pub mod sbd;
 pub mod scene;
 pub mod screenfx;
 pub mod screenfx_pass;
+pub mod storm209;
 pub mod syscalls;
 pub mod vsm;

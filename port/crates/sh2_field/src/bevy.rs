@@ -118,6 +118,9 @@ pub struct LoadedFieldMap {
     pub draws: usize,
     pub two_pass_groups: usize,
     pub warnings: Vec<String>,
+    /// FX3 hook: the BG models as the field's effect programs look them up (`fldAttachBG(2)` -> `FindFieldModel(a, b)`), keyed by
+    /// `sh2_gfx::effects::scene::field_model_name`, rest pose, PS2 world; handed to `FxRunner::named_models` when the map loads.
+    pub fx_models: Vec<(String, sh2_gfx::effects::scene::FxActor)>,
 }
 
 /// Root entity of everything spawned for the current map.
@@ -315,6 +318,8 @@ pub fn spawn_field_map_bytes_with(
 
     let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
     let recs = mps.models()?;
+    // FX3 hook: `FindFieldModel(a, b)` counts the kind-0 (a == 0) / kind-2 (a != 0) BG models in record order
+    let mut fx_counts = [0i32; 2];
     // BG motions (kind 3) by target model index
     let mut motions_of: Vec<Vec<std::sync::Arc<Motion>>> = vec![Vec::new(); recs.len()];
     for rec in recs.iter().filter(|r| matches!(r.kind, ModelKind::Motion)) {
@@ -348,6 +353,16 @@ pub fn spawn_field_map_bytes_with(
         };
         out.warnings.extend(model.warnings.iter().map(|w| format!("MODEL `{}`: {w}", rec.name)));
         let local = placement(rec.pos, rec.rot);
+        let fx_kind = match rec.kind {
+            ModelKind::Bg0 => Some(0),
+            ModelKind::Bg2 => Some(1),
+            _ => None,
+        };
+        if let Some(k) = fx_kind {
+            let name = sh2_gfx::effects::scene::field_model_name(k, fx_counts[k as usize]);
+            fx_counts[k as usize] += 1;
+            out.fx_models.push((name, sh2_gfx::effects::scene::FxActor::from_model_rest(&model, local.to_matrix())));
+        }
         motions_of[i].extend(extra(&rec.name, &model));
         if motions_of[i].is_empty() {
             let (_, st) = spawn_map_model(commands, ps2, &model, gpu, local, &rec.name);
@@ -554,6 +569,14 @@ fn load_requested_map(
                     commands.entity(e).insert(FieldMapRoot);
                 }
             }
+            // FX3 hook: the field effect programs' `fldAttachBG(2)` find these BG models (`FindFieldModel`)
+            let fx_models = map.fx_models.clone();
+            commands.queue(move |w: &mut World| {
+                if let Some(mut r) = w.get_resource_mut::<sh2_gfx::effects::runner::FxRunner>() {
+                    r.named_models.retain(|(n, _)| !n.starts_with("fld:"));
+                    r.named_models.extend(fx_models);
+                }
+            });
             commands.insert_resource(map);
         }
         Err(e) => error!("failed to load map {}: {e}", req.name),

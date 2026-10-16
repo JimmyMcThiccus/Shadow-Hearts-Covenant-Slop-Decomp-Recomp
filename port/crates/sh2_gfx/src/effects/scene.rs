@@ -23,7 +23,6 @@ use sh2_formats::math::{FVector, Matrix};
 use sh2_formats::model::Model;
 use sh2_formats::motion::Motion;
 use sh2_script::efmg::{kind, Efmg};
-use sh2_script::opcodes::VEC_FUNC_TABLE;
 use sh2_script::vsm::Vec3 as VmMem;
 
 use super::bbp::Bbpf;
@@ -36,7 +35,7 @@ use crate::model::ModelInstance;
 pub const TICK: f32 = 1.0 / 30.0;
 
 pub fn syscall_name(id: i32) -> &'static str {
-    VEC_FUNC_TABLE.iter().find(|f| f.id == id).map(|f| f.name).unwrap_or("?")
+    sh2_script::opcodes::us_func(id).map(|f| f.name).unwrap_or("?")
 }
 
 // ------------------------------------------------------------------------------------------------------------------
@@ -143,6 +142,23 @@ impl FxActor {
         FxActor { pos, world: Mat4::from_translation(pos), height, ..Default::default() }
     }
 
+    /// A model standing still in its rest pose with the model-to-world matrix `world` (PS2 world), every frame listed the way
+    /// `render::fx_actor_of` lists a posed character (joint position of `pose * bind`, the pose's rotation): a field BG model as
+    /// `fldAttachBG(2)` sees it (`FindFieldModel`, see [`field_model_name`]).
+    pub fn from_model_rest(model: &Model, world: Mat4) -> Self {
+        let sk = crate::model::skeleton::Skeleton::from_model(model);
+        let bones = sk
+            .bones
+            .iter()
+            .map(|b| {
+                let mut fm = Mat4::IDENTITY;
+                fm.w_axis = b.bind.to_glam().w_axis;
+                (b.name.clone(), world * fm)
+            })
+            .collect();
+        FxActor { pos: world.w_axis.truncate(), world, bones, height: 0.0, ..Default::default() }
+    }
+
     /// `searchFrame(name)` + `getWorldPos/Rot`: the frame's world matrix, or a body-height fallback when the skeleton is unknown.
     pub fn frame(&self, name: &str) -> Mat4 {
         if let Some((_, m)) = self.bones.iter().find(|(n, _)| n.eq_ignore_ascii_case(name)) {
@@ -155,6 +171,15 @@ impl FxActor {
             _ => self.world * Mat4::from_translation(Vec3::new(0.0, -self.height * 0.5, 0.0)),
         }
     }
+}
+
+/// The `named_models` key of the field BG model `fldAttachBG(model, a, b, frame)` / `fldAttachBG2` look up: `FindFieldModel(a, b)` (US 0x00342450,
+/// JP 0x0030bfe0) walks `CField::GetBGModel(i)` over the `CFieldBG` models (the MPS `MODEL` records of kind 0 / 1 / 2 in file order, motions
+/// excluded) and returns the `b`-th whose model type (`CFieldModel +0x98` JP / `+0xa8` US, `SetModelType(kind 0 -> 1, 1 -> 2, 2 -> 0)`) is 1 when
+/// `a == 0`, else 0: `a == 0` counts the kind-0 records, any other `a` the kind-2 records; kind 1 is never found.  The field registers its models
+/// as `"fld:0:<b>"` / `"fld:1:<b>"`.
+pub fn field_model_name(a: i32, b: i32) -> String {
+    format!("fld:{}:{b}", (a != 0) as i32)
 }
 
 /// Who casts (`gen`) and who is hit (`targets`), plus the scene's own light colours (`colGet/SetLightColor`).
@@ -2240,8 +2265,23 @@ impl FxScene {
                 self.fparts.push(FxFParticle { handle: h, fx, ztest: true, layer: 0 });
                 out_u32(v, a, 12, h);
             }
-            3007 | 3010 => {
-                // fefCreateThunder / (retail) fefCreateTorch: no shipped program calls them (census: 0); accepted with a handle, not drawn
+            3010 => {
+                // retail fefCreateTorch(pos, col1, col2, col3, size, &handle) (US 0x0035d990: `new FpTorch` (0xc0) + `FpTorch::CreateFromParam` 0x002a1850): the colours arrive
+                // as 0..255 float vectors, are stored as rgba bytes (`+0x10 / +0x14 / +0x18`) and scaled by 0.502 -> `FpTorch::Create(pos, c1, c2, c3,
+                // size)`.  Used by the N094 / N100B cut scene tracks (a burning torch at a bone).
+                let byte = |x: f32| ((x.max(0.0) as u32) & 0xff) as f32 * 0.501_960_8; // `(u32) f & 0xff` (US 0x0035daa0..)
+                let c = |k: usize| {
+                    let w = avec(v, a, k);
+                    Vec4::new(byte(w.x), byte(w.y), byte(w.z), byte(w.w))
+                };
+                let (pos, cols, size) = (avec(v, a, 0).truncate(), [c(1), c(2), c(3)], af(v, a, 4));
+                let h = self.handle();
+                let fx = super::bgfx::BgFx::from_torch(pos, cols, size, h ^ self.tick);
+                self.fparts.push(FxFParticle { handle: h, fx, ztest: true, layer: 0 });
+                out_u32(v, a, 5, h);
+            }
+            3007 => {
+                // fefCreateThunder: no shipped program calls it (census: 0); accepted with a handle, not drawn
                 *self.ignored.entry("fef").or_default() += 1;
                 *self.ignored_ids.entry(id).or_default() += 1;
                 let h = self.handle();
@@ -2373,9 +2413,10 @@ impl FxScene {
             }
             2302 | 2303 => {
                 // fldAttachBG / fldAttachBG2(model, a, b, frame): `FindFieldModel(a, b)` -> `searchFrame` -> model +0x518 / `chainModel`; the host lists the field
-                // models as `named_models` entries "fld:<a>:<b>"
+                // models as `named_models` entries ([`field_model_name`]; `sh2_field::bevy` fills them from the map's MPS).  `fldAttachBG` sets the
+                // model's reference frame (`+0x518`), `fldAttachBG2` chains it to the frame: both follow the frame, which is all the port draws
                 let (h, x, y, frame) = (ai(v, a, 0) as u32, ai(v, a, 1), ai(v, a, 2), astr(v, a, 3));
-                let name = format!("fld:{x}:{y}");
+                let name = field_model_name(x, y);
                 if !self.named_models.iter().any(|(n, _)| *n == name) {
                     *self.ignored_ids.entry(id).or_default() += 1;
                 }
@@ -2606,6 +2647,42 @@ mod tests {
             let mut vm = VmMem { thread: &mut self.th };
             self.scene.syscall(&mut vm, id, &args, &self.env)
         }
+    }
+
+    /// Round 6 FX3: retail `fefCreateTorch` (3010) draws an `FpTorch`; `fldAttachBG2` (2303) chains to a field BG model frame
+    /// (`FindFieldModel(0, 0)` = the first kind-0 MPS model, registered as `field_model_name(0, 0)`).
+    #[test]
+    fn retail_torch_and_field_attach() {
+        let mut h = Harness::new();
+        h.set_v(0, [90.0, 0.0, 200.0, 1.0]);
+        h.set_v(1, [140.0, 80.0, 16.0, 240.0]);
+        h.set_v(2, [128.0, 32.0, 0.0, 180.0]);
+        h.set_v(3, [25.0, 15.0, 0.0, 80.0]);
+        h.set_f(4, 60.0);
+        assert!(h.call(3010, 6));
+        let handle = h.get_i(5) as u32;
+        assert!(h.scene.fparts.iter().any(|p| p.handle == handle && p.fx.quads().len() == 40));
+        assert!(!h.scene.ignored_ids.contains_key(&3010));
+        assert_eq!(field_model_name(0, 0), "fld:0:0");
+        assert_eq!(field_model_name(3, 1), "fld:1:1");
+        let mut bg = FxActor::at(Vec3::new(10.0, 0.0, 0.0), 0.0);
+        bg.bones.push(("conpane".into(), Mat4::from_translation(Vec3::new(10.0, -20.0, 0.0))));
+        h.scene.named_models.push((field_model_name(0, 0), bg));
+        h.set_i(0, 0);
+        h.set_i(1, 1);
+        h.set_f(2, 0.0);
+        assert!(h.call(900, 3)); // mdlCreate(0, 1, 0)
+        let m = h.get_i(2);
+        h.set_i(0, m);
+        h.set_i(1, 0);
+        h.set_i(2, 0);
+        for (j, b) in b"conpane ".iter().enumerate() {
+            let o = Harness::off(3) as usize + j;
+            h.th.dseg[o] = *b;
+        }
+        assert!(h.call(2303, 4));
+        assert!(!h.scene.ignored_ids.contains_key(&2303));
+        assert!(h.scene.models.iter().any(|x| matches!(&x.parent, Parent::Named { name, frame } if name == "fld:0:0" && frame == "conpane")));
     }
 
     /// Retail ids 212..215 (US 0x347c40..0x347d70): two banks of 32 shared script variables.

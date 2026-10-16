@@ -166,7 +166,23 @@ impl SysCalls for FxHost {
                     }
                 }
             }
-            2600 | 2601 => {} // strStrCopy / strStrNCopy: scripts only use them for debug names
+            2600 | 2601 => {
+                // strStrCopy(dst, src) = `strcpy` / strStrNCopy(dst, src, n) = `memcpy(dst, src, n); dst[n] = 0` (JP 0x00323f40 / 0x00323f90).  Cut scene
+                // tracks copy a model name into a string variable and pass it to `lsdGetModel` (N094 / N100B: `Smg_a` ..), so the copy matters
+                let (dst, src) = (arg(0) as usize, arg(1) as usize);
+                let d = &mut vm.thread.dseg;
+                let mut bytes: Vec<u8> = d.get(src..).unwrap_or(&[]).iter().copied().take_while(|&c| c != 0).collect();
+                if id == 2601 {
+                    let n = ri(vm, 2).max(0) as usize;
+                    let d = &vm.thread.dseg;
+                    bytes = d.get(src..).unwrap_or(&[]).iter().copied().take(n).collect();
+                }
+                bytes.push(0);
+                let d = &mut vm.thread.dseg;
+                if let Some(t) = d.get_mut(dst..dst + bytes.len()) {
+                    t.copy_from_slice(&bytes);
+                }
+            }
             3100 => vm.write_u32(arg(0), 0), // padGetKeyPress
             _ => {
                 *self.unknown.entry(super::scene::syscall_name(id)).or_default() += 1;

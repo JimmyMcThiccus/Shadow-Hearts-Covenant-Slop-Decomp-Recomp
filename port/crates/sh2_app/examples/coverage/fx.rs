@@ -125,7 +125,14 @@ fn check(disc: &sh2_core::fileio::Disc, path: &str) -> Row {
         }
     };
     let id = efd_id(path);
-    match run_program(id, bytes, 1, &[]) {
+    // round 6 FX3: a field effect (`FIELD/EFF/`) may look the map's BG models up (`fldAttachBG(2)` -> `FindFieldModel(a, b)`); the field registers
+    // every kind-0 / kind-2 BG model of the map (`sh2_field::bevy`, `LoadedFieldMap::fx_models`), here the first 16 of each kind stand in
+    let named: Vec<String> = if path.contains("FIELD/EFF/") {
+        (0..2).flat_map(|a| (0..16).map(move |b| sh2_gfx::effects::scene::field_model_name(a, b))).collect()
+    } else {
+        vec![]
+    };
+    match run_program(id, bytes, 1, &named) {
         Err(e) => {
             row.status = "fails".into();
             row.detail = format!("parse: {e}");
