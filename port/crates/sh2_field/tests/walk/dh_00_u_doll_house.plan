@@ -1,0 +1,4 @@
+# Doll house (hidden chapter 0x65), from ai_00_u_vessel.walk resumed at DH_00_U:0 (the world-map point, taken by hand).
+# DH_00_U box 1 (ev 2) leads to DH_07_U (the doll house's boss, monster set 220) and back; DH_00_U's start function then finds 0x1d2b
+# set and 0x1d2c clear and plays the ending scene (func 0x5fa6), which sets 0x65.  Found by `story_walk --search` in 1 state.
+0x65>DH_00_U:enter box 1 (ev 2)

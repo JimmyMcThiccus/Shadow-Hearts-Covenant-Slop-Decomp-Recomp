@@ -1,0 +1,15 @@
+# Ring Tower (hidden chapter 0x69), from gi_04_r_ring_tower.walk (GI_04_R entered from the Vessel-era save, floor byte 0x79 = 0x12).
+# Each entry plays 10 floors of battles; the prompt after them (look 0x0 / ev 1: "Carry on!" / "Go back down" / "I need to think")
+# takes answer 0 to go on.  After floor 100 GI_04_R func 0x7bb7 sets register byte 0x78 = 4 and HUB_NA's start function sets 0x69.
+0x69>GI_04_R:look 0x0 (ev 1) []
+0x69>GI_04_R:look 0x0 (ev 1) []
+0x69>GI_04_R:look 0x0 (ev 1) []
+0x69>GI_04_R:look 0x0 (ev 1) []
+0x69>GI_04_R:look 0x0 (ev 1) []
+0x69>GI_04_R:look 0x0 (ev 1) []
+0x69>GI_04_R:look 0x0 (ev 1) []
+0x69>GI_04_R:look 0x0 (ev 1) []
+0x69>GI_04_R:look 0x0 (ev 1) []
+0x69>GI_04_R:look 0x0 (ev 1) []
+0x69>GI_04_R:look 0x0 (ev 1) []
+0x69>GI_04_R:look 0x0 (ev 1) []

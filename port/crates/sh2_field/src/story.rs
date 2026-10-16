@@ -142,8 +142,8 @@ pub fn story_flags(regs: &[u32]) -> Vec<u32> {
 
 /// The area (map-name prefix) whose script sets a chapter flag with a constant argument (`flag_xref --set-only`), for the chapters the
 /// walker has to reach through the world map.  A player learns where to go from the story; the walker takes it from here.
-const CHAPTER_AREAS: [(u32, &str); 15] =
-    [(0x16, "AZ"), (0x17, "FI"), (0x18, "ND"), (0x1b, "SM"), (0x1c, "CA"), (0x27, "IF"), (0x28, "AP"), (0x4c, "FU"), (0x4e, "IN"), (0x4f, "GB"), (0x50, "KA"), (0x51, "IN"), (0x52, "QG"), (0x53, "WE"), (0x54, "IN")];
+const CHAPTER_AREAS: [(u32, &str); 17] =
+    [(0x14, "AD"), (0x15, "FI"), (0x16, "AZ"), (0x17, "FI"), (0x18, "ND"), (0x1b, "SM"), (0x1c, "CA"), (0x27, "IF"), (0x28, "AP"), (0x4c, "FU"), (0x4e, "IN"), (0x4f, "GB"), (0x50, "KA"), (0x51, "IN"), (0x52, "QG"), (0x53, "WE"), (0x54, "IN")];
 
 /// The area of the next chapter (see [`CHAPTER_AREAS`]): the lowest one not reached in the half of the highest chapter reached;
 /// `None` when it is not known.  The first half branches (the walk can finish Wales 2 .. Apoina Tower 2, 0x1d..0x28, before Nemeton /
@@ -154,6 +154,29 @@ pub fn next_chapter_area(regs: &[u32]) -> Option<&'static str> {
     // only once the story is near it (one of the three chapters before it reached): early in a new game the next area would be
     // Nemeton, and the walker left the Ardennes forest for a world map with no open point
     CHAPTER_AREAS.iter().find(|(f, _)| half.contains(f) && !flag(regs, *f)).filter(|(f, _)| (f - 3..*f).any(|g| flag(regs, g))).map(|x| x.1)
+}
+
+/// Story order the world map does not enforce (retail opens the points; the user's walkthrough reference, lparchive.org Shadow Hearts
+/// Covenant, gives the order): `(chapter, before)` = the walker does not take a step that sets `chapter` while `before` is not set.
+/// The Mirror castle (0x23) and Goreme 2 (0x24) come after Cannes 2 (0x1c); played earlier, Goreme 2 makes SM_00_U set 0x9cd and
+/// Locke's key in the prison never appears.
+const STORY_ORDER: [(u32, u32); 2] = [(0x23, 0x1c), (0x24, 0x1c)];
+
+/// Areas the world map opens before the story goes there: `(area, flag)` = the walker does not enter `area` (world-map point or map
+/// jump) before `flag` is set.  WE_03_U (Wales, right after the Ronda mine) opens the Petrograd point (`SetWorldMapPoint(0x13, 3)`),
+/// and retail lets the player go, but the story (the user's walkthrough: Florence ch. 19-23, Nemeton ch. 25-27, Cannes and the
+/// prison ch. 28-34, Russia ch. 35-43, Goreme / the Mirror castle ch. 46-49) goes to Florence; Russia leads straight on into the
+/// Hermitage, Goreme, the Mirror castle and Goreme 2 (0x24), which hides Locke's key in the prison.
+const AREA_ORDER: [(&str, u32); 4] = [("PE_", 0x1c), ("HE_", 0x1c), ("GT_", 0x1c), ("MS_", 0x1c)];
+
+/// `map` belongs to an area the story order keeps closed for now (see [`AREA_ORDER`]).
+pub fn area_too_early(regs: &[u32], map: &str) -> bool {
+    AREA_ORDER.iter().any(|&(a, f)| map.starts_with(a) && !flag(regs, f))
+}
+
+/// A chapter flag that the story order says must wait (see [`STORY_ORDER`]).
+pub fn too_early(regs: &[u32], chapter: u32) -> bool {
+    STORY_ORDER.iter().any(|&(c, b)| c == chapter && !flag(regs, b))
 }
 
 /// Areas reached only through another one: Sainte-Marguerite (SM) by Nelson's boat from Cannes (CA_02_U -> SM_00_U).
@@ -1068,7 +1091,7 @@ impl<'e> Walker<'e> {
                     continue;
                 }
                 let Some(p) = wm.points.get(e.id as usize) else { continue };
-                if p.map.is_empty() {
+                if p.map.is_empty() || area_too_early(&self.game.regs(), &p.map) {
                     continue;
                 }
                 let v = *self.visits.get(&p.map).unwrap_or(&0) as i64;
@@ -1129,9 +1152,11 @@ impl<'e> Walker<'e> {
     }
 
     fn score(&self, o: &Outcome) -> i64 {
-        let mut s = o.new_flags.len() as i64 * 1000 + o.novel as i64 * 20 + (o.save_changed.min(20) as i64) * 2 + o.picked_up as i64 * 400;
+        let early = o.new_flags.iter().filter(|&&f| too_early(&self.game.regs(), f)).count() as i64;
+        let mut s = o.new_flags.len() as i64 * 1000 - early * 200_000 + o.novel as i64 * 20 + (o.save_changed.min(20) as i64) * 2 + o.picked_up as i64 * 400;
         match &o.stop {
             Stop::Battle(_) => s += 300,
+            Stop::Jump(m, _) if area_too_early(&self.game.regs(), m) && !area_too_early(&self.game.regs(), self.game.map()) => s -= 200_000,
             Stop::Jump(m, _) => {
                 let v = *self.visits.get(m).unwrap_or(&0) as i64;
                 s += if v == 0 && self.env.has_map(m) { 200 } else { -v.min(50) };
@@ -1607,6 +1632,9 @@ impl<'e> Walker<'e> {
                 save_regs(&g.rt, &mut s);
                 let mut out = vec![];
                 for (map, entry) in self.open_world_points(&g) {
+                    if area_too_early(&g.regs(), &map) {
+                        continue;
+                    }
                     let Some(mut n) = Game::enter(self.env, clone_session(&s), &map, entry) else { continue };
                     let mut p = path.clone();
                     p.push(format!("world map -> {map}:{entry}"));
@@ -1688,6 +1716,10 @@ impl<'e> Walker<'e> {
                     let ch = if o.policy.choices.is_empty() { String::new() } else { format!(" choices {:?}", o.policy.choices) };
                     path.push(format!("[{}] {}{ch}{}", ng.map(), o.action, o.policy.ring.map(|r| format!(" ring {r}")).unwrap_or_default()));
                     for (g2, stop, path) in self.follow(g, o.stop.clone(), path, 0) {
+                    // a chapter the story order says must wait (`STORY_ORDER`): neither a goal nor a state to go on from
+                    if story_flags(&g2.regs()).iter().any(|&f| !flag(&root_regs, f) && too_early(&root_regs, f)) {
+                        continue;
+                    }
                     if goal(&g2, &stop) {
                         self.log(format!("search: found after {expanded} states ({:.0} s) from {root_map}, {} steps:", t0.elapsed().as_secs_f64(), path.len()));
                         for p in &path {

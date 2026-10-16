@@ -1,6 +1,6 @@
 # Round 6 FS2: story to the end, field scripts
 
-## Status (2026-10-16, batch 5)
+## Status (2026-10-16, batch 6)
 
 **Chapters reached (story flags set by walks, union with round 5):**
 - First half: **31 of 34** (0x18 Nemeton ruins in batch 3; 0x1b Sainte-Marguerite and 0x1c Cannes 2 in batch 4).  Missing 0x08,
@@ -16,14 +16,44 @@
 - Second half after batch 3: still 23 of 26, but the walk now **plays the whole last dungeon and the ending**: from
   `fs2/chain/6_last_dungeon_AI_00_U.walk` with the Vessel plan, AI_00..03 rings -> AI_06_U (boss, monster set 217) -> GY_00_D ->
   AI_04_U -> ED_00_U (final boss 302) -> `SpecialMenu(7)` "THE END" in 41 steps / 17 s.  0x55 is never set by a script (see above).
-- Hidden: 0 of 6 (batch 5: what sets them, below).
-- **Clean walk from New Game (batch 5, no hand-set flags): first half 26 / 34** (0x09..0x12, 0x14..0x18, 0x1d..0x26, 0x29), stuck
-  before 0x1b; second half not reached.  See batch 5.
+- Hidden: **2 of 6** (batch 6: 0x65 Doll house, 0x69 Ring Tower; what sets the others: batch 5).
+- **Clean walk from New Game (no hand-set flags), batch 6 in story order: first half 13 / 34** (0x09..0x13, 0x1d, 0x29), now at the
+  Manmaria zodiac doors (AD_02_U); batch 5's out-of-order walk had 26 (see batch 6 for why it was wrong).
 
 **Second-half chain** (checkpoints in `fs2/chain/`, resume with `story_walk --load F [--goto MAP:ENTRY]`):
 `1_post4e_00037_IN_04_U` (Fuji search result) -> `2_post4f_AP_02_A` (+ `--goto KA_09_U:0`) -> `3_post51_IN_02_U` (+ `--goto QG_14_U:0`)
 -> `4_post53_WE_00_U` -> `5_post54_IN_00_U` -> `6_last_dungeon_AI_00_U`.  Logs: `fs2/fu5.err`, `w1.err`, `w2a.err`, `w3a.err`,
 `w4a.err`, `w5.err`, `ai1.err`.
+
+**Batch 6 (2026-10-16): world-map order, Ring Tower, Doll house.**
+- **World-map unlock order: retail opens Russia early, the port is right.**  `SetWorldMapPoint` call sites (`msc_calls --ops 0x70`
+  over every map; `story_walk --point-table` prints every point id with its map and WM byte): RO_20_U opens Wales (0xd), WE_00_U
+  Florence (0xe, state 3), **WE_03_U** -- the Roger scene right after the Ronda mine, flag 0x1d -- opens **Petrograd** (point 0x13,
+  state 3 = open + new), HE_10_N (Hermitage 2) opens Goreme (0x15).  No later `SetWorldMapPoint(0x13, ..)` exists, so retail lets the
+  player go to Russia from then on; the port's state handling (1 greyed, 2 open, 3 open + new) matches `worldMap::initialize`.  The
+  story (the user's walkthrough, lparchive) goes Florence (ch. 19-23: Firenze 1, the Manmaria mansion with the zodiac doors, the SG
+  Italy branch), Nemeton / Cannes / the prison (ch. 25-34), then Russia, Goreme and the Mirror castle.  Played the other way the
+  Russia chain leads straight through Hermitage 2 -> Goreme -> Mirror castle -> Goreme 2 (0x24), and 0x24 hides Locke's key.
+- **The walker now follows the story order** (`story.rs`): `AREA_ORDER` keeps PE_ / HE_ / GT_ / MS_ closed until 0x1c (no world-map
+  point there in `pick_world_point` or the search, a jump into them scores -200000); `STORY_ORDER` + `too_early` keep a step that sets
+  0x23 / 0x24 before 0x1c from scoring or being a search goal; `CHAPTER_AREAS` += 0x14 AD, 0x15 FI.
+- **Clean walk in story order** (`fs2/full5`, `full6`, from `fs2/clean/0_post11_WE_02_U.walk` = the batch-5 walk's own checkpoint
+  before WE_03_U): 0x1d, 0x12 Wales 1, **0x13 Firenze 1 (never reached before)**, then the Manmaria mansion (AD_16 -> AD_00 ..
+  AD_11; `fs2/clean/1_post13_AD_16_U.walk`).  Blocked at **AD_02_U's three zodiac doors**: a tile-frame UI ("Choose a frame",
+  Select / Confirm / Read Poem / Cancel, then "Choose a tile", "Remove / Switch / Do nothing"); the walker's answers repeat the
+  frame prompt for ever (trials time out).  AD_03_U's "AB blood type" door wants Gepetto (prompt answers [0, Gepetto's index]).
+  Solutions (from the poems): left door "The Hero" Gemini / Sagittarius / Leo, right door "The Maiden" Virgo / Aquarius / Libra, centre
+  door Aries / Capricorn / Taurus and Pisces / Cancer / Scorpio (order from the poems' wording).  Next: a plan for the frame UI (which
+  answers / pads select a frame and a tile), then AD_05_U sets 0x14.
+- **Ring Tower (0x69) played**: plan `tests/walk/gi_04_r_ring_tower.plan` (answer 0 "Carry on!" at every GI_04_R prompt), fixture
+  `gi_04_r_ring_tower.walk` (floor 18, from the Vessel-era save); 10 floors per block to floor 100, then HUB_NA sets 0x69.  Test
+  `retail_story::ring_tower_plan_sets_the_hidden_chapter` (ignored, release, 16 s).
+- **Doll house (0x65) played**: `story_walk --search` from DH_00_U found it in one state: DH_00_U box 1 (ev 2) -> DH_07_U (boss,
+  monster set 220) -> back to DH_00_U, whose start function plays the ending (0x1d2b set, 0x1d2c not).  Plan
+  `tests/walk/dh_00_u_doll_house.plan`, test `doll_house_plan_sets_the_hidden_chapter` (ignored, release, 1 s).
+- Not played: 0x66 Schwarzwald (SH_00..04 flower maze; `--search 1500` in SH timed out after 25 min; the LP route, update 122, is per
+  screen: left / middle / right ..., to be mapped to SH box events), 0x68 Nemeton depths (`--search 1500` from ND_20_U: nothing in
+  1500 states), 0x64 Killing Stone (SE_00_U entrance dead end, batch 5).
 
 **Batch 5 (2026-10-16): hidden chapters, clean walk from New Game.**
 - **Hidden chapter flags** (debug page 3 = 0x64 + row; `flag_xref --set-only`):

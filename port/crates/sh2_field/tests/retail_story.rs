@@ -284,6 +284,47 @@ fn sainte_marguerite_key_plan_sets_both_chapter_flags() {
     assert!(sh2_field::story::flag(&regs, 0x1b) && sh2_field::story::flag(&regs, 0x1c), "{:?}", w.steps.iter().rev().take(5).map(|s| &s.what).collect::<Vec<_>>());
 }
 
+/// Ring Tower (hidden chapter 0x69): the floors of GI_04_R from `tests/walk/gi_04_r_ring_tower.plan` ("Carry on!" at every prompt).
+/// After floor 100 (register byte 0x79) GI_04_R sets byte 0x78 = 4 and HUB_NA's start function sets 0x69.  Release build, long:
+/// `cargo test --release -p sh2_field --test retail_story -- --ignored ring_tower`.
+#[test]
+#[ignore]
+fn ring_tower_plan_sets_the_hidden_chapter() {
+    let Some(env) = walk_env() else { return };
+    let g = sh2_field::story::Game::resume(&env, &fixture("gi_04_r_ring_tower.walk")).unwrap();
+    let mut w = sh2_field::story::Walker::new(&env, g);
+    let plan = std::fs::read_to_string(fixture("gi_04_r_ring_tower.plan")).unwrap();
+    w.plan = plan.lines().filter(|l| !l.starts_with('#') && !l.trim().is_empty()).filter_map(|l| l.split_once(':')).map(|(m, t)| (m.to_string(), t.to_string())).collect();
+    for _ in 0..40 {
+        if sh2_field::story::flag(&w.game.regs(), 0x69) {
+            break;
+        }
+        w.run(1);
+    }
+    let b: Vec<u8> = w.game.regs().iter().flat_map(|r| r.to_le_bytes()).collect();
+    assert!(sh2_field::story::flag(&w.game.regs(), 0x69), "floor byte 0x79 = {}, {:?}", b[0x79], w.steps.iter().rev().take(5).map(|s| &s.what).collect::<Vec<_>>());
+}
+
+/// Doll house (hidden chapter 0x65): `tests/walk/dh_00_u_doll_house.plan` from the Vessel-era save resumed in DH_00_U.
+/// Release build: `cargo test --release -p sh2_field --test retail_story -- --ignored doll_house`.
+#[test]
+#[ignore]
+fn doll_house_plan_sets_the_hidden_chapter() {
+    let Some(env) = walk_env() else { return };
+    let (s, _, _) = sh2_field::story::read_checkpoint(&fixture("ai_00_u_vessel.walk")).unwrap();
+    let g = sh2_field::story::Game::resume_at(&env, s, "DH_00_U", 0).unwrap();
+    let mut w = sh2_field::story::Walker::new(&env, g);
+    let plan = std::fs::read_to_string(fixture("dh_00_u_doll_house.plan")).unwrap();
+    w.plan = plan.lines().filter(|l| !l.starts_with('#') && !l.trim().is_empty()).filter_map(|l| l.split_once(':')).map(|(m, t)| (m.to_string(), t.to_string())).collect();
+    for _ in 0..20 {
+        if sh2_field::story::flag(&w.game.regs(), 0x65) {
+            break;
+        }
+        w.run(1);
+    }
+    assert!(sh2_field::story::flag(&w.game.regs(), 0x65), "{:?}", w.steps.iter().rev().take(5).map(|s| &s.what).collect::<Vec<_>>());
+}
+
 /// Todo lab 1, TD_02_U: the corridor gallery (walk-on box 6, event 6) is played -- the walker takes a walk-on box that changes the state
 /// before it leaves the room (in the game the player walks through it) and holds still while the targets come (a press is a miss).
 /// Event 6 sets 0x1c2e and clears 0x1c2f, the flag that TD_06_U's look point set and that TD_02_U's door reads as "wrong way" in the

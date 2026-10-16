@@ -73,6 +73,17 @@ fn main() {
     w.search_budget = get("--search-on-stall").and_then(|v| v.parse().ok()).unwrap_or(0);
     // `--search-world 0`: the searches do not take the world map (one dungeon's puzzle)
     w.search_world = get("--search-world").map(|v| v != "0").unwrap_or(true);
+    // `--point-table`: every world-map point id with its map and the WM byte in this state, then stop
+    if a.iter().any(|x| x == "--point-table") {
+        if let Some(wm) = env.wm.as_ref() {
+            let chunk = w.game.session.0.save.field.find(sh2_menu::save::FieldSave::TAG_WM);
+            for (id, p) in wm.points.iter().enumerate() {
+                let b = chunk.and_then(|c| c.payload.get(0xc + id).copied()).unwrap_or(0);
+                println!("point {id:#x} {} entry {} WM {b:#x}", p.map, p.entry);
+            }
+        }
+        return;
+    }
     // `--points`: print the world-map points open in this state and stop
     if a.iter().any(|x| x == "--points") {
         for (m, e) in w.open_world_points(&w.game) {
