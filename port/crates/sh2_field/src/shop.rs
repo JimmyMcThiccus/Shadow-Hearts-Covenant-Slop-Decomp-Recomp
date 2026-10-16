@@ -24,6 +24,7 @@
 
 use std::sync::Arc;
 
+use sh2_battle::hud_hits::{self, HitArt};
 use sh2_core::game::padbit;
 use sh2_gfx::effects::jring::{self, JRing, JrEvent, JrResult, Rng as _, XorShift};
 use sh2_gfx::texture::decode_menu_texture;
@@ -33,7 +34,7 @@ use sh2_menu::save::BtlSave;
 
 use crate::cmd::CmdPage;
 use crate::cmd_page::{party_view, CmdScenes, Env, PcView};
-use crate::cmd_ui::{blit, cfmt, fill, text_right, text_run, BitmapFont, A, SCREEN_H, SCREEN_W};
+use crate::cmd_ui::{blit, cfmt, fill, text_right, text_run, BitmapFont, A};
 use crate::fscreen::{coded_text, dim_field, label, label_c, window, wrap_text, FieldScreen, ScreenFlow, ScreenIo, DT_MS};
 use crate::overlay_data::OverlayImage;
 
@@ -540,10 +541,20 @@ pub struct ShopTex {
     pub cash_label: Option<(TextureId, (u32, u32))>,
     /// party faces by `PcView::face` (entries 6..)
     pub faces: Vec<Option<TextureId>>,
+    /// the discount ring's face (`COMMON/JRING.BIN` texture 1, the same sheet the battle ring and `field_ring.rs` draw with
+    /// `sh2_battle::hud_hits::draw_ring`; live `screens/r6_mn3/live_shop_ring.png` shows the real tilted sprite, not a flat vector circle).
+    pub ring_face: Option<(TextureId, (u32, u32))>,
 }
 
 pub fn load_tex(env: &mut Env) -> ShopTex {
     let mut t = ShopTex::default();
+    if let Some(bytes) = env.assets.disc.as_ref().and_then(|d| d.read("COMMON/JRING.BIN")) {
+        let tex: Vec<&[u8]> = sh2_battle::stage::sections(&bytes).iter().filter(|(ty, _)| ty == "tex").map(|(_, s)| *s).collect();
+        if let Some(img) = tex.get(1).and_then(|s| sh2_gfx::texture::decode_jrc(s, 0, 0).ok()) {
+            let sz = (img.width, img.height);
+            t.ring_face = env.reg.add(&img).map(|id| (id, sz));
+        }
+    }
     let Some(bytes) = env.assets.disc.as_ref().and_then(|d| d.read("SHOP/SHOP.DAT")) else { return t };
     let n = u32::from_le_bytes(bytes.get(0..4).and_then(|b| b.try_into().ok()).unwrap_or([0; 4])) as usize;
     let load = |env: &mut Env, k: usize| -> Option<(TextureId, (u32, u32))> {
@@ -594,6 +605,9 @@ struct ShopRing {
     rng: XorShift,
     result: Option<JrResult>,
     time: f32,
+    /// pointer trail for [`hud_hits::draw_ring`] (its last 9 angles, like [`sh2_battle::ring::RingDriver`] / `FieldRingRun`).
+    trail: [f32; 9],
+    trail_i: usize,
 }
 
 impl ShopRing {
@@ -602,6 +616,9 @@ impl ShopRing {
         let mut r = JRing::new(0);
         r.data_loaded = true;
         r.set_mode(5, jring::ring_type::SINGLE, 1, 3, 3);
+        // live (`screens/r6_mn3/live_shop_ring.png`): the ring sits at (256, 288) on the 512 x 448 screen, not `JRing::new`'s
+        // default battle centre (256, 224).
+        r.set_ring_pos(256.0, 288.0);
         for (s, w) in challenge_areas(tbl, row, rate) {
             r.add_step_area(s.rem_euclid(360), w, None, 0);
         }
@@ -612,7 +629,7 @@ impl ShopRing {
         r.ring_active(&mut rng);
         r.period = challenge_period(rate);
         r.events.clear();
-        ShopRing { ring: r, rng, result: None, time: 0.0 }
+        ShopRing { ring: r, rng, result: None, time: 0.0, trail: [0.0; 9], trail_i: 0 }
     }
     /// true when the ring is over
     fn tick(&mut self, face: u16) -> bool {
@@ -623,6 +640,8 @@ impl ShopRing {
                 self.result = Some(r);
             }
         }
+        self.trail_i = (self.trail_i + 1) % 9;
+        self.trail[self.trail_i] = self.ring.cur_angle;
         (self.result.is_some() && self.ring.state == jring::state::SLEEP) || self.time > 30.0
     }
     /// ring result grade >= 2 (`(flags >> 1 & 3) >= 2`)
@@ -1462,12 +1481,15 @@ impl ShopScreen {
             }
         }
         ntext(g, 414.0, 372.0, get(3).trim_start(), white);
-        // note: the `Notes` label and the first line of the description
-        if let Some((nt, (w, h))) = self.tex.note {
-            blit(g, Some(nt), 12.0, 390.0, w as f32, h as f32, (0.0, 0.0, w as f32, h as f32), white);
-        }
-        if let Some(l) = self.desc.lines().next() {
-            ntext(g, 23.0, 418.0, &sh2_menu::sjis::strip_codes(l), white);
+        // note: the `Notes` label and the first line of the description (live: the query / rate dialogs draw their own hint over this
+        // same bottom line instead, `draw_query` / `draw_rate`)
+        if !matches!(self.phase, Phase::Query | Phase::Rate) {
+            if let Some((nt, (w, h))) = self.tex.note {
+                blit(g, Some(nt), 12.0, 390.0, w as f32, h as f32, (0.0, 0.0, w as f32, h as f32), white);
+            }
+            if let Some(l) = self.desc.lines().next() {
+                ntext(g, 23.0, 418.0, &sh2_menu::sjis::strip_codes(l), white);
+            }
         }
         if self.phase == Phase::List {
             self.sc_cursor(g, 40.0, 72.0 + 21.0 * (self.sel - self.top) as f32 + 10.0);
@@ -1629,95 +1651,78 @@ impl ShopScreen {
         }
     }
 
+    /// Buy / sell confirmation (live `screens/r6_mn3/live_shop_query.png`, debug-room shop 6, Blessed Saber): a `MenuWindowGeneral`
+    /// frame (outer rect measured 94, 187, 333, 123 -- the same left edge the rank card's `general_frame` uses) with the prompt
+    /// ("Ready to buy?") at (123, 212) and the three choices from (130, 236) spaced 26 px apart, like the retail command lists
+    /// (`draw_main_retail`).  The per-choice hint ("Try for a Discount (Set Price if fail)") replaces the plain bottom note line
+    /// `draw_list_retail` draws (no separate boxed footer live).
     fn draw_query(&self, g: &mut dyn MenuGfx) {
         let (q, note) = if self.buy { (&self.d.text.query_buy, &self.d.text.query_buy_note) } else { (&self.d.text.query_sell, &self.d.text.query_sell_note) };
-        window(g, 130.0, 190.0, 252.0, 110.0, 1.0);
-        label(g, 142.0, 194.0, q.get(3).map(|s| s.as_str()).unwrap_or(""), 1.0);
+        let al = 0x80u8;
+        let white = Rgba::new(0x80, 0x80, 0x80, al);
+        let cyan = Rgba::new(0x00, 0x80, 0x80, al);
+        crate::cmd_common::general_frame(g, &self.sc.cmn, 94.0, 187.0, 333.0, 123.0, al);
+        ntext(g, 123.0, 212.0, q.get(3).map(|s| s.as_str()).unwrap_or(""), white);
         for i in 0..3 {
-            let y = 222.0 + 22.0 * i as f32;
-            if i == self.query_sel {
-                fill(g, 136.0, y - 2.0, 240.0, 21.0, Rgba::new(0x50, 0x70, 0xc0, 0x50));
-                self.sc_cursor(g, 150.0, y + 9.0);
+            let y = 236.0 + 26.0 * i as f32;
+            let sel = i == self.query_sel;
+            ntext(g, 130.0, y, q.get(i).map(|s| s.as_str()).unwrap_or(""), if sel { cyan } else { white });
+            if sel {
+                self.sc_cursor(g, 118.0, y + 10.0);
             }
-            label(g, 160.0, y, q.get(i).map(|s| s.as_str()).unwrap_or(""), 1.0);
         }
-        window(g, 8.0, 420.0, 496.0, 22.0, 1.0);
-        text_run(g, 16.0, 422.0, note.get(self.query_sel).map(|s| s.as_str()).unwrap_or(""), 14, Rgba::new(0x80, 0x80, 0x80, 0x80), Some((1, 1)));
+        ntext(g, 23.0, 418.0, note.get(self.query_sel).map(|s| s.as_str()).unwrap_or(""), white);
     }
 
+    /// Discount-rate choice (live `screens/r6_mn3/live_shop_rate.png`): the same frame and column as [`Self::draw_query`], sized to
+    /// the rate count (`44 + 18 * (n + 1)`, fitted on the rank-E 1-rate box measured 94 px tall and the 4-line query box above).  The
+    /// bottom note is the highlighted rate's challenge line (`shopMess_queryBuyNote_J` has no separate "select" table; live shows the
+    /// same text `draw_msg`'s `RingIntro` uses once confirmed, e.g. "The 10% Discount Challenge!", just for the rate under the cursor).
     fn draw_rate(&self, g: &mut dyn MenuGfx) {
-        let sel = if self.buy { &self.d.text.disc_select } else { &self.d.text.up_select };
+        let rates = if self.buy { &self.d.text.disc_select } else { &self.d.text.up_select };
         let prompt = if self.buy { &self.d.text.disc_select_prompt } else { &self.d.text.up_select_prompt };
         let n = self.rate_count();
-        window(g, 150.0, 170.0, 212.0, 40.0 + 22.0 * n as f32, 1.0);
+        let al = 0x80u8;
+        let white = Rgba::new(0x80, 0x80, 0x80, al);
+        let cyan = Rgba::new(0x00, 0x80, 0x80, al);
+        crate::cmd_common::general_frame(g, &self.sc.cmn, 94.0, 187.0, 333.0, 44.0 + 18.0 * (n as f32 + 1.0), al);
+        ntext(g, 123.0, 212.0, prompt, white);
+        let mut hi_name = "";
         for i in 0..n {
             let rate = self.rank - i;
-            let y = 178.0 + 22.0 * i as f32;
-            if i == self.rate_sel {
-                fill(g, 156.0, y - 2.0, 200.0, 21.0, Rgba::new(0x50, 0x70, 0xc0, 0x50));
-                self.sc_cursor(g, 170.0, y + 9.0);
+            let y = 236.0 + 26.0 * i as f32;
+            let sel = i == self.rate_sel;
+            let name = rates.get(rate).map(|s| s.as_str()).unwrap_or("");
+            ntext(g, 130.0, y, name, if sel { cyan } else { white });
+            if sel {
+                self.sc_cursor(g, 118.0, y + 10.0);
+                hi_name = name;
             }
-            label(g, 180.0, y, sel.get(rate).map(|s| s.as_str()).unwrap_or(""), 1.0);
         }
-        window(g, 8.0, 420.0, 496.0, 22.0, 1.0);
-        text_run(g, 16.0, 422.0, prompt, 14, Rgba::new(0x80, 0x80, 0x80, 0x80), Some((1, 1)));
-        // the note of the highlighted rate (`shopMess_discountSelectNote_J` with the rate name)
+        let chal = if self.buy { &self.d.text.challenge } else { &self.d.text.up_challenge };
+        ntext(g, 23.0, 418.0, &chal.replace("%s", hi_name), white);
     }
 
+    /// Result / ring-intro / warning message (live `screens/r6_mn3/live_shop_result.png`, `live_shop_msg.png`): the same frame
+    /// family as the query / rate boxes, full screen width (16, 187, 480 -- measured on both the 1-line "Challenge!" banner and the
+    /// 4-line result text, `44 + 18 * lines`).
     fn draw_msg(&self, g: &mut dyn MenuGfx, text: &str) {
-        window(g, 40.0, 332.0, 432.0, 110.0, 1.0);
-        coded_text(g, 56.0, 340.0, &wrap_text(&text, 50), 14, Rgba::new(0x80, 0x80, 0x80, 0x80), 20.0, true);
+        let al = 0x80u8;
+        let white = Rgba::new(0x80, 0x80, 0x80, al);
+        let wrapped = wrap_text(text, 58);
+        let lines = 1 + wrapped.matches(['$', '\n']).count();
+        crate::cmd_common::general_frame(g, &self.sc.cmn, 16.0, 187.0, 480.0, 44.0 + 18.0 * lines as f32, al);
+        crate::fscreen::coded_text_h(g, 40.0, 212.0, &wrapped, 0, white, 18.0, true, sh2_menu::gfx::NARROW, retail_palette);
     }
 
-    /// The challenge ring: base circle, the three step areas, the pointer (`JRing` drawn on the 512x448 screen at (256, 288)).
+    /// The challenge ring: the real `JRing` sprite (`COMMON/JRING.BIN` texture 1, the same fan [`sh2_battle::hud_hits::draw_ring`]
+    /// draws for the battle rings and the field's own `SetRing` ring (`field_ring.rs`), centred at (256, 288) on the 512x448 screen
+    /// -- live `screens/r6_mn3/live_shop_ring.png` shows the tilted 3D ring face + hit-area wedges, not hand-drawn vector arcs.
     fn draw_ring(&self, g: &mut dyn MenuGfx) {
         let Some(run) = self.ring.as_ref() else { return };
-        let r = &run.ring;
-        let (cx, cy) = (256.0f32, 288.0f32);
-        let (rx, ry) = (112.0 * r.scale_x.max(0.2), 112.0 * r.scale_y.max(0.2));
-        window(g, cx - rx - 20.0, cy - ry - 20.0, rx * 2.0 + 40.0, ry * 2.0 + 40.0, 0.5);
-        let pt = |ang: f32, k: f32| {
-            let a = ang.to_radians();
-            (cx + a.sin() * rx * k, cy - a.cos() * ry * k)
-        };
-        let seg = |g: &mut dyn MenuGfx, a0: f32, a1: f32, k0: f32, k1: f32, c: Rgba| {
-            let (p0, p1, p2, p3) = (pt(a0, k0), pt(a0, k1), pt(a1, k0), pt(a1, k1));
-            g.draw(sh2_menu::gfx::DrawCmd::Quad {
-                tex: None,
-                v: [crate::cmd_ui::vtx(p0.0, p0.1, 0.0, 0.0, c), crate::cmd_ui::vtx(p1.0, p1.1, 0.0, 0.0, c), crate::cmd_ui::vtx(p2.0, p2.1, 0.0, 0.0, c), crate::cmd_ui::vtx(p3.0, p3.1, 0.0, 0.0, c)],
-                blend: sh2_menu::gfx::Blend::Alpha,
-            });
-        };
-        let ring_c = Rgba::new(0x60, 0x70, 0xa0, 0x80);
-        for s in 0..72 {
-            let a0 = s as f32 * 5.0;
-            seg(g, a0, a0 + 5.2, 0.97, 1.03, ring_c);
-        }
-        for ar in r.areas.iter().filter(|a| a.kind.is_some()) {
-            let n = ((ar.width as f32 / 4.0).ceil() as i32).max(1);
-            for s in 0..n {
-                let a0 = ar.start as f32 + ar.width as f32 * s as f32 / n as f32;
-                let a1 = ar.start as f32 + ar.width as f32 * (s + 1) as f32 / n as f32 + 0.4;
-                let hit = ar.result >= 0;
-                seg(g, a0, a1, 0.82, 1.0, if hit { Rgba::new(0xff, 0xe0, 0x40, 0x80) } else { Rgba::new(0x10, 0xd0, 0x70, 0x80) });
-            }
-        }
-        if r.pointer_visible || self.phase == Phase::Ring {
-            let tip = pt(r.cur_angle, 1.05);
-            let c = Rgba::new(0xff, 0xff, 0xa0, 0x80);
-            let (p0, p1) = (pt(r.cur_angle - 1.6, 0.2), pt(r.cur_angle + 1.6, 0.2));
-            g.draw(sh2_menu::gfx::DrawCmd::Quad {
-                tex: None,
-                v: [crate::cmd_ui::vtx(p0.0, p0.1, 0.0, 0.0, c), crate::cmd_ui::vtx(p1.0, p1.1, 0.0, 0.0, c), crate::cmd_ui::vtx(tip.0, tip.1, 0.0, 0.0, c), crate::cmd_ui::vtx(tip.0, tip.1, 0.0, 0.0, c)],
-                blend: sh2_menu::gfx::Blend::Alpha,
-            });
-        }
-        if self.phase == Phase::RingEnd {
-            let won = self.won.unwrap_or(false);
-            let s = if won { "OK!" } else { "MISS" };
-            text_run(g, cx - 24.0, cy - 12.0, s, 0, if won { Rgba::new(0xff, 0xe0, 0x40, 0x80) } else { Rgba::new(0xc0, 0x60, 0x60, 0x80) }, Some((1, 1)));
-        }
-        let _ = (SCREEN_W, SCREEN_H);
+        let Some(face) = self.tex.ring_face else { return };
+        let art = HitArt { ring: vec![None, Some(face)], ..Default::default() };
+        hud_hits::draw_ring(g, &art, &run.ring, &run.trail, run.trail_i);
     }
 }
 

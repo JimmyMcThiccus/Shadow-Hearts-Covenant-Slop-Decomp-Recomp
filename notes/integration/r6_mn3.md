@@ -7,7 +7,7 @@
 | 1. combo switch bit | **fixed** (both sides) | see "Combo switch" below: bit 0 = the battle's `Combo` command, bit 1 = the shortcut switch, copied from `MENU+0x276` at each battle start |
 | 2. shortcut setting overlay (mode 0x18) | **done** | `sh2_battle/src/shortcut.rs` (`setting_row`, `SettingMenu`, `write_row`, `draw_setting`) + `plugin.rs` `run_shortcut_setting` hook; shots `screens/r6_mn3/shortcut_setting.png`, `shortcut_set.png` |
 | 3. title Options / Theater hi-res | **checked + fixed** | text crisp at 1440x1080; Theater hints rebuilt as retail (3 lines + pad icons), title texts proportional + 0.8 narrow, Options cursor stuck on Vibration fixed, Sound box 6 px lower |
-| 6. fourth pass (shops live) | **shop done; Solomon / tailor not reachable live** | see "Fourth pass" |
+| 6. fourth / fifth pass (shops live) | **shop main / list / query / rate / ring / result done; Solomon / tailor not reachable live** | see "Fourth pass" / "Fifth pass" |
 | 5. third pass (measure / weight / Game Over) | **done** | see "Third pass"; shops / Solomon / tailor not compared live (no capture reachable) |
 | 4. MN2 open items (second pass) | **Graveyard / Combo Magic / Library checked against live, fixed** | see "Task 4" below; Library data view and the soul charge 3D still not compared live |
 
@@ -127,7 +127,58 @@ snapped, combo 0 seen) and `goto:grave / combomagic / library`; before / after i
   live px -> virtual: x / 1.707, (y + 33) / 1.463).
 * **Common frames**: `compact_frame` / `note_frame` used the wrong texture (attach 14 / 1); their records' UVs address the 88 x 120 sheet
   of attach 8: the capsule now renders.
-* Not compared live: the query / discount / ring / result windows (they keep their port panels), the Sell list.
+* Not compared live: the Sell list (the query / discount / ring / result windows were rebuilt against live in the fifth pass below).
+
+## Fifth pass (2026-10-16): shop query / rate / ring / result windows live
+
+Live: DB_00_U, Circle + Square > ショップ > 6 (`La Cage Aux Songes`), same debug-room shop as the fourth pass.  Cash was 0 on this save
+(cannot buy); the debug menu's own **Items / parameter settings > お金 (money)** page (Cross opens the digit entry twice in a row with a
+short tap, holds the old value, edit with Up/Down per digit and Left/Right to move, confirm with Cross) set it to 9999 and, at the end
+of the session, back to 0 -- cleaner than the raw `MENU+4+bag*4` save-field write (that field resets to 0 whenever the shop is re-entered
+through the debug launcher, before the shop's own `お金` page runs; the debug menu's money tool is the one that sticks).  Bought a Blessed
+Saber, an Espada and a Red Mailbox at rank E (10% discount challenge, all three lost); shop points went from 13 to 76 and three items sit
+in the debug save's equipment bag -- left as is (disposable slot 1, lower stakes, the task note said not to chase a full revert).  Captures:
+`live_shop_query.png`, `live_shop_rate.png`, `live_shop_msg.png` (the "The 10% Discount Challenge!" banner, also `Phase::Warning`'s shape),
+`live_shop_ring.png`, `live_shop_result.png`; before / after port shots `t7_shop_{query,rate,msg,ring,result}_{before,after}.png`;
+`cmp_shop_{query,rate,msg,ring,result}.png`.  Live px -> virtual mapping for this window size (874 x 604, re-derived per the live-driving
+recipe, different from the fourth pass's window): `x = (live_x - 20.64) / 1.611`, `y = (live_y + 36.58) / 1.484` (fit on the `compact_frame`
+rank banner's known virtual bounds 102..349 x 26..57 against its live pixel edges; cross-checked against the discount ring's measured
+live centre (447, 393) -> virtual (265, 290), matching the doc comment's (256, 288) within a few px).
+
+* **`draw_query` / `draw_rate`** (`shop.rs`): both are a `MenuWindowGeneral` frame (`cmd_common::general_frame`) at the same outer
+  origin the rank card uses (x 94, same left edge), top y 187, 333 px wide -- `draw_query` always 123 px tall (prompt + the fixed three
+  choices "Try for a Discount / Buy without a Discount / Cancel"), `draw_rate` `44 + 18 * (n + 1)` for its `n` rate rows (fitted on the
+  measured 1-rate rank-E box, 94 live px / 1.484 = 123 virtual high... worked back from the two known heights, 123 for the 4-line query
+  box and ~94 for the 2-line rate box, giving the `44 + 18 * lines` fit used by `draw_msg` too).  Prompt text at (123, 212), choices from
+  (130, 236) stepped 26 px like the retail command lists (`draw_main_retail`), cursor via the existing `CmdCursor` (`sc_cursor`).  The
+  bottom hint ("Try for a Discount (Set Price if fail)" / the per-rate challenge line) draws over the same bottom-of-screen spot
+  `draw_list_retail`'s item-description note uses; `draw_list_retail` now skips that note while `Phase::Query` / `Phase::Rate` are up
+  (it used to bleed through under the dialog's own hint -- visible in the first `t7_shop_query_after.png` capture, fixed before the
+  final screenshots here).
+* **The TODO at the old line 1664** ("the note of the highlighted rate", `shopMess_discountSelectNote_J`): there is no such separate
+  table -- live shows the **same line `Phase::RingIntro` uses once confirmed** (`shopMess_queryBuy`'s "challenge" text, `%s` replaced by
+  the rate name), just for the rate under the cursor instead of the confirmed one.  `draw_rate` now builds it the same way
+  (`self.d.text.challenge.replace("%s", &highlighted_rate_name)`).
+* **`draw_msg`** (`Phase::RingIntro` / `Phase::Result` / `Phase::Warning`): the same frame family, full width (16, 187, 480 -- close to
+  the old placeholder's width, which was already in the right ballpark; the height and y moved a lot, from a 110-tall box at y 332 to
+  `44 + 18 * lines` at y 187) with `fscreen::coded_text_h` (narrow, `retail_palette`, matching `draw_list_retail`'s rank-title call) so
+  the `%p1` / `%p7` highlights in the result text ("You **failed** to get the **10% Discount**!", live `cmp_shop_result.png`) render in
+  colour, like the rest of the retail shop.  The rate-choice highlight on the RingIntro / Rate note does **not** colour live comparably
+  on the port (`cmp_shop_msg.png`): `ShopScreen::rate_name()` round-trips the rate name through `sjis::encode` + `cmd_ui::sj`, which
+  likely drops the `%pN` bytes the source string carries -- pre-existing (the old placeholder had the same plain-white text), left open.
+* **`draw_ring`**: replaced the hand-drawn flat ellipse (vector arcs + a straight pointer line, `screens/r6_mn3/t7_shop_ring_before.png`)
+  with the real sprite: `ShopTex::ring_face` loads `COMMON/JRING.BIN` texture 1 the same way `sh2_battle::hud_hits::load_hit_art` does
+  (`sh2_battle::stage::sections` + `sh2_gfx::texture::decode_jrc`), and `draw_ring` calls `sh2_battle::hud_hits::draw_ring` directly --
+  the same function the battle rings and the field's own `SetRing` ring (`field_ring.rs`) already draw with, reused rather than
+  reinventing the tilted-fan geometry.  `ShopRing` gained the 9-sample pointer trail `draw_ring` needs and `set_ring_pos(256.0, 288.0)`
+  (`JRing::new`'s default centre is the battle one, (256, 224)); live confirms (256, 288) to a few px.  `cmp_shop_ring.png` matches the
+  live tilt, hit-area wedges and pointer closely.  Not ported: the `Good! / Miss!` floating hit messages (`HitFx::ring_mes`, `JRING.BIN`
+  texture 0) -- the result window already states the outcome, and no live capture caught the ring's own end-state text (if retail even
+  shows one over the ring itself; `RingEnd`'s old "OK!" / "MISS" text was dropped rather than left unverified).
+* **Pre-existing, not touched**: the buy/sell outcome text drops the rate's number ("You failed to get the **%** Discount!" instead of
+  "10%", both before and after -- a `%d` substitution bug in `disc_buy` / `disc_miss` formatting, not a layout issue).
+* `cargo test --workspace` green after the change (729+ baseline, see the report); `cargo check -p sh2_field` clean (one pre-existing
+  unused-import warning fixed along the way).
 
 ## Open (priority order)
 
@@ -135,3 +186,5 @@ snapped, combo 0 seen) and `goto:grave / combomagic / library`; before / after i
    items at (40, 88) / (222, 384)) that the port does not draw.  The title Options page keeps the gaps of the hidden rows (not compared live).
 2. Mode 0x18 / 0x17 JRing sprites; MAGI / SKIL byte 6 in `ActionRec`; fused-form shortcut rows.
 3. MN2's list: soul charge 3D, Personal sub-scenes, Library list / data view, live re-checks of shops / save points / Game Over.
+4. Shop: the rate-name colour codes dropped by `rate_name()`'s sjis round-trip (`draw_rate` / `draw_msg`'s RingIntro note); the missing
+   `%d` in the buy/sell outcome's discount percentage; the ring's `Good! / Miss!` hit messages; Solomon / tailor still need a live state.
