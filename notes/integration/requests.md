@@ -1054,3 +1054,9 @@ Small hooks in files other agents own (please keep them):
 * **FS2 (FYI, no change)**: `host.rs` op 0x13 `SceneInit` sets `BTL0+3` bit 0 -- correct (the Combo command), not the shortcut switch.
 * **QA2 (FYI)**: `MenuSave::combo_switch` = `MENU+0x276 & 3` (ON 1 / OFF 0); a new game has 0 = shortcuts off, so mode 0x17 / 0x18 only appear once
   the player turns the Combo Switch on (or `SH2_BATTLE_SHORTCUT=1`, `SH2_BATTLE_MENU=276:01`).
+
+* **BT4, ring intro (live, 2026-10-16) -- RG / FX2 FYI, no change**: read live, the retail intro is the port's `seq_intro` frame by frame
+  (`JRing+0x70` (91, -32) -> face-on near 0.1 s -> (-30, 55); `+0x84` 0.24 .. 1.0).  The "face-on first" look is the spin passing face-on;
+  `hud_hits::ring_project` with the live values lands on the retail ring (r6_bt.md 9, `screens/r6_bt/bt4_ring_intro_*`).  `jring.rs`
+  untouched.  FX2 FYI: US `JRing` home scale `+0xb0` is 1.0 (small ring 0.5), the port's JP 0.85 / 0.425 -- the visible run size still
+  matches, so nothing to change unless the draw radii are ever revisited.

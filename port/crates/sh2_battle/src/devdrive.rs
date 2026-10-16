@@ -578,7 +578,7 @@ fn drive(
             if ring.active {
                 dd.ring_age += 1;
                 // round 6 BT: the first intro frames (ring intro orientation vs live retail)
-                if matches!(dd.ring_age, 2 | 6 | 12 | 20) {
+                if matches!(dd.ring_age, 2 | 4 | 6 | 8 | 10 | 12 | 14 | 16 | 20 | 24 | 30 | 40) {
                     let n = format!("ring_intro_{:02}", dd.ring_age);
                     dd.shot(&n);
                 }

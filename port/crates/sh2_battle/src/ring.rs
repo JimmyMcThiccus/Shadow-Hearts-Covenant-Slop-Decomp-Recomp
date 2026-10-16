@@ -90,4 +90,36 @@ mod tests {
         let r = d.result().expect("result");
         eprintln!("event ring result {:?}", r);
     }
+    /// Round 6 BT4: the intro (`SetMode(5, ..)`, state 3 type 5) against live US `JRing` samples (Nicolai's attack, AP_02_U, 2026-10-16):
+    /// `(+0x94 elapsed, +0x70 rot x / y in degrees, +0x84 / +0xb0)`.  The ring spins in from (91, -32) through face-on (~0.1 s) to its
+    /// home tilt (-30, 55); retail's home scale is 1.0 against the port's 0.85, so the radius grows by the same fraction of home.
+    #[test]
+    fn the_ring_intro_follows_the_live_us_samples() {
+        const LIVE: [(f32, f32, f32, f32); 8] = [
+            (0.030, 90.9, -31.7, 0.241),
+            (0.063, 153.7, -103.6, 0.440),
+            (0.095, -161.2, -155.0, 0.583),
+            (0.128, -126.7, 165.6, 0.693),
+            (0.161, -101.3, 136.5, 0.774),
+            (0.194, -82.6, 115.1, 0.833),
+            (0.292, -51.3, 79.3, 0.932),
+            (0.390, -38.6, 64.8, 0.973),
+        ];
+        let mut r = RingRun::start_areas(&[(169, 90, 14), (279, 72, 11)], 1.6, 7);
+        let mut samples = vec![];
+        for _ in 0..40 {
+            let j = &r.ring;
+            if j.state == jring::state::INTRO && j.sub == 1 {
+                samples.push((j.anim_c, j.rot[0].to_degrees(), j.rot[1].to_degrees(), j.scale_y / j.home_scale_y));
+            }
+            r.tick(0);
+        }
+        let wrap = |d: f32| (d + 540.0).rem_euclid(360.0) - 180.0;
+        for (c, x, y, s) in LIVE {
+            // the port's tick nearest in elapsed time (the live game runs two 1/60 s steps per frame)
+            let p = samples.iter().min_by(|a, b| (a.0 - c).abs().total_cmp(&(b.0 - c).abs())).unwrap();
+            assert!(wrap(p.1 - x).abs() < 12.0 && wrap(p.2 - y).abs() < 12.0, "t {c}: live ({x}, {y}) port ({}, {})", p.1, p.2);
+            assert!((p.3 - s).abs() < 0.12, "t {c}: live scale {s} port {}", p.3);
+        }
+    }
 }

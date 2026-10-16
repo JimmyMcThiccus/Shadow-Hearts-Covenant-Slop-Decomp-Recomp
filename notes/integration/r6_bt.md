@@ -172,3 +172,21 @@ Status: `cargo test -p sh2_battle` 259 green, `cargo check --workspace --all-tar
   scripted fight; ~20 min of pad-only walking (route east, `CField*` `[0x43ff34]` + 0x2130 = player x / z) found no fight (the east door /
   box 8 not reached), so no live frames.  Port intro frames: `screens/r6_bt/bt4_port_ring_intro_frames.png` (devdrive `ring_intro_NN`).
   Needs a save at a fight (slot 8 / debug battle player) to read `JRing+0x70 / +0x80 / +0x84` on the first intro frames.
+
+## 9. Round 6 BT4, ring intro read live (2026-10-16, user's save state in AP_02_U's fight)
+Status: `cargo test -p sh2_battle` green (new `ring::tests::the_ring_intro_follows_the_live_us_samples`), `cargo check --workspace --all-targets`
+clean.  **No code change was needed: the port's intro already matches retail frame by frame.**
+* Live (pad + reads only, `tools/live`-based recorder): Nicolai's attack, JRing 0xd709f0, `JRing+0x46..0x94` sampled every game frame plus a
+  window grab every ~33 ms.  State 3 / intro 5: `+0x70` = (91, -32) deg at 0.03 s -> (154, -104) -> (-161, -155) -> (-127, 166) -> (-101, 136)
+  -> ... -> (-30, 55) at 0.82 s (state 4); `+0x80` stays 1.0, `+0x84` grows 0.24, 0.44, 0.58, 0.69 .. 1.0; `+0x94` +0.0327 per frame.
+  The decay is two 1/60 s steps per frame (ratio ~0.735 = (6/7)^2), i.e. the port's 60 Hz `seq_intro`.
+* The screen shows a state ~2 frames after the sample: an edge-on line, a thin vertical ellipse, then **face-on at ~0.08..0.1 s** (rot near
+  (-161, -155)), edge-on again at ~0.15..0.25 s, then the tilt settles.  "Face-on first, then tilting" is this spin passing face-on, not a
+  different start pose.  Drawing `hud_hits::ring_project` with the live `+0x70 / +0x84` on the live frames lands on the retail ring every time
+  (`screens/r6_bt/bt4_ring_intro_live_with_port_projection.png`); live vs port dev-drive shots at matching times:
+  `bt4_ring_intro_live_vs_port_1.png` / `_2.png` (port shots `ring_intro_NN`, NN = 60 Hz ticks; the port shots lag ~2 ticks behind the
+  live ones in the sheet, as the Bevy screenshot does).
+* Scale: US `JRing::JRing` (SLUS 0x2f3340) sets `+0xb0` = 1.0 and the small-ring abnormal (0x2fc6b8) 0.5, while the port (JP) uses 0.85 /
+  0.425 with the same 114 / 103 / 101 radii.  The run ring's size in the live frames matches the port's 0.85 x 114 (the US draw scale must
+  include that factor elsewhere), so `jring.rs` was left alone; during the intro both grow by the same fraction of home (test above).
+* Live side effect: the recorder pressed Attack twice (two of Nicolai's attacks, rings missed); the battle is back at a command menu (4, 1).
