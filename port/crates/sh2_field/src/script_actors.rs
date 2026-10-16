@@ -653,6 +653,15 @@ impl ActorTable {
             }
             // motion
             a.motion_age = a.motion_age.saturating_add(1);
+            // a looping motion with a queued one (`SetMotion(slot, id, 1 / 2)` while it plays) hands over at the end of a loop
+            // (SE_00_U: `SetMotion(0, 5, 1)` then `while (GetCharacterInfo(0, 0xd) != 5)` with the idle cycle playing)
+            if a.motion_loop && !a.chain.is_empty() {
+                let len = self.motion_len.get(&(a.char_id, a.motion)).copied().unwrap_or(DEFAULT_MOTION_TICKS).max(1);
+                if a.motion_age >= len {
+                    a.motion_loop = false;
+                    a.motion_left = 1;
+                }
+            }
             if a.motion_left > 0 && !a.motion_loop {
                 a.motion_left -= 1;
                 if a.motion_left == 0 {
