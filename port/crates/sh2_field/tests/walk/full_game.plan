@@ -1,0 +1,73 @@
+# Whole-game route for `story_walk` from New Game: the puzzle plans in story order, each step guarded by its chapter flag (`FLAG>MAP:text`,
+# dropped once the flag is set).  Use: SH2_WALK_PLAN="$(grep -v '^#' FILE | paste -sd';')" story_walk --decisions N --search-on-stall 300
+0x18>ND_08_U:enter box 3 (ev 4)
+0x18>ND_08_U:enter box 1 (ev 2)
+0x18>ND_14_U:enter box 1 (ev 2)
+0x1b>SM_05_U:examine box 1 (ev 2)|0,8,6,4
+0x1b>SM_12_U:look 0x1 (ev 6)
+0x1b>SM_19_U:examine box 1 (ev 2)
+0x3f>MI_02_U:talk slot 3
+0x3f>MI_02_U:examine box 2 (ev 3) [1]
+0x3f>MI_02_U:press pad 0x8000
+0x3f>MI_11_U:enter box 1
+0x3f>MI_10_U:enter box 0
+0x3f>MI_09_U:talk slot 3
+0x3f>MI_09_U:examine box 1 (ev 2) []
+0x3f>MI_09_U:press pad 0x8000
+0x3f>MI_02_U:examine box 2 (ev 3) [1]
+0x3f>MI_02_U:enter box 3
+0x3f>MI_03_U:enter box 1
+0x3f>MI_04_U:enter box 1
+0x3f>MI_06_U:examine box 2 (ev 4) []
+0x3f>MI_06_U:press pad 0x8000
+0x3f>MI_09_U:examine box 1 (ev 2) []
+0x3f>MI_09_U:enter box 0
+0x3f>MI_10_U:enter box 2
+0x3f>MI_12_U:talk slot 3
+0x3f>MI_12_U:enter box 0
+0x3f>MI_10_U:enter box 1
+0x3f>MI_11_U:examine box 3
+0x3f>MI_17_U:examine box 1 (ev 2) []
+0x3f>MI_17_U:press pad 0x8000
+0x3f>MI_06_U:enter box 1
+0x3f>MI_07_U:examine box 5 (ev 8) []
+0x3f>MI_07_U:press pad 0x8000
+0x3f>MI_17_U:examine box 0
+0x3f>MI_11_U:enter box 1
+0x3f>MI_10_U:enter box 0
+0x3f>MI_09_U:examine box 1 (ev 2) []
+0x3f>MI_09_U:press pad 0x8000
+0x3f>MI_07_U:enter box 0
+0x3f>MI_06_U:examine box 2 (ev 4) []
+0x3f>MI_06_U:enter box 0
+0x3f>MI_04_U:enter box 0
+0x3f>MI_03_U:enter box 0
+0x3f>MI_02_U:examine box 2 (ev 3) [1]
+0x3f>MI_02_U:press pad 0x8000
+0x3f>MI_09_U:examine box 1 (ev 2) [1]
+0x3f>MI_09_U:enter box 0
+0x3f>MI_10_U:enter box 1
+0x3f>MI_11_U:enter box 2
+0x3f>MI_13_U:examine box 2 (ev 4) []
+0x3f>MI_13_U:press pad 0x8000
+0x3f>MI_02_U:examine box 2 (ev 3) [1]
+0x3f>MI_02_U:enter box 3
+0x3f>MI_03_U:press pad 0x8000
+0x3f>MI_13_U:examine box 2 (ev 4) []
+0x3f>MI_13_U:press pad 0x8000
+0x3f>MI_03_U:enter box 2
+0x3f>MI_05_U:enter box 1
+0x3f>MI_14_U:examine box 3 (ev 4) []
+0x3f>MI_14_U:press pad 0x8000
+0x3f>MI_13_U:enter box 1
+0x3f>MI_14_U:talk slot 1
+0x3f>MI_14_U:enter box 2
+0x3f>MI_15_U:examine box 1
+AI_00_U:look 0x1 (ev 15)
+AI_00_U:look 0x3 (ev 72)
+AI_01_U:look 0x1 (ev 70)|0|L,L,L,O
+AI_01_U:look 0x2 (ev 71)
+AI_02_U:look 0x1 (ev 70)|0|L,L,O
+AI_02_U:look 0x4 (ev 73)
+AI_03_U:look 0x1 (ev 70)|0|L,O
+AI_00_U:look 0x6 (ev 75)

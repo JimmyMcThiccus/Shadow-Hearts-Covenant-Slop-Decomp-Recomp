@@ -1,6 +1,6 @@
 # Round 6 FS2: story to the end, field scripts
 
-## Status (2026-10-16, batch 4)
+## Status (2026-10-16, batch 5)
 
 **Chapters reached (story flags set by walks, union with round 5):**
 - First half: **31 of 34** (0x18 Nemeton ruins in batch 3; 0x1b Sainte-Marguerite and 0x1c Cannes 2 in batch 4).  Missing 0x08,
@@ -16,12 +16,43 @@
 - Second half after batch 3: still 23 of 26, but the walk now **plays the whole last dungeon and the ending**: from
   `fs2/chain/6_last_dungeon_AI_00_U.walk` with the Vessel plan, AI_00..03 rings -> AI_06_U (boss, monster set 217) -> GY_00_D ->
   AI_04_U -> ED_00_U (final boss 302) -> `SpecialMenu(7)` "THE END" in 41 steps / 17 s.  0x55 is never set by a script (see above).
-- Hidden: 0 of 6.
+- Hidden: 0 of 6 (batch 5: what sets them, below).
+- **Clean walk from New Game (batch 5, no hand-set flags): first half 26 / 34** (0x09..0x12, 0x14..0x18, 0x1d..0x26, 0x29), stuck
+  before 0x1b; second half not reached.  See batch 5.
 
 **Second-half chain** (checkpoints in `fs2/chain/`, resume with `story_walk --load F [--goto MAP:ENTRY]`):
 `1_post4e_00037_IN_04_U` (Fuji search result) -> `2_post4f_AP_02_A` (+ `--goto KA_09_U:0`) -> `3_post51_IN_02_U` (+ `--goto QG_14_U:0`)
 -> `4_post53_WE_00_U` -> `5_post54_IN_00_U` -> `6_last_dungeon_AI_00_U`.  Logs: `fs2/fu5.err`, `w1.err`, `w2a.err`, `w3a.err`,
 `w4a.err`, `w5.err`, `ai1.err`.
+
+**Batch 5 (2026-10-16): hidden chapters, clean walk from New Game.**
+- **Hidden chapter flags** (debug page 3 = 0x64 + row; `flag_xref --set-only`):
+  - 0x64 Killing Stone: SE_09_U start (Sesshoseki, SE_00..SE_15).  Trial (`--goto SE_00_U` from the Vessel state): SE_00_U's
+    entrance (ev 1, func 0x252e, floor in register byte 0x17c) leaves the walk in SE_00_U -- dead end, not analysed further.
+  - 0x65 Doll house: DH_00_U func 0x5fa6 (start function, when 0x1d2b is set and 0x1d2c not; 0x1d2b comes from DH_00_U ev 2 / func
+    0x5cf6, i.e. finish the house and come back).  Trial: the walk toured DH_01..07 and left without 0x1d2b.
+  - 0x66 Schwarzwald: SH_04_U start (0xcbb and not 0x66).  Trial: party change scene in SH_00_U, then the walk left.
+  - 0x67 Wakuraba (cut): no script references it.
+  - 0x68 Nemeton depths: ND_22_U (ND_04_A -> ND_20 -> ND_21 -> ND_22).  Trial: ND_20_U's walk-on boxes loop (no progress).
+  - 0x69 Ring Tower: HUB_NA's start function when register byte **0x78 = 4**, which GI_04_R func 0x7bb7 writes after floor
+    **100** (byte 0x79, `SWITCH 0x5d..0x64`: floors 93..100 have their own scenes).  The walker plays the floors (battles, monster
+    sets 260..276 per block): each entry (GI_03_N look 0xc, ev 12) plays 10 floors (byte 0x79: 0x0a -> 0x14), then GI_04_R's
+    prompt (ev 1, 3 answers) -- the walker only takes answer 1 (leave) and the floor count did not reach 100 in a 70-min run
+    (`fs2/ring/`, byte 0x79 = 0x12).  Next: a plan with the "go on" answer for the GI_04_R prompt.
+  - `flag_xref --regb 0x78` (new): writes of the short-form byte registers `&regb[i]`.
+- **Whole-game plan** `sh2_field/tests/walk/full_game.plan`: the Nemeton, Sainte-Marguerite, Mikasa and Vessel plans in story order;
+  a step may carry its chapter flag (`0x18>ND_08_U:...`) and is dropped once that flag is set (`plan_step_flag` / `plan_step_map`).
+- **Walker fixes for a new game:** `next_chapter_area` only once one of the three chapters before it is reached, and the world-map
+  bonus only when a point in that area is open (the walk had left the Ardennes forest for a world map with no open point, and later
+  toured Europe after Firenze 2 with Nemeton not open); `CHAPTER_AREAS` += 0x16 AZ, 0x17 FI, 0x27 IF, 0x28 AP.
+- **Clean walk** (`fs2/full1` -> `full2` -> `full3`, resumed from its own checkpoints after each fix; `fs2/clean/` has the chapter
+  checkpoints): 0x09 .. 0x11, then 0x1d Wales 2, 0x1e..0x24 (Russia, Goreme, Mirror castle, Goreme 2), 0x14 / 0x25, 0x26, 0x12, 0x15,
+  0x16 / 0x17 (AZ, after the elevator part: the walker found it once the area hint pointed there), **0x18 by the walker itself**
+  (search; the plan steps were dropped), then stuck at SM_19_U's door: **0x24 was set (GT_06_U, after 0x23 Mirror castle) long before
+  Sainte-Marguerite**, so SM_00_U set 0x9cd and Locke's second meeting never appears (batch 4).  The user's walkthrough (lparchive)
+  puts Mirror castle (ch. 48) and Goreme after the prison (ch. 29-33) and Florence (ch. 19-21) before Russia (ch. 22-24): the walker
+  reaches Russia / Goreme / the Mirror castle too early.  Next: find why those world-map points are open then (WM byte state after
+  Ronda mine / Wales) -- a port bug in what opens the world map, or the walker walking into a dungeon the story has not opened.
 
 **Batch 4 (2026-10-16): Sainte-Marguerite (0x1b) and Cannes 2 (0x1c) played.**
 - **The key is not Locke-in-Cannes.**  The 0x110 -> 0x111 -> 0x112 -> 0x113 chain (CA_02 / Petrograd / Paris / CA_01) needs flag 0x49

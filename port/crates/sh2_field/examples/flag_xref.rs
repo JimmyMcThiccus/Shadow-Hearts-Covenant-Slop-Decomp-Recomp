@@ -11,6 +11,8 @@ fn main() {
     let p = |v: &str| if let Some(h) = v.strip_prefix("0x") { u32::from_str_radix(h, 16).unwrap() } else { v.parse().unwrap() };
     let flags: Option<Vec<u32>> = get("--flags").map(|s| s.split(',').map(p).collect());
     let regs: Option<Vec<u32>> = get("--regs").map(|s| s.split(',').map(p).collect());
+    // `--regb 0x78`: byte registers 0..0xff addressed with the short form `&regb[i]` (0x10 i)
+    let regb: Option<Vec<u32>> = get("--regb").map(|s| s.split(',').map(p).collect());
     let only = get("--map");
     let set_only = a.iter().any(|x| x == "--set-only");
     let set = PkbSet::open(std::env::var(if us { "SH2_US_DISC_DIR" } else { "SH2_DISC_DIR" }).unwrap()).unwrap();
@@ -22,6 +24,21 @@ fn main() {
         }
         let Some(b) = set.read(&format!("FIELD/MPS/{}", e.name)) else { continue };
         let Ok(img) = ScriptImage::parse(&b) else { continue };
+        if let Some(rb) = &regb {
+            let code = &img.code;
+            for i in 0..code.len().saturating_sub(2) {
+                if code[i] != 0x10 || !rb.contains(&(code[i + 1] as u32)) {
+                    continue;
+                }
+                let tail: Vec<String> = code[i + 2..(i + 8).min(code.len())].iter().map(|b| format!("{b:02x}")).collect();
+                let kind = if matches!(code.get(i + 2), Some(0x20) | Some(0x21)) { "read" } else { "write?" };
+                if set_only && kind == "read" {
+                    continue;
+                }
+                println!("{map} regb {:#x} {kind} at {i:#06x} next {}", code[i + 1], tail.join(" "));
+            }
+            continue;
+        }
         if let Some(regs) = &regs {
             // typed register byte accesses: `regT lo hi` (0x14) and the operator that follows (byte scan, may have false hits)
             let code = &img.code;

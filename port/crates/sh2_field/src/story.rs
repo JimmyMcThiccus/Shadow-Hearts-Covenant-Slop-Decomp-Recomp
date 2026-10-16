@@ -142,8 +142,8 @@ pub fn story_flags(regs: &[u32]) -> Vec<u32> {
 
 /// The area (map-name prefix) whose script sets a chapter flag with a constant argument (`flag_xref --set-only`), for the chapters the
 /// walker has to reach through the world map.  A player learns where to go from the story; the walker takes it from here.
-const CHAPTER_AREAS: [(u32, &str); 11] =
-    [(0x18, "ND"), (0x1b, "SM"), (0x1c, "CA"), (0x4c, "FU"), (0x4e, "IN"), (0x4f, "GB"), (0x50, "KA"), (0x51, "IN"), (0x52, "QG"), (0x53, "WE"), (0x54, "IN")];
+const CHAPTER_AREAS: [(u32, &str); 15] =
+    [(0x16, "AZ"), (0x17, "FI"), (0x18, "ND"), (0x1b, "SM"), (0x1c, "CA"), (0x27, "IF"), (0x28, "AP"), (0x4c, "FU"), (0x4e, "IN"), (0x4f, "GB"), (0x50, "KA"), (0x51, "IN"), (0x52, "QG"), (0x53, "WE"), (0x54, "IN")];
 
 /// The area of the next chapter (see [`CHAPTER_AREAS`]): the lowest one not reached in the half of the highest chapter reached;
 /// `None` when it is not known.  The first half branches (the walk can finish Wales 2 .. Apoina Tower 2, 0x1d..0x28, before Nemeton /
@@ -151,7 +151,9 @@ const CHAPTER_AREAS: [(u32, &str); 11] =
 pub fn next_chapter_area(regs: &[u32]) -> Option<&'static str> {
     let top = story_flags(regs).into_iter().filter(|&f| f < 0x64 && story_flag_name(f).is_some()).max()?;
     let half = if top >= 0x3c { 0x3c..0x64 } else { 0..0x3c };
-    CHAPTER_AREAS.iter().find(|(f, _)| half.contains(f) && !flag(regs, *f)).map(|x| x.1)
+    // only once the story is near it (one of the three chapters before it reached): early in a new game the next area would be
+    // Nemeton, and the walker left the Ardennes forest for a world map with no open point
+    CHAPTER_AREAS.iter().find(|(f, _)| half.contains(f) && !flag(regs, *f)).filter(|(f, _)| (f - 3..*f).any(|g| flag(regs, g))).map(|x| x.1)
 }
 
 /// Areas reached only through another one: Sainte-Marguerite (SM) by Nelson's boat from Cannes (CA_02_U -> SM_00_U).
@@ -1154,7 +1156,9 @@ impl<'e> Walker<'e> {
             if !in_chapter_area(self.game.map(), area) {
                 match &o.stop {
                     Stop::Jump(m, _) if in_chapter_area(m, area) => s += 300,
-                    Stop::WorldMap(..) => s += 250,
+                    // only when the world map has a point in that area open (otherwise the walk tours the world: a new game after
+                    // Firenze 2, Nemeton not open yet)
+                    Stop::WorldMap(..) if self.open_world_points(&self.game).iter().any(|(m, _)| in_chapter_area(m, area)) => s += 250,
                     _ => {}
                 }
             }
@@ -1245,9 +1249,20 @@ impl<'e> Walker<'e> {
             })
         });
         // the scripted route: the next step on this map.  `text|c1,c2|pads` = the action whose name contains `text`, played with those
-        // answers and the buttons `pads` (L R U D, O = circle, X = cross, T = triangle, S = square; see `Policy::pads`)
+        // answers and the buttons `pads` (L R U D, O = circle, X = cross, T = triangle, S = square; see `Policy::pads`).  A step
+        // `0x18>MAP:text` belongs to the chapter whose flag is 0x18: it is dropped once that flag is set (a whole-game plan whose walk
+        // got past a puzzle without it)
+        let regs_now = self.game.regs();
+        while let Some(f) = self.plan.front().and_then(|(m, _)| plan_step_flag(m)) {
+            if !flag(&regs_now, f) {
+                break;
+            }
+            let (m, t) = self.plan.pop_front().unwrap();
+            self.log(format!("plan step {m}:{t} dropped: flag {f:#x} is set ({} left)", self.plan.len()));
+        }
+        let here = self.game.map().to_string();
         let mut scripted: Option<usize> = None;
-        if let Some((m, t)) = self.plan.front().cloned().filter(|(m, t)| m == self.game.map() && t.contains('|')) {
+        if let Some((m, t)) = self.plan.front().cloned().filter(|(m, t)| plan_step_map(m) == here && t.contains('|')) {
             let mut parts = t.split('|');
             let name = parts.next().unwrap_or("").trim().to_string();
             let choices: Vec<usize> = parts.next().unwrap_or("").split(',').filter_map(|c| c.trim().parse().ok()).collect();
@@ -1265,7 +1280,7 @@ impl<'e> Walker<'e> {
             }
         }
         let planned = if scripted.is_some() { scripted } else { match self.plan.front() {
-            Some((m, t)) if m == self.game.map() => {
+            Some((m, t)) if plan_step_map(m) == here => {
                 let i = outs.iter().position(|(_, o, _)| format!("{} {:?}", o.action, o.policy.choices).contains(t.as_str()));
                 if i.is_none() {
                     let have: Vec<String> = outs.iter().map(|(_, o, _)| format!("{} {:?}", o.action, o.policy.choices)).collect();
@@ -1731,6 +1746,17 @@ impl WalkerView {
         let (stop, ticks) = g.settle(&mut pol, self.max_action);
         (Outcome { action: a.clone(), stop, ticks, novel: 0, new_flags: vec![], changed_bytes: 0, save_changed: 0, picked_up: false, policy: pol }, g)
     }
+}
+
+/// The map of a plan step's `[FLAG>]MAP` part.
+pub fn plan_step_map(m: &str) -> &str {
+    m.split_once('>').map(|x| x.1).unwrap_or(m).trim()
+}
+
+/// The chapter flag of a plan step's `FLAG>MAP` part (the step is dropped once the flag is set).
+pub fn plan_step_flag(m: &str) -> Option<u32> {
+    let f = m.split_once('>')?.0.trim();
+    f.strip_prefix("0x").map(|h| u32::from_str_radix(h, 16).ok()).unwrap_or_else(|| f.parse().ok())
 }
 
 /// Button names of a plan step / `walk_probe --pads`: `L,R,U,D` (d-pad), `O` circle, `X` cross, `T` triangle, `S` square, `W` no button.
