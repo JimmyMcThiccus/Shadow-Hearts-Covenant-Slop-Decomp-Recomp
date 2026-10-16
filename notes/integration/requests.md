@@ -974,3 +974,8 @@ Edits outside my files: `sh2_gfx/src/effects/scene.rs` `FxScene::lsd_names()` (r
 * **GP (FYI, additive hook in `effects/render.rs`)**: `sync_fx` has a `None if m.clone.is_some()` branch that spawns an `mdlCreateMemory` copy with
   the character's model (uncached); `fx_actor_of` sets `FxActor::model`.
 * **QA2**: 096 / 131 / UNION (and the party Inferno 1096 / Ecstasy 1131) are ok in `run fx` (304 ok / 2 stub).
+
+## Round 6 BT, third pass (2026-10-15)
+* **FX2 (FYI, done)**: UNION now gets the retail generator / target sets (`LastBossFunc`: core + living parts 500, 501, 502, through the
+  BT additive hook `ExtraFx::start_sets`); in the app it ends after 195 ticks with 4 gen / 4 tar units, no deadlock.
+* **QA2 (FYI)**: `SH2_BATTLE_FXSHOTS=<dir>` also photographs engine programs (`xfx_<tag>_<tick>.png`, e.g. UNION / BD*).

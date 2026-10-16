@@ -256,6 +256,7 @@ fn drive(
     mut exit: MessageWriter<AppExit>,
     cams: Query<(Entity, &Camera, Option<&Camera3d>, &GlobalTransform, Option<&Projection>)>,
     db: Option<Res<crate::plugin::BattleDb>>,
+    extra: Option<Res<crate::effects_bridge::ExtraFx>>,
 ) {
     dd.ticks += 1;
     // hard frame cap (round 5 rule: every dev-drive run must end by itself): `SH2_BATTLE_MAX_TICKS`, default 30000 ticks (~8 min at 60 Hz)
@@ -596,6 +597,17 @@ fn drive(
             }
             if rt.spark_count() > 0 {
                 dd.shot("weapon_hit");
+            }
+            // the engine programs (`UNION.EFD`, the boss death `BD*`) too: `xfx_<tag>_<tick>.png`
+            if let (Some(dir), Some(extra)) = (std::env::var_os("SH2_BATTLE_FXSHOTS").map(std::path::PathBuf::from), extra.as_ref()) {
+                let every: u32 = std::env::var("SH2_BATTLE_FXEVERY").ok().and_then(|s| s.parse().ok()).unwrap_or(8);
+                for run in extra.runs.iter().filter(|r| !r.prog.finished) {
+                    let t = run.prog.ticks;
+                    if t >= 3 && (t - 3) % every == 0 && dd.taken.insert(format!("xfx_{}_{}_{}", run.tag, run.key, t)) {
+                        let _ = std::fs::create_dir_all(&dir);
+                        commands.spawn(Screenshot::primary_window()).observe(save_to_disk(dir.join(format!("xfx_{}_{:03}.png", run.tag, t))));
+                    }
+                }
             }
             // the total hit panel / counter once the floating numbers have gone (`hud_hits`)
             if !rt.hits.panels.is_empty() && rt.hits.texts.is_empty() && rt.hits.counters.is_empty() && rt.hits.panels.iter().all(|p| p.t > 0.4 && !p.closing) {

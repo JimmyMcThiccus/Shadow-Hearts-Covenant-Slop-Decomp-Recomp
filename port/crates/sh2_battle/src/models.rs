@@ -889,6 +889,27 @@ pub fn drive_battle_models(
                     m.ch.walk_beside(pp, pr, &*asset);
                 }
             }
+            // the other antics' motions (US `BtlChrSequence` state 0xc: `sp1` -> `sp2`, phase 0x10 `sp3`; state 0xd: `win`; phase 0x12: state
+            // 0x26 `dwn` -> 0x2a `dwni`, lying until the next turn) and the search's find jingle (`PlaySE(0x1002)`, SYSREG)
+            BattleEvent::Party(crate::flow::PartyEvent::BerserkAntic { chr, antic }) => {
+                if let Some(Ok((mut m, _, _))) = ent(st, *chr).map(|en| models.get_mut(en)) {
+                    let asset = m.asset.clone();
+                    match antic {
+                        crate::flow::Antic::Search { item, .. } => {
+                            m.ch.antic(&["sp1", "sp2", "sp3"], &*asset);
+                            if item.is_some() {
+                                sh2_audio::post(sh2_audio::AudioRequest::PlayGlobalSe { id: sh2_audio::se_ids::global(sh2_audio::se_ids::BANK_SYSREG, 0x1002) });
+                            }
+                        }
+                        crate::flow::Antic::Talk { .. } => {
+                            m.ch.antic(&["win"], &*asset);
+                        }
+                        crate::flow::Antic::Pose => m.ch.faint(),
+                        // the fighter's own `TurnStart` already got it up (`Choreo::turn_starts`)
+                        crate::flow::Antic::Approach { .. } | crate::flow::Antic::Wake => {}
+                    }
+                }
+            }
             BattleEvent::Defeat => {
                 for en in st.entities.iter().flatten() {
                     if let Ok((mut m, _, _)) = models.get_mut(*en) {

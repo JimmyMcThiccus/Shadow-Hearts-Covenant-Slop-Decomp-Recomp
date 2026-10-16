@@ -1511,6 +1511,9 @@ pub struct FighterExt {
     /// round 6 BT: the character's special-command list (`SetSkill1Menu` mask, [`crate::menu_data::MenuSource::skill_mask`]): bit `k` =
     /// record `k` of its `SKIL` group; the berserk antics pick from it
     pub skill_mask: u64,
+    /// round 6 BT: `BtlChr+0xb6` bit 0x10 -- lying unconscious after a berserk faint ([`crate::flow::Antic::Pose`]); `TurnBeforeFunc` step 0
+    /// clears it at the character's next turn (`SetBtlMessage(0x80)`) and state 0x2a gets up
+    pub fainted: bool,
 }
 
 /// What a fusion changes on the character (`FusMonInit` 0x49fb10 + the getters' fused branch).
@@ -2304,11 +2307,13 @@ mod tests {
     #[test]
     fn real_tables() {
         let Some(d) = disc() else { return };
+        // other tests flip the process-wide region in parallel: check the retail zones only when it held still across the load
+        let retail = sh2_core::boot::is_retail();
         let bd = BattleData::load(&d).unwrap();
         let t = ActionTables::load(&bd);
         assert!(t.items.len() >= 41 && t.items[0].battle_use);
         // Judgement Ring zones (live `01l` Cure one blue zone (60, 60, 15); Thera Leaf's strike area)
-        if sh2_core::boot::is_retail() {
+        if retail && sh2_core::boot::is_retail() {
             assert_eq!(t.groups[11][0].ring_mod, Some((60, 60, 100, 15)));
             assert!(t.groups[11][0].ring_steps.is_empty());
             assert_eq!(t.magic[10].ring_steps, vec![(145, 50)]);

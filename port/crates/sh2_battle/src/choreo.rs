@@ -117,6 +117,8 @@ pub enum Act {
     Win,
     /// the victory pose held on its last frame until the fight is over (`BtlModel+0x510 == 2`: the win scene waits for the result screen)
     WinHold,
+    /// round 6 BT: a berserk antic (US `BtlChrSequence` states 0xc / 0xd): the motions `seq` in turn (`i` = the one playing), then idle
+    Antic { seq: Vec<&'static str>, i: usize },
 }
 
 /// A request for the model's motion.
@@ -452,6 +454,9 @@ pub struct Choreo {
     pub push: Option<Push>,
     /// character package sounds requested since the owner last drained them, see [`ChrSe`]
     pub sounds: Vec<ChrSe>,
+    /// round 6 BT: lying down alive after a berserk faint (US phase 0x12 sets `BtlChr+0xb6` bit 0x10, which keeps state 0x2a from waking);
+    /// the fighter gets up at its next turn
+    pub fainted: bool,
 }
 
 impl Choreo {
@@ -478,6 +483,7 @@ impl Choreo {
             stand_extra: 0.0,
             push: None,
             sounds: vec![],
+            fainted: false,
         }
     }
 
@@ -510,6 +516,7 @@ impl Choreo {
             Act::Gone => "gone",
             Act::Win => "win",
             Act::WinHold => "winhold",
+            Act::Antic { .. } => "antic",
         }
     }
 
@@ -517,7 +524,7 @@ impl Choreo {
     pub fn busy(&self) -> bool {
         matches!(
             self.act,
-            Act::Approach { .. } | Act::Strike { .. } | Act::Finish { .. } | Act::Return { .. } | Act::Walk { .. } | Act::Cast { .. } | Act::Hit { .. } | Act::GuardHit | Act::Wake | Act::Dissolve | Act::Escape
+            Act::Approach { .. } | Act::Strike { .. } | Act::Finish { .. } | Act::Return { .. } | Act::Walk { .. } | Act::Cast { .. } | Act::Hit { .. } | Act::GuardHit | Act::Wake | Act::Dissolve | Act::Escape | Act::Antic { .. }
         ) || (matches!(self.act, Act::Down | Act::EnemyDown) && self.t < 1.2)
     }
 
@@ -640,6 +647,10 @@ impl Choreo {
 
     /// The fighter's own turn starts: the guard stance is dropped.
     pub fn turn_starts(&mut self) {
+        if self.fainted && matches!(self.act, Act::Down) {
+            self.fainted = false;
+            self.set(Act::Wake);
+        }
         if matches!(self.act, Act::Guard | Act::GuardHit) {
             self.set(Act::Idle);
         }
@@ -651,8 +662,32 @@ impl Choreo {
         }
     }
 
+    /// Round 6 BT: a berserk antic's motions (Anastasia's search: state 0xc `sp1` -> `sp2`, then phase 0x10 `SetNextBtlMotion(0x3a)` `sp3`;
+    /// Gepetto / Joachim: state 0xd `win`), then idle.
+    pub fn antic(&mut self, seq: &[&'static str], ms: &dyn MotionSet) -> bool {
+        if !matches!(self.act, Act::Idle | Act::Intro | Act::Guard) || !seq.iter().any(|n| ms.has(n)) {
+            return false;
+        }
+        self.set(Act::Antic { seq: seq.to_vec(), i: 0 });
+        true
+    }
+
+    /// Round 6 BT: a berserk faint (US phase 0x12: state 0x26 `dwn` + `0x7000_0005`, then 0x2a `dwni`), alive; up again at the next turn.
+    pub fn faint(&mut self) {
+        if matches!(self.act, Act::Idle | Act::Intro | Act::Guard) {
+            self.fainted = true;
+            self.set(Act::Down);
+        }
+    }
+
     /// Victory: the living party members cheer.
     pub fn victory(&mut self, ms: &dyn MotionSet) {
+        // `Phase15_Win` clears the faint bit (`BtlChr+0xb6 & 0xef`): a fainted member gets up
+        if self.fainted && matches!(self.act, Act::Down) {
+            self.fainted = false;
+            self.set(Act::Wake);
+            return;
+        }
         if !self.enemy && matches!(self.act, Act::Idle | Act::Guard | Act::Intro) && ms.has(names::WIN) {
             self.set(Act::Win);
         } else if !self.enemy && matches!(self.act, Act::Idle | Act::Guard | Act::Intro) {
@@ -741,7 +776,7 @@ impl Choreo {
         if !self.enemy {
             if w.dead && !matches!(self.act, Act::Down | Act::Gone) {
                 self.set(Act::Down);
-            } else if !w.dead && matches!(self.act, Act::Down) {
+            } else if !w.dead && matches!(self.act, Act::Down) && !self.fainted {
                 self.set(Act::Wake);
             }
         } else if w.dead && !self.is_dead_act() {
@@ -1010,6 +1045,20 @@ impl Choreo {
                 }
             }
             Act::WinHold => {}
+            Act::Antic { seq, i } => match seq.get(i) {
+                Some(&n) if !ms.has(n) => self.set(Act::Antic { seq, i: i + 1 }),
+                Some(&n) => {
+                    if (anim.finished && playing(n) && self.t > 0.05) || self.t > STEP_TIMEOUT {
+                        self.set(Act::Antic { seq, i: i + 1 });
+                    } else {
+                        want = Some((n.into(), 0.12));
+                    }
+                }
+                None => {
+                    self.set(Act::Idle);
+                    want = Some((idle.into(), 0.15));
+                }
+            },
         }
 
         if let Some((name, blend)) = want {
@@ -1607,6 +1656,31 @@ pub mod tests {
         let mut e = enemy(0);
         e.despair(&f);
         assert_eq!(e.act, Act::Idle);
+    }
+
+    /// Round 6 BT: the berserk antics' motions (US states 0xc / 0xd / 0x26 -> 0x2a).
+    #[test]
+    fn berserk_antics_play_their_motions_and_faint_until_the_next_turn() {
+        let f = Fake::party();
+        let mut p = Player::new(&f);
+        let mut c = party();
+        run(&mut c, &f, &mut p, 1.5, 1.0, false, false);
+        // Talk: `win` once, then idle; missing motions are skipped
+        assert!(c.antic(&["sp1", "win"], &f) && c.busy());
+        let (_, names) = run(&mut c, &f, &mut p, 4.0, 1.0, false, false);
+        assert_eq!(names, vec!["win", "idla"]);
+        assert_eq!(c.act, Act::Idle);
+        assert!(!c.antic(&["sp1", "sp2"], &f), "nothing to play");
+        // faint: `dwn` -> `dwni`, alive, and it stays down until the fighter's next turn
+        c.faint();
+        let (_, names) = run(&mut c, &f, &mut p, 5.0, 1.0, false, false);
+        assert_eq!(names, vec!["dwn", "dwni"]);
+        assert_eq!(c.act, Act::Down);
+        assert!(!c.busy());
+        c.turn_starts();
+        let (_, names) = run(&mut c, &f, &mut p, 3.0, 1.0, false, false);
+        assert_eq!(names, vec!["wup", "idla"]);
+        assert!(!c.fainted);
     }
 
     #[test]

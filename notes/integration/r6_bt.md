@@ -96,13 +96,37 @@ battle command menu, ring, victory, field after battle, menu tour checked; dev d
 * RG ring intro: analysed, not changed (jring `seq_intro` type 5 starts tilted ~(15, 55) deg; needs a live read of `JRing+0x70`).
 * MN2 shortcut rules: the battle has no shortcut (`SetComboShortCutMenu`) handling yet; noted the retail item-row clearing (JP CBattle.c ~10917).
 
+## 7. Round 6 BT, third pass (2026-10-15, after the stop)
+Status: `cargo test -p sh2_battle` 253 green (3 full runs; `actions::tests::real_tables` was flaky -- other tests flip the process-wide region
+while it loads, it now checks the retail ring zones only when the region held still), `cargo check --workspace --all-targets` clean.  Sanity
+(`sh2_app --us --autoplay --boost 80 --shots`): battle command menu, Judgement Ring, victory, field after battle, menu top checked.
+* **UNION party generators (FX2's request)**: `plugin::union_units` = `LastBossFunc` step 1 (JP 0x45f620): the core, then the living parts in
+  the order CHR 500, 501, 502 (`SetGenModel(n, +0x3c34)`), the same list as targets (`+0x3d24`); `ExtraFx::start_sets` (effects_bridge, BT
+  additive hook) passes them.  App (`SH2_BATTLE_DEMO=302 SH2_BATTLE_BOSS_JOIN=1 SH2_BATTLE_PARTY=0,5,3,4 SH2_BATTLE_LEVEL=99`): "engine effect
+  (union) ended after 195 ticks, 4 gen / 4 tar units", no deadlock (was cut at t102), twice in one fight.  Screens
+  `screens/r6_bt/union_full_set_t123.png` / `_t171.png`.  Dev aid: `SH2_BATTLE_FXSHOTS` now also photographs engine programs (`xfx_<tag>_<tick>.png`).
+  Open: retail closes the party panel / turn bar before UNION (`LastBossFunc` step 0); the port still shows the turn bar during it.
+* **Berserk antics PC 1..7** (`flow::berserk_command`, WIP of the stopped agent completed; rates from its disassembly of 0x691090..0x694198,
+  test `berserk_antics_follow_the_retail_blocks`): Blanca 50 % approach, Gepetto 30 % Cornelia, Lucia 40 % Tarot, Anastasia 10 % search /
+  40 % Snap Shot, Karin 10 % faint, Joachim 30 % showing off, Kurando 75 % attacks the nearest unit; skill picks per character.  Presentation from
+  the US phases 0x0f..0x12 + `BtlChrSequence` (decomp/I): search = state 0xc `sp1` -> `sp2`, then `sp3` (0x3a), found item `PlaySE(0x1002)`
+  (SYSREG) + 0x7c / else 0x7d; talk = state 0xd `win` + 0x7e (Gepetto) / 0x81; faint = 0x26 `dwn` -> 0x2a `dwni` + `0x7000_0005` + 0x7f, and
+  `BtlChr+0xb6` bit 0x10 keeps 0x2a from waking: **`TurnBeforeFunc` step 0 (US 0x4737d0) clears it at her next turn with `SetBtlMessage(0x80)`**,
+  she gets up (`wup`) and the turn goes on (`Antic::Wake`, `FighterExt::fainted`, `Choreo::faint` / `antic`).  Test
+  `berserk_antics_play_their_motions_and_faint_until_the_next_turn`.  Not ported: the after-antic `DestinationSearch` walk (phase 0x14) of
+  phases 0x0f..0x11, Kurando's run-away branch, Joachim's story-word filter.  Antics not seen on screen yet (needs a berserk party member).
+* **Panic** (status 0x54 bit 0x10): scanned US BATTLE.BIN and SLUS_210.41 for every `li 0x54` status-kind compare followed by an `andi 0x10`
+  or a bit-4 shift test: the only hit is `DecSPp` (US 0x6a5e20, the x3 Sanity cost, already ported).  `TurnBeforeFunc` tests only Paralysis
+  (step 0x39) and Sanity (0x3d).  So retail Panic = the x3 Sanity drain; everything else is the generic status machinery (cure, protection,
+  icons, AI condition masks).  Nothing to add.
+
 ## Open (priority)
 1. (mostly done, see 6) Weapon / voice SE: the retail hit / swing code (US 0x4c6a40..0x4c9b40, JP CBattle.c ~15580 / ~29770) plays global ids `0x6000_1001..100a`,
    `0x6000_3005..3007`, `0x7000_000x`, `0x9000_000x` through `HNMSnd::PlaySE` (SLUS 0x38a900, queued as is).  No SSE bank on the disc has wave
    bank 0x6000 / 0x7000 (`examples/bt_se_banks`: battle banks are 0x90xx M/W, 0x91xx C, 0x92xx.., system 0x0200), so these are class ids the
    sound driver maps -- asked CS2 (requests.md).
-2. Berserk antics of PC ids 1..7 (disassembly of 0x691090..0x694198).
-3. Panic beyond the x3 SP drain (not looked into); the AI's skill-block records, dispel test, Joachim filter.
+2. (done, see 7) Berserk antics; left: the after-antic destination walk, Kurando's run-away, antics on screen.
+3. (Panic: nothing beyond the x3 SP drain, see 7.)  The AI's skill-block records, dispel test, Joachim filter.
 4. Tutorial pages (battle types 1 / 2).
 5. Last boss: where retail triggers the separation; the separated-core-death case live.
 6. Battle shortcut / combo-key menu (`SetComboShortCutMenu`), RG ring intro orientation (live `JRing+0x70`), the `0x6000_300x` / `1008..100a` ids.

@@ -672,6 +672,9 @@ pub enum Antic {
     Talk { cornelia: bool },
     /// 0x12: falls down (`bState 0x26`, `0x7000_0005`) with `SetBtlMessage(0x7f)` "%s lost consciousness!" (Karin)
     Pose,
+    /// `TurnBeforeFunc` (US 0x4737d0) steps 0..3: the fainted member's next turn -- `BtlChr+0xb6 &= ~0x10`, `SetBtlMessage(0x80)`, state 0x2a
+    /// -> 0x2b (`wup`); then the turn goes on (step 10)
+    Wake,
 }
 
 /// `Retail_CBattle_Phase10_BerserkFindItem` (US 0x493ed0): the weights of items 0..40 the search can turn up (BATTLE.BIN 0x6e2e80).
@@ -1004,6 +1007,13 @@ impl<H: Host> Battle<H> {
             }
             Phase::TurnBefore => {
                 let i = self.actor.unwrap();
+                // `TurnBeforeFunc` step 0: a member lying unconscious after a berserk faint gets up (message 0x80) and goes on with its turn
+                if self.ext.get(i).is_some_and(|e| e.fainted) {
+                    self.ext[i].fainted = false;
+                    if self.fighters[i].as_ref().is_some_and(|f| f.hp > 0) {
+                        self.events.push(BattleEvent::Party(PartyEvent::BerserkAntic { chr: i, antic: Antic::Wake }));
+                    }
+                }
                 let gm = self.gmod;
                 let f = self.fighters[i].as_mut().unwrap();
                 // tick down timed status modifiers (MakeTurnOrderTable: duration byte)
@@ -1756,6 +1766,9 @@ impl<H: Host> Battle<H> {
             5 => {
                 if rand10k(self) <= 1000 && last != 127 {
                     set_last(self, 127);
+                    if let Some(e) = self.ext.get_mut(i) {
+                        e.fainted = true;
+                    }
                     return self.berserk_antic(i, Antic::Pose);
                 }
                 if last != 19 && !sealed {
@@ -2889,6 +2902,17 @@ mod bp_flow_tests {
         let id = found.expect("a search found something");
         assert!((id as usize) < BERSERK_FIND_WEIGHTS.len() && BERSERK_FIND_WEIGHTS[id as usize] > 0 && b.bag[id as usize] >= 1);
         assert!(b.stats.bag_found.contains(&id));
+        // Karin's faint marks her unconscious (`BtlChr+0xb6` bit 0x10) until her next `TurnBefore`
+        b.ext[0].pc = 5;
+        for _ in 0..1000 {
+            b.ext[0].berserk_last = 0;
+            let before = b.events.len();
+            b.berserk_command(0);
+            if b.events[before..].iter().any(|e| matches!(e, BattleEvent::Party(PartyEvent::BerserkAntic { antic: Antic::Pose, .. }))) {
+                break;
+            }
+        }
+        assert!(b.ext[0].fainted);
     }
 
     #[test]

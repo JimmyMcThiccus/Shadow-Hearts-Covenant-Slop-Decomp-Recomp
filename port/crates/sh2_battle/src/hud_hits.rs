@@ -1452,6 +1452,7 @@ pub fn party_event_texts(hits: &mut HitFx, ev: &crate::flow::PartyEvent, is_enem
                 Antic::Talk { cornelia: true } => (0x7e, name(*chr), format!("{} is playing with Cornelia.", name(*chr))),
                 Antic::Talk { cornelia: false } => (0x81, name(*chr), format!("{} is showing off.", name(*chr))),
                 Antic::Pose => (0x7f, name(*chr), format!("{} lost consciousness!", name(*chr))),
+                Antic::Wake => (0x80, name(*chr), format!("{} regained consciousness.", name(*chr))),
             };
             let s = crate::hud_result::message(text, id, &arg);
             let s = if s.is_empty() { fallback } else { s };
