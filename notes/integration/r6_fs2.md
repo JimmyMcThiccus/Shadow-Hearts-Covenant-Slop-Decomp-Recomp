@@ -1,6 +1,6 @@
 # Round 6 FS2: story to the end, field scripts
 
-## Status (2026-10-16, batch 6)
+## Status (2026-10-16, batch 7)
 
 **Chapters reached (story flags set by walks, union with round 5):**
 - First half: **31 of 34** (0x18 Nemeton ruins in batch 3; 0x1b Sainte-Marguerite and 0x1c Cannes 2 in batch 4).  Missing 0x08,
@@ -17,13 +17,42 @@
   `fs2/chain/6_last_dungeon_AI_00_U.walk` with the Vessel plan, AI_00..03 rings -> AI_06_U (boss, monster set 217) -> GY_00_D ->
   AI_04_U -> ED_00_U (final boss 302) -> `SpecialMenu(7)` "THE END" in 41 steps / 17 s.  0x55 is never set by a script (see above).
 - Hidden: **2 of 6** (batch 6: 0x65 Doll house, 0x69 Ring Tower; what sets the others: batch 5).
-- **Clean walk from New Game (no hand-set flags), batch 6 in story order: first half 13 / 34** (0x09..0x13, 0x1d, 0x29), now at the
-  Manmaria zodiac doors (AD_02_U); batch 5's out-of-order walk had 26 (see batch 6 for why it was wrong).
+- **Clean walk from New Game to THE END, in story order, no hand-set flags (batch 7): first half 31 / 34, second half 23 / 26**
+  (the same flags as the union of all walks: missing only 0x08, 0x19, 0x1a, 0x41, 0x4d, 0x55, which no script sets).  Hidden 2 / 6
+  by their own plans (batch 6).  Checkpoints per chapter in `fs2/clean/` (`0_post11_WE_02_U` .. `7_ending_00586_ED_00_U`).
 
 **Second-half chain** (checkpoints in `fs2/chain/`, resume with `story_walk --load F [--goto MAP:ENTRY]`):
 `1_post4e_00037_IN_04_U` (Fuji search result) -> `2_post4f_AP_02_A` (+ `--goto KA_09_U:0`) -> `3_post51_IN_02_U` (+ `--goto QG_14_U:0`)
 -> `4_post53_WE_00_U` -> `5_post54_IN_00_U` -> `6_last_dungeon_AI_00_U`.  Logs: `fs2/fu5.err`, `w1.err`, `w2a.err`, `w3a.err`,
 `w4a.err`, `w5.err`, `ai1.err`.
+
+**Batch 7 (2026-10-16): Manmaria zodiac doors; the clean walk reaches the ending.**
+- **Zodiac doors (AD_02_U, chapter 0x14).**  DoorPanelFunc (func 0x6d38, door 0..3) checks the tiles in regT2 bytes 0x348..0x35e
+  (u16 treasure ids, door d frame f at 0x348 + 6d + 2f) against door 0 0x8e 0x8b 0x7f, door 1 0x83 0x84 0x88, door 2 0x80 0x81 0x82,
+  door 3 0x87 0x8a 0x8c (func 0x6b0e); doors 0..2 open the way on (AD_02 -> AD_14 -> AD_12 -> AD_05, which sets 0x14).  "Has tile"
+  is `TreasureControl(1, id)` -> code, `TreasureControl(5, code, 0)` -> count (kind 10 key items); the tile names the port shows in
+  the list are wrong (the ids are right).  The menu is pad-driven: frame menu (`get_pad(1)` at 0x7e18: circle = choose frame, square =
+  poem, cross = leave, right / down = next frame -- right on door 0, down on doors 1..3), tile list (0x8472: right / left or up / down
+  move, circle places, the tile leaves the bag).  List order 0x82 0x80 0x8e 0x8a 0x7f 0x83 0x88 0x87 0x8b 0x81 0x84 0x8c; the cursor
+  stays where the last tile was taken, also across doors (`fs2/zodiac.py` computes the presses).  The AB-blood door (AD_03_U) wants
+  answers 0, 4 (Gepetto); the tiles come from AD_06_U / AD_10_U slot 1 and the chests the walker opens on its own.
+- **Walker changes (`story.rs`):** timed scripted presses (`Policy::pad_hold`, plan step `text|answers|pads|hold`: held `hold` ticks,
+  a new press only on the first tick, then 30 ticks without -- the read-based presses were consumed by reads the menu ignored);
+  `settle` no longer waits for leftover pads once no event polls (`pad_age > 120`); a plan step is never undone by a backtrack and is
+  no branch point; with nothing new to do the walker heads for the next plan step's map over the learnt exits (`distances_to`); plan
+  steps can wait for flags (`FLAG+NEED+NEED>MAP:text`, `plan_step_ready`: Locke's key waits for the three parts, the SM_19 door for
+  0x94f); `CHAPTER_AREAS` += Russia / Goreme / Mirror castle / SK, `AREA_GATEWAYS` += HE via PE, MS via GY.  `SH2_WALK_PADS_DEBUG`
+  traces the scripted presses; `walk_probe --hold N`.
+- **Whole-game plan** (`tests/walk/full_game.plan`): Manmaria (AB door, two tile chests, three zodiac doors), Nemeton,
+  Sainte-Marguerite, Mikasa, **Mt. Fuji** (17 steps, the route of the batch-1 puzzle search, so the walk needs no 3000-state search),
+  the Vessel.  The clean walk ran in pieces, each resumed from its own last checkpoint after a walker fix: `fs2/full7` (Manmaria ..
+  0x18), `full9` (0x1b / 0x1c), `full10` (Russia .. 0x4b: the disc change, Mikasa, the Todo labs), `full11` (Fuji .. THE END).
+- Test `retail_story::zodiac_doors_plan_sets_manmaria` (ignored, release; fixture `tests/walk/ad_02_u_zodiac.walk`).
+- **Schwarzwald (0x66): not solved.**  The maze step function (func 0x2c8d, all SH maps) keeps the step in bytes 0x19c / 0x19e and
+  checks the direction (box event: SH_00 ev 2 = 3; SH_01 ev 2 / 3 = 1 / 2; SH_02 ev 2 / 3 / 4 = 1 / 2 / 3) against the route table
+  3 1 3 2 2 1 1 3 3 2 2 3 2 1 1 1 1 1 1 1 1 2 1 3 (maps 0 1 2 1 2 1 1 2 2 2 1 2 1 2 2 1 2 2 1 1 1 1 2 2 3 4 = SH_00..SH_04), but only
+  while byte 0x19d is 1.  The walker arrives with 0x19d = 0 (the entrance walk-on box, ev 1, which the teleporting walker skips, is
+  what sets it), so every step resets.  Next: play the entrance box on arrival, then `fs2/sh_plan.txt` (24 steps).
 
 **Batch 6 (2026-10-16): world-map order, Ring Tower, Doll house.**
 - **World-map unlock order: retail opens Russia early, the port is right.**  `SetWorldMapPoint` call sites (`msc_calls --ops 0x70`

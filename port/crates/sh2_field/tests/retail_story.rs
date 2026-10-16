@@ -325,6 +325,30 @@ fn doll_house_plan_sets_the_hidden_chapter() {
     assert!(sh2_field::story::flag(&w.game.regs(), 0x65), "{:?}", w.steps.iter().rev().take(5).map(|s| &s.what).collect::<Vec<_>>());
 }
 
+/// Manmaria (0x14): the zodiac-tile doors of AD_02_U driven by timed pad presses (`tests/walk/ad_02_u_zodiac.plan`); the walk then goes
+/// through the opened door to AD_05_U, which sets 0x14.  Release build: `cargo test --release -p sh2_field --test retail_story -- --ignored zodiac`.
+#[test]
+#[ignore]
+fn zodiac_doors_plan_sets_manmaria() {
+    let Some(env) = walk_env() else { return };
+    let (s, _, _) = sh2_field::story::read_checkpoint(&fixture("ad_02_u_zodiac.walk")).unwrap();
+    let g = sh2_field::story::Game::resume_at(&env, s, "AD_02_U", 0).unwrap();
+    let mut w = sh2_field::story::Walker::new(&env, g);
+    let plan = std::fs::read_to_string(fixture("ad_02_u_zodiac.plan")).unwrap();
+    w.plan = plan.lines().filter(|l| !l.starts_with('#') && !l.trim().is_empty()).filter_map(|l| l.split_once(':')).map(|(m, t)| (m.to_string(), t.to_string())).collect();
+    assert_eq!(w.plan.len(), 3);
+    for _ in 0..40 {
+        if sh2_field::story::flag(&w.game.regs(), 0x14) {
+            break;
+        }
+        w.run(1);
+    }
+    let b: Vec<u8> = w.game.regs().iter().flat_map(|r| r.to_le_bytes()).collect();
+    let tile = |o: usize| u16::from_le_bytes([b[o], b[o + 1]]);
+    assert_eq!([tile(0x348), tile(0x34a), tile(0x34c)], [0x8e, 0x8b, 0x7f]);
+    assert!(sh2_field::story::flag(&w.game.regs(), 0x14), "{:?}", w.steps.iter().rev().take(5).map(|s| &s.what).collect::<Vec<_>>());
+}
+
 /// Todo lab 1, TD_02_U: the corridor gallery (walk-on box 6, event 6) is played -- the walker takes a walk-on box that changes the state
 /// before it leaves the room (in the game the player walks through it) and holds still while the targets come (a press is a miss).
 /// Event 6 sets 0x1c2e and clears 0x1c2f, the flag that TD_06_U's look point set and that TD_02_U's door reads as "wrong way" in the

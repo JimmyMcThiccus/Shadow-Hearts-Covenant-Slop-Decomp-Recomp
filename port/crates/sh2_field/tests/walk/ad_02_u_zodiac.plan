@@ -1,0 +1,8 @@
+# Manmaria (0x14): AD_02_U's zodiac-tile doors, from ad_02_u_zodiac.walk (all twelve tiles in the bag: AD_06_U / AD_10_U chests and
+# the AB-blood door, Gepetto = answer 4), resumed at AD_02_U:0.  Each door: circle opens the tile list on the frame, right moves the
+# list cursor (it stays where the last tile was taken, across doors), circle places, right (door 0) / down (doors 1, 2) moves to
+# the next frame, cross leaves.  Solutions (treasure ids, regs 0x348..0x358): door 0 0x8e 0x8b 0x7f, door 1 0x83 0x84 0x88, door 2
+# 0x80 0x81 0x82; list order 0x82 0x80 0x8e 0x8a 0x7f 0x83 0x88 0x87 0x8b 0x81 0x84 0x8c (taken tiles leave it).  Timed presses (hold 1).
+0x14>AD_02_U:examine box 1 (ev 2)||O,R,R,O,R,O,R,R,R,R,R,O,R,O,R,R,R,R,R,R,O,X|1
+0x14>AD_02_U:examine box 2 (ev 3)||O,O,D,O,R,R,R,O,D,O,R,R,R,R,O,X|1
+0x14>AD_02_U:examine box 3 (ev 4)||O,R,R,R,R,O,D,O,R,R,O,D,O,R,O,X|1

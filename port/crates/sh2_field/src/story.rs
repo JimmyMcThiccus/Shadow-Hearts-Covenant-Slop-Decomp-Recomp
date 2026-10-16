@@ -142,8 +142,9 @@ pub fn story_flags(regs: &[u32]) -> Vec<u32> {
 
 /// The area (map-name prefix) whose script sets a chapter flag with a constant argument (`flag_xref --set-only`), for the chapters the
 /// walker has to reach through the world map.  A player learns where to go from the story; the walker takes it from here.
-const CHAPTER_AREAS: [(u32, &str); 17] =
-    [(0x14, "AD"), (0x15, "FI"), (0x16, "AZ"), (0x17, "FI"), (0x18, "ND"), (0x1b, "SM"), (0x1c, "CA"), (0x27, "IF"), (0x28, "AP"), (0x4c, "FU"), (0x4e, "IN"), (0x4f, "GB"), (0x50, "KA"), (0x51, "IN"), (0x52, "QG"), (0x53, "WE"), (0x54, "IN")];
+const CHAPTER_AREAS: [(u32, &str); 25] =
+    [(0x14, "AD"), (0x15, "FI"), (0x16, "AZ"), (0x17, "FI"), (0x18, "ND"), (0x1b, "SM"), (0x1c, "CA"), (0x1e, "HE"), (0x1f, "PE"), (0x20, "HE"),
+     (0x21, "PE"), (0x22, "GT"), (0x23, "MS"), (0x24, "GT"), (0x25, "SK"), (0x27, "IF"), (0x28, "AP"), (0x4c, "FU"), (0x4e, "IN"), (0x4f, "GB"), (0x50, "KA"), (0x51, "IN"), (0x52, "QG"), (0x53, "WE"), (0x54, "IN")];
 
 /// The area of the next chapter (see [`CHAPTER_AREAS`]): the lowest one not reached in the half of the highest chapter reached;
 /// `None` when it is not known.  The first half branches (the walk can finish Wales 2 .. Apoina Tower 2, 0x1d..0x28, before Nemeton /
@@ -180,7 +181,7 @@ pub fn too_early(regs: &[u32], chapter: u32) -> bool {
 }
 
 /// Areas reached only through another one: Sainte-Marguerite (SM) by Nelson's boat from Cannes (CA_02_U -> SM_00_U).
-const AREA_GATEWAYS: [(&str, &str); 1] = [("SM", "CA")];
+const AREA_GATEWAYS: [(&str, &str); 3] = [("SM", "CA"), ("HE", "PE"), ("MS", "GY")];
 
 /// `map` belongs to the chapter area `area` or to the area the walker has to go through to get there ([`AREA_GATEWAYS`]).
 pub fn in_chapter_area(map: &str, area: &str) -> bool {
@@ -227,6 +228,10 @@ pub struct Policy {
     /// buttons pressed one by one (every 20 ticks, `0` = a pause) while the script itself polls the pad (`get_pad`) -- a pad-driven
     /// gimmick inside an event (the Vessel's altar ring: left / right, then circle); they replace the default circle presses then
     pub pads: Vec<u16>,
+    /// `> 0`: the scripted presses are timed instead of read-based: each is held this many ticks (a new press only on its first tick),
+    /// then 30 ticks without a button -- for menus that poll the pad all the time but act only when ready (AD_02_U's zodiac-tile
+    /// frames); plan step `text|answers|pads|hold`
+    pub pad_hold: u32,
 }
 
 /// What ended a run of ticks.
@@ -272,6 +277,8 @@ pub struct Game {
     pad_gap: u32,
     /// ticks since any job last read the pad, saturating
     pad_any_age: u32,
+    /// ticks the current timed scripted press has been held (`Policy::pad_hold`)
+    pad_held: u32,
     /// ticks the start job has polled the pad behind an open window
     help_wait: u32,
 }
@@ -380,7 +387,7 @@ impl Game {
         let prev = std::mem::replace(&mut session.map, map.to_string());
         let mut rt = crate::plugin::build_runtime_carry(&env.pkb, None, Some(env.tables.clone()), map, entry, &session, carry)?;
         rt.st.prev_map = if prev != map { prev } else { session.chr_pos.as_ref().map(|_| String::new()).unwrap_or_default() };
-        Some(Game { rt, session: GameSessionBox(session), battle: env.battle.clone(), party_log: vec![], idle_root: 0, no_ctrl: 0, pad: 0, quiet: 0, last_calls: 0, last_txt: String::new(), pad_reads: 0, pad_age: u32::MAX, pad_gap: 0, pad_any_age: u32::MAX, help_wait: 0 })
+        Some(Game { rt, session: GameSessionBox(session), battle: env.battle.clone(), party_log: vec![], idle_root: 0, no_ctrl: 0, pad: 0, quiet: 0, last_calls: 0, last_txt: String::new(), pad_reads: 0, pad_age: u32::MAX, pad_gap: 0, pad_any_age: u32::MAX, help_wait: 0, pad_held: 0 })
     }
 
     /// Resume a walk checkpoint ([`read_checkpoint`]): the resumed map has no models from the previous one, so the player (slot 0 = the
@@ -487,13 +494,36 @@ impl Game {
         // answered as usual.  Each press is held until the script has read it once, then nothing for 20 ticks (the Vessel altar ring,
         // AI_01_U func 0x42d0: get_pad(0) each round, left / right turn the ring, circle confirms, cross cancels).
         let gimmick = !policy.pads.is_empty() && self.pad_age < 30 && rt.vm.top_event().is_some() && !rt.st.ui.select.active;
-        if gimmick {
+        if !policy.pads.is_empty() && std::env::var_os("SH2_WALK_PADS_DEBUG").is_some() && t % 10 == 0 {
+            eprintln!("  [pads t{t}] next {:#x} left {} age {} event {:?} select {} gimmick {gimmick}", policy.pads[0], policy.pads.len(), self.pad_age, rt.vm.top_event(), rt.st.ui.select.active);
+        }
+        let mut edge = press;
+        if gimmick && policy.pad_hold > 0 {
+            if self.pad_gap > 0 {
+                self.pad_gap -= 1;
+                press = 0;
+                edge = 0;
+            } else {
+                press = policy.pads[0];
+                self.pad_held += 1;
+                edge = if self.pad_held == 1 { press } else { 0 };
+                if self.pad_held >= policy.pad_hold {
+                    if std::env::var_os("SH2_WALK_PADS_DEBUG").is_some() {
+                        eprintln!("  [pads t{}] held {:#x} ({} left)", rt.st.ticks, press, policy.pads.len() - 1);
+                    }
+                    policy.pads.remove(0);
+                    self.pad_held = 0;
+                    self.pad_gap = 30;
+                }
+            }
+        } else if gimmick {
             if self.pad_gap > 0 {
                 self.pad_gap -= 1;
                 press = 0;
             } else {
                 press = policy.pads[0];
             }
+            edge = press;
         }
         rt.st.press = press;
         crate::host::tick_state(&mut rt.st, &mut rt.sim);
@@ -503,7 +533,7 @@ impl Game {
                 rt.st.event_running = true;
             }
         }
-        rt.vm.set_pad(PadState { raw: press as u32, new_press: press as u32, repeat: 0, consumed: 0 });
+        rt.vm.set_pad(PadState { raw: press as u32, new_press: edge as u32, repeat: 0, consumed: 0 });
         let idle = rt.vm.poll(&mut FieldHost { st: &mut rt.st, sim: &mut rt.sim, session: Some(session) });
         if idle {
             rt.st.event_running = false;
@@ -512,7 +542,10 @@ impl Game {
         self.pad_reads = rt.vm.pad_reads;
         self.pad_any_age = if read { 0 } else { self.pad_any_age.saturating_add(1) };
         if read && rt.vm.top_event().is_some() {
-            if gimmick && self.pad_gap == 0 && !policy.pads.is_empty() {
+            if gimmick && policy.pad_hold == 0 && self.pad_gap == 0 && !policy.pads.is_empty() {
+                if std::env::var_os("SH2_WALK_PADS_DEBUG").is_some() {
+                    eprintln!("  [pads t{}] read {:#x} ({} left)", rt.st.ticks, policy.pads[0], policy.pads.len() - 1);
+                }
                 policy.pads.remove(0);
                 self.pad_gap = 20;
             }
@@ -618,7 +651,8 @@ impl Game {
             if let Some(s) = self.tick(policy) {
                 return (s, n);
             }
-            if n > 2 && policy.pads.is_empty() && self.is_free() {
+            // scripted presses left over once no event polls the pad any more (a menu that closed by itself) do not hold the walk
+            if n > 2 && (policy.pads.is_empty() || self.pad_age > 120) && self.is_free() {
                 return (Stop::Free, n);
             }
         }
@@ -1039,6 +1073,29 @@ impl<'e> Walker<'e> {
         }
     }
 
+    /// Hops from each known map to `target` over the learnt exits (reverse BFS).
+    fn distances_to(&self, target: &str) -> HashMap<String, u32> {
+        let mut rev: HashMap<&str, Vec<&str>> = HashMap::new();
+        for (a, ds) in &self.exits {
+            for d in ds {
+                rev.entry(d.as_str()).or_default().push(a.as_str());
+            }
+        }
+        let mut dist: HashMap<String, u32> = HashMap::new();
+        dist.insert(target.to_string(), 0);
+        let mut q = std::collections::VecDeque::from([target.to_string()]);
+        while let Some(m) = q.pop_front() {
+            let dm = dist[&m];
+            for s in rev.get(m.as_str()).cloned().unwrap_or_default() {
+                if !dist.contains_key(s) {
+                    dist.insert(s.to_string(), dm + 1);
+                    q.push_back(s.to_string());
+                }
+            }
+        }
+        dist
+    }
+
     /// Hops from each known map to the nearest frontier map (not visited since the last progress), over the learnt exits (reverse BFS).
     fn frontier_distances(&self) -> HashMap<String, u32> {
         let mut rev: HashMap<&str, Vec<&str>> = HashMap::new();
@@ -1118,16 +1175,16 @@ impl<'e> Walker<'e> {
     }
 
     pub fn try_action_ring(&self, a: &Action, choices: Vec<usize>, ring: Option<i32>) -> (Outcome, Game) {
-        self.try_action_pads(a, choices, ring, vec![])
+        self.try_action_pads(a, choices, ring, vec![], 0)
     }
 
     /// [`Walker::try_action_ring`] with scripted button presses ([`Policy::pads`]).
-    pub fn try_action_pads(&self, a: &Action, choices: Vec<usize>, ring: Option<i32>, pads: Vec<u16>) -> (Outcome, Game) {
+    pub fn try_action_pads(&self, a: &Action, choices: Vec<usize>, ring: Option<i32>, pads: Vec<u16>, pad_hold: u32) -> (Outcome, Game) {
         let mut g = self.game.clone();
         let before = g.regs();
         let save_before = g.session.0.save.btl.data.clone();
         let field_before = g.session.0.save.field.clone();
-        let mut pol = Policy { choices, seen: vec![], ring, pads };
+        let mut pol = Policy { choices, seen: vec![], ring, pads, pad_hold };
         g.rt.st.ring_override = ring;
         g.start(a);
         let (stop, ticks) = g.settle(&mut pol, self.max_action);
@@ -1287,15 +1344,16 @@ impl<'e> Walker<'e> {
         }
         let here = self.game.map().to_string();
         let mut scripted: Option<usize> = None;
-        if let Some((m, t)) = self.plan.front().cloned().filter(|(m, t)| plan_step_map(m) == here && t.contains('|')) {
+        if let Some((m, t)) = self.plan.front().cloned().filter(|(m, t)| plan_step_map(m) == here && plan_step_ready(m, &regs_now) && t.contains('|')) {
             let mut parts = t.split('|');
             let name = parts.next().unwrap_or("").trim().to_string();
             let choices: Vec<usize> = parts.next().unwrap_or("").split(',').filter_map(|c| c.trim().parse().ok()).collect();
             let pads = parse_pads(parts.next().unwrap_or(""));
+            let hold: u32 = parts.next().and_then(|h| h.trim().parse().ok()).unwrap_or(0);
             // `press pad 0x20|..`: any button, also one the map's code does not test with the pattern `Game::actions` looks for
             let synth = name.strip_prefix("press pad 0x").and_then(|h| u16::from_str_radix(h, 16).ok()).map(|bits| Action::Pad { bits });
             if let Some(a) = acts.iter().find(|a| a.to_string().contains(&name)).cloned().or(synth) {
-                let (o, g) = self.try_action_pads(&a, choices, None, pads);
+                let (o, g) = self.try_action_pads(&a, choices, None, pads, hold);
                 self.trial_ticks += o.ticks as u64;
                 let sc = self.score(&o);
                 outs.push((sc, o, g));
@@ -1305,7 +1363,7 @@ impl<'e> Walker<'e> {
             }
         }
         let planned = if scripted.is_some() { scripted } else { match self.plan.front() {
-            Some((m, t)) if plan_step_map(m) == here => {
+            Some((m, t)) if plan_step_map(m) == here && plan_step_ready(m, &regs_now) => {
                 let i = outs.iter().position(|(_, o, _)| format!("{} {:?}", o.action, o.policy.choices).contains(t.as_str()));
                 if i.is_none() {
                     let have: Vec<String> = outs.iter().map(|(_, o, _)| format!("{} {:?}", o.action, o.policy.choices)).collect();
@@ -1318,6 +1376,8 @@ impl<'e> Walker<'e> {
         if planned.is_some() {
             let (m, t) = self.plan.pop_front().unwrap();
             self.log(format!("plan step {m}:{t} ({} left)", self.plan.len()));
+            // a scripted step is not undone by a later backtrack (it would lose what the step picked up: AD_10_U's tile chest)
+            self.branches.clear();
         }
         let pick = if let Some(i) = planned.or(forced) {
             i
@@ -1330,6 +1390,21 @@ impl<'e> Walker<'e> {
             let fresh = |m: &str| !self.since_progress.contains(m);
             let dist = self.frontier_distances();
             let mut best: Option<(i64, usize)> = None;
+            // the scripted route's next step is on another map the walker knows the way to: go there (the Manmaria doors after the
+            // tile chests -- left to the frontier rule, the walk wandered and searched for an hour)
+            if let Some(tg) = self.plan.front().filter(|(m, _)| plan_step_ready(m, &self.game.regs())).map(|(m, _)| plan_step_map(m).to_string()).filter(|m| *m != here) {
+                let dt = self.distances_to(&tg);
+                for (i, (_, o, _)) in outs.iter().enumerate() {
+                    if let Stop::Jump(m, _) = &o.stop {
+                        if let Some(d) = dt.get(m.as_str()) {
+                            let sc = 10_000_000 - *d as i64;
+                            if best.map(|b| sc > b.0).unwrap_or(true) {
+                                best = Some((sc, i));
+                            }
+                        }
+                    }
+                }
+            }
             for (i, (_, o, _)) in outs.iter().enumerate() {
                 let sc = match &o.stop {
                     Stop::Jump(m, _) if self.env.has_map(m) && *m != here => {
@@ -1396,7 +1471,7 @@ impl<'e> Walker<'e> {
             }
         }
         // another progressing action exists: remember the way back
-        if progress && outs.iter().enumerate().any(|(i, x)| i != pick && x.0 > 0 && x.1.action != outs[pick].1.action) {
+        if planned.is_none() && progress && outs.iter().enumerate().any(|(i, x)| i != pick && x.0 > 0 && x.1.action != outs[pick].1.action) {
             if self.branches.len() >= 24 {
                 self.branches.remove(0);
             }
@@ -1772,7 +1847,7 @@ struct WalkerView {
 impl WalkerView {
     fn trial(&self, game: &Game, a: &Action, choices: Vec<usize>, ring: Option<i32>) -> (Outcome, Game) {
         let mut g = game.clone();
-        let mut pol = Policy { choices, seen: vec![], ring, pads: vec![] };
+        let mut pol = Policy { choices, seen: vec![], ring, pads: vec![], pad_hold: 0 };
         g.rt.st.ring_override = ring;
         g.start(a);
         let (stop, ticks) = g.settle(&mut pol, self.max_action);
@@ -1785,10 +1860,19 @@ pub fn plan_step_map(m: &str) -> &str {
     m.split_once('>').map(|x| x.1).unwrap_or(m).trim()
 }
 
-/// The chapter flag of a plan step's `FLAG>MAP` part (the step is dropped once the flag is set).
-pub fn plan_step_flag(m: &str) -> Option<u32> {
-    let f = m.split_once('>')?.0.trim();
+fn parse_flag(f: &str) -> Option<u32> {
+    let f = f.trim();
     f.strip_prefix("0x").map(|h| u32::from_str_radix(h, 16).ok()).unwrap_or_else(|| f.parse().ok())
+}
+
+/// The chapter flag of a plan step's `FLAG[+NEED..]>MAP` part (the step is dropped once the flag is set).
+pub fn plan_step_flag(m: &str) -> Option<u32> {
+    parse_flag(m.split_once('>')?.0.split('+').next()?)
+}
+
+/// A plan step `FLAG+NEED+NEED>MAP:..` waits until every `NEED` flag is set (Locke's key in the prison: the three parts first).
+pub fn plan_step_ready(m: &str, regs: &[u32]) -> bool {
+    m.split_once('>').map(|(h, _)| h.split('+').skip(1).filter_map(parse_flag).all(|f| flag(regs, f))).unwrap_or(true)
 }
 
 /// Button names of a plan step / `walk_probe --pads`: `L,R,U,D` (d-pad), `O` circle, `X` cross, `T` triangle, `S` square, `W` no button.

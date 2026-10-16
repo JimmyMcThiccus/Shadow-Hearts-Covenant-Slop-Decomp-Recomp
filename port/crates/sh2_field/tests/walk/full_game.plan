@@ -1,11 +1,20 @@
 # Whole-game route for `story_walk` from New Game: the puzzle plans in story order, each step guarded by its chapter flag (`FLAG>MAP:text`,
 # dropped once the flag is set).  Use: SH2_WALK_PLAN="$(grep -v '^#' FILE | paste -sd';')" story_walk --decisions N --search-on-stall 300
+# Manmaria (0x14): the AB-blood door (Gepetto), the two tile chests, then the zodiac-tile frames of AD_02_U's doors 0..2 (timed
+# presses, `|answers|pads|hold`; tile list order and cursor: see r6_fs2.md batch 7)
+0x14>AD_06_U:talk slot 1 (ev 16)
+0x14>AD_03_U:examine box 1 (ev 2)|0,4
+0x14>AD_10_U:talk slot 1 (ev 16)
+0x14>AD_02_U:examine box 1 (ev 2)||O,R,R,O,R,O,R,R,R,R,R,O,R,O,R,R,R,R,R,R,O,X|1
+0x14>AD_02_U:examine box 2 (ev 3)||O,O,D,O,R,R,R,O,D,O,R,R,R,R,O,X|1
+0x14>AD_02_U:examine box 3 (ev 4)||O,R,R,R,R,O,D,O,R,R,O,D,O,R,O,X|1
 0x18>ND_08_U:enter box 3 (ev 4)
 0x18>ND_08_U:enter box 1 (ev 2)
 0x18>ND_14_U:enter box 1 (ev 2)
 0x1b>SM_05_U:examine box 1 (ev 2)|0,8,6,4
-0x1b>SM_12_U:look 0x1 (ev 6)
-0x1b>SM_19_U:examine box 1 (ev 2)
+0x1b+0x94e+0x972+0x973>SM_12_U:look 0x1 (ev 6)
+0x1b+0x94f>SM_09_U:examine box 2 (ev 3)
+0x1b+0x94f>SM_19_U:examine box 1 (ev 2)
 0x3f>MI_02_U:talk slot 3
 0x3f>MI_02_U:examine box 2 (ev 3) [1]
 0x3f>MI_02_U:press pad 0x8000
@@ -63,6 +72,25 @@
 0x3f>MI_14_U:talk slot 1
 0x3f>MI_14_U:enter box 2
 0x3f>MI_15_U:examine box 1
+# Mt. Fuji (0x4c): the crystal route the puzzle search found (round 6 batch 1, fs2/fu5.err): crystals from FU_01 / FU_02 / FU_04,
+# crystal 4 into FU_06_U's gate, then FU_12 -> FU_15 -> FU_16 -> FU_17_A -> FU_18 (boss)
+0x4c>FU_00_U:enter box 1 (ev 2)
+0x4c>FU_01_U:talk slot 1 (ev 6)
+0x4c>FU_01_U:examine box 1 (ev 2)
+0x4c>FU_02_U:talk slot 1 (ev 6)
+0x4c>FU_02_U:examine box 0 (ev 2)
+0x4c>FU_02_U:look 0x2 (ev 11)
+0x4c>FU_04_U:talk slot 1 (ev 6)
+0x4c>FU_04_U:look 0x2 (ev 20)
+0x4c>FU_02_U:examine box 0 (ev 2)
+0x4c>FU_02_U:examine box 1 (ev 3)
+0x4c>FU_02_U:look 0x2 (ev 12)
+0x4c>FU_06_U:examine box 0 (ev 1)
+0x4c>FU_06_U:look 0x3 (ev 13)
+0x4c>FU_12_U:enter box 2 (ev 4)
+0x4c>FU_15_U:enter box 1 (ev 2)
+0x4c>FU_16_U:enter box 1 (ev 2)
+0x4c>FU_17_A:enter box 1 (ev 2)
 AI_00_U:look 0x1 (ev 15)
 AI_00_U:look 0x3 (ev 72)
 AI_01_U:look 0x1 (ev 70)|0|L,L,L,O

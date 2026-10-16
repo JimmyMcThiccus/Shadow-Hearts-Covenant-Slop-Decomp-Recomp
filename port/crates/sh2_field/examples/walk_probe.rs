@@ -48,7 +48,7 @@ fn main() {
         if !g.start(&act) {
             continue;
         }
-        let mut pol = Policy { choices: choices.clone(), pads: sh2_field::story::parse_pads(&get("--pads").unwrap_or_default()), ..Default::default() };
+        let mut pol = Policy { choices: choices.clone(), pads: sh2_field::story::parse_pads(&get("--pads").unwrap_or_default()), pad_hold: get("--hold").and_then(|h| h.parse().ok()).unwrap_or(0), ..Default::default() };
         let mut texts: Vec<String> = vec![];
         let mut stop = Stop::Timeout;
         for _ in 0..6000 {
