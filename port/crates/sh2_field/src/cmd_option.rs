@@ -156,7 +156,8 @@ impl OptionPage {
 
     fn cursor_to_sel(&mut self) {
         let (x, y) = self.origin();
-        if sh2_core::boot::is_retail() && !self.title_mode() {
+        // round 6 MN3: the title's four-item page draws its labels on the retail rows too (the cursor stayed on Vibration there)
+        if sh2_core::boot::is_retail() {
             self.cursor.set_target(x - 4.0, Self::retail_row_y(self.row_id()) + 10.0);
             return;
         }
@@ -224,8 +225,10 @@ impl OptionPage {
                     }
                 }
                 2 => {
-                    // two-line Sound box: Stereo / Mono on top, Dolby Digital 5.1 below
-                    let top = y - 29.0;
+                    // two-line Sound box: Stereo / Mono on top, Dolby Digital 5.1 below.  Round 6 MN3: 6 px lower (was y - 29): live
+                    // `menu5/cmp_opt.png` has the Stereo row 31 px and the Dolby row 58 px under the Vibration label (port 25 / 51), the Sound
+                    // label half way between them
+                    let top = y - 23.0;
                     for (j, (bxo, bw, byo)) in [(4.0, 98.0, 4.0), (104.0, 98.0, 4.0), (4.0, 198.0, 30.0)].iter().enumerate() {
                         boxed(g, bx + bxo, top + byo, *bw, 24.0);
                         if let Some(&(t, _)) = row.opts.get(j) {

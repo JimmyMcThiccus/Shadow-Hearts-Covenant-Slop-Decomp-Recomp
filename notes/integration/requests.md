@@ -1043,3 +1043,14 @@ Matrix: 3810 items, 3625 ok, 43 stub, 3 fails, 139 untested; everything open is 
   `JRing+0x70` starts at (15 deg, 55 deg) in retail as well; a face-on first frame would come from the drawing (`hud_hits::ring_project`, BT's
   file, or the `+0x80` alpha / `+0x84` radius roles).  No live fight was reachable (AP_02_U after its scripted fight, pad only), so it stays open
   (r6_bt.md 8).  Coordinator: a fight state (slot 8 or the debug battle player) would let BT read `+0x70 / +0x80 / +0x84` on the intro frames.
+
+## Round 6 MN3 (menus / meta screens, 2026-10-16)
+Small hooks in files other agents own (please keep them):
+* **BT `sh2_battle/src/plugin.rs`**: the combo shortcut gate (mode 0x17) reads `BtlSave::combo_shortcut_enabled` (`BTL0+3` **bit 1**, US
+  `BtlSocket::Polling` copies it from the menu's Combo Switch `MENU+0x276` -- done here at `Stage::Intro`); `can_link` keeps bit 0 (the `Combo`
+  command, US `SetMainMenu`).  New `run_shortcut_setting` (mode 0x18: triangle on an Attack / item / magic / technique row, then L1 / R1 / L2 / R2
+  stores the row), fields `shortcut_setting` / `shortcut_writes`, the overlay drawn after the mode-0x17 menu.  Logic in `shortcut.rs` (MN3 edited it,
+  as agreed while BT was off).  `devdrive.rs`: `SH2_BATTLE_SHORTCUT_SET=<slot>` (shots `shortcut_setting` / `shortcut_set`).
+* **FS2 (FYI, no change)**: `host.rs` op 0x13 `SceneInit` sets `BTL0+3` bit 0 -- correct (the Combo command), not the shortcut switch.
+* **QA2 (FYI)**: `MenuSave::combo_switch` = `MENU+0x276 & 3` (ON 1 / OFF 0); a new game has 0 = shortcuts off, so mode 0x17 / 0x18 only appear once
+  the player turns the Combo Switch on (or `SH2_BATTLE_SHORTCUT=1`, `SH2_BATTLE_MENU=276:01`).

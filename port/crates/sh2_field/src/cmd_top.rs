@@ -529,16 +529,19 @@ impl Page for TopPage {
                                 }
                             } else {
                                 self.sub_rows = vec![28, 29];
-                                self.data_sel = if env.session.save.btl.combo_menu_enabled() { 0 } else { 1 };
+                                // US `CmdRetailWin11` (FIELD 0x4e95b4): the rows carry the values ON = 1 / OFF = 0 (place `+0x16`); the cursor
+                                // starts on the row of the stored value (`MENU+0x276 & 3`), the other row is dimmed
+                                self.data_sel = if env.session.save.menu.combo_switch() != 0 { 0 } else { 1 };
                                 self.cursor_to_sel();
                                 self.update_note();
                             }
                         }
-                        // combo switch: ON / OFF writes `BtlSaveSec::SetComboMenuMode`
+                        // combo switch (round 6 MN3, US `CmdTop::SelectMenu` FIELD 0x4699e8..0x469a20): the picked row's value (ON 1, OFF 0) goes to
+                        // `MENU+0x276` bits 0..1; every battle copies `value != 0` into `BTL0+3` bit 1 (the shortcut switch, not the bit-0 Combo command)
                         Some(28) => {
-                            let on = self.data_sel == 0;
-                            let f = &mut env.session.save.btl.data[sh2_menu::save::BtlSave::OFF_FLAGS];
-                            *f = (*f & !1) | on as u8;
+                            let v = (self.data_sel == 0) as u8;
+                            env.session.save.menu.set_combo_switch(v);
+                            env.session.save.btl.set_combo_shortcut(v != 0);
                             self.state = State::Menu;
                             self.cursor_to_sel();
                             self.update_note();

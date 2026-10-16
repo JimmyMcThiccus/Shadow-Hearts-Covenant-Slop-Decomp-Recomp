@@ -759,6 +759,9 @@ pub struct TheaterArt {
     pub chapters: Vec<String>,
     pub ui: Vec<String>,
     pub font: Option<crate::gamefont::GameFont>,
+    /// round 6 MN3: the pad icon sheet (`COMMON/CMNMENU.DAT` attach 6, 8 x 2 cells of 16 x 20; row 1 = pad bit 8..15: L2 R2 L1 R1
+    /// triangle circle cross square) for the button hints
+    pub icons: Handle<Image>,
 }
 
 /// Fonts, text images and the extra screens' data (Options, Theater).
@@ -783,9 +786,11 @@ impl RetailExtras {
             return Some(c.clone());
         }
         let font = if which == 1 { self.theater.font.as_ref().or(self.font.as_ref()) } else { self.font.as_ref() }?;
-        let img = crate::hifont::render_scaled(font, s, 0, 0, self.text_k.max(1))?;
+        // round 6 MN3: these are `MenuText`s (US `0x3dfab0`: `FontItem::Clear` flags 0x18), laid out like retail `FontDraw::Order`: proportional
+        // (the glyph's width byte as the advance) and narrow (the run squeezed by `FontDraw+0x40` = 0.8)
+        let img = crate::hifont::render_scaled_layout(font, s, 0, 0, self.text_k.max(1), true)?;
         let f = crate::hifont::image_factor(font, &img);
-        let (w, hh) = ((img.width / f) as f32, (img.height / f) as f32);
+        let (w, hh) = ((img.width / f) as f32 * crate::gfx::NARROW, (img.height / f) as f32);
         let h = image_from(images, img.width, img.height, img.pixels);
         let e = (h, w, hh);
         self.cache.insert(key, e.clone());
@@ -853,7 +858,9 @@ enum Part {
     ThChapter,
     ThTitle,
     ThPage,
-    ThHint,
+    /// round 6 MN3: hint line `k` (0 `: Play`, 1 `: Back`, 2 `: Switch Chapters`) and its pad icons (`k` 0 confirm, 1 cancel, 2 L1, 3 R1)
+    ThHint(usize),
+    ThIcon(usize),
 }
 
 fn image_from(images: &mut Assets<Image>, w: u32, h: u32, rgba: Vec<u8>) -> Handle<Image> {
@@ -1076,7 +1083,28 @@ fn load_theater(assets: &MenuAssets, images: &mut Assets<Image>) -> TheaterArt {
     t.ui = bundle_entry(&b, 7).map(parse_msg_table).unwrap_or_default();
     t.titles = bundle_entry(&b, 8).map(parse_msg_table).unwrap_or_default();
     t.chapters = bundle_entry(&b, 9).map(parse_msg_table).unwrap_or_default();
+    if let Some(img) = assets
+        .disc
+        .as_ref()
+        .and_then(|d| d.read("COMMON/CMNMENU.DAT"))
+        .and_then(|c| crate::msd::Msd::parse(c).ok())
+        .and_then(|m| m.attach_data(6).map(|a| a.to_vec()))
+        .and_then(|a| sh2_gfx::texture::decode_menu_texture(&a, 0).ok())
+    {
+        t.icons = image_from(images, img.width, img.height, img.pixels);
+    }
     t
+}
+
+/// Round 6 MN3: the Theater's button hints (US FIELD.BIN 0x5553c0 `Theater` set-up, raw 0xf6940): message-table strings 4 / 5 / 6 are text
+/// items 0 / 1 / 3 at x 370, y 380 / 402 / 358 (`0x3dfab0`), each after 16 x 20 pad icons of the common icon sheet (`0x3ded80(tex, 16, 20)`):
+/// sprite 1 = cell `MENU+0x26c[1] - 8` (confirm) at (354, 380), sprite 2 = cell `[2] - 8` (cancel) at (354, 402), sprites 6 / 7 = cells 2 / 3
+/// (L1 / R1) at (338, 358) / (354, 358).  Returns `(x, y)` of hint line `k`.
+pub const THEATER_HINT_POS: [(f32, f32); 3] = [(370.0, 380.0), (370.0, 402.0), (370.0, 358.0)];
+/// `(x, y, pad bit)` of the hint icons (pad bit 8..15 -> column `bit - 8` of row 1 of the icon sheet).
+pub fn theater_hint_icons() -> [(f32, f32, u16); 4] {
+    let e = sh2_core::game::default_buttons();
+    [(354.0, 380.0, e[1]), (354.0, 402.0, e[2]), (338.0, 358.0, 10), (354.0, 358.0, 11)]
 }
 
 fn node_at(x: f32, y: f32, w: f32, h: f32) -> Node {
@@ -1208,8 +1236,16 @@ fn spawn_ui(commands: &mut Commands, art: &RetailArt, extras: &mut RetailExtras,
         commands.spawn((Part::ThThumb(i), node512(31.0 + c as f32 * 75.5, 171.0 + r as f32 * 70.0, 72.0, 64.0), ImageNode::default().with_mode(NodeImageMode::Stretch), Visibility::Hidden, ZIndex(4), ChildOf(root)));
     }
     commands.spawn((Part::ThFrame, node512(31.0, 171.0, 72.0, 64.0), ImageNode::default().with_mode(NodeImageMode::Stretch), Visibility::Hidden, ZIndex(5), ChildOf(root)));
-    for (part, x, y) in [(Part::ThChapter, 112.0, 60.0), (Part::ThTitle, 326.0, 222.0), (Part::ThPage, 188.0, 120.0), (Part::ThHint, 30.0, 408.0)] {
+    for (part, x, y) in [(Part::ThChapter, 112.0, 60.0), (Part::ThTitle, 326.0, 222.0), (Part::ThPage, 188.0, 120.0)] {
         commands.spawn((part, node512(x, y, 10.0, 10.0), ImageNode::default(), Visibility::Hidden, ZIndex(6), ChildOf(root)));
+    }
+    for (k, &(x, y)) in THEATER_HINT_POS.iter().enumerate() {
+        commands.spawn((Part::ThHint(k), node512(x, y, 10.0, 10.0), ImageNode::default(), Visibility::Hidden, ZIndex(6), ChildOf(root)));
+    }
+    for (k, (x, y, bit)) in theater_hint_icons().into_iter().enumerate() {
+        let c = (bit.clamp(8, 15) - 8) as f32;
+        let img = ImageNode { image: extras.theater.icons.clone(), rect: Some(Rect::new(c * 16.0, 20.0, c * 16.0 + 16.0, 40.0)), image_mode: NodeImageMode::Stretch, ..default() };
+        commands.spawn((Part::ThIcon(k), node512(x, y, 16.0, 20.0), img, Visibility::Hidden, ZIndex(6), ChildOf(root)));
     }
     // brightness (`CApp::SetBright`): a black veil over everything, relative to the default level
     commands.spawn((Part::Bright, Node { position_type: PositionType::Absolute, left: px(0), top: px(0), width: px(SRC_W), height: px(VIRT_H), ..default() }, BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.0)), ZIndex(101), ChildOf(root)));
@@ -1516,15 +1552,20 @@ fn retail_draw(
             let ti = u.selected().and_then(|e| tart.titles.get(e.index).cloned()).unwrap_or_default();
             let pg = format!("{}/{}", u.page() + 1, u.pages());
             let ui = |i: usize| tart.ui.get(i).cloned().unwrap_or_default();
-            (ch, ti, pg, format!("O{}    X{}    L1/R1{}", ui(4), ui(5), ui(6)))
+            (ch, ti, pg, [ui(4), ui(5), ui(6)])
         }
         _ => Default::default(),
     };
     let tex_for = |extras: &mut RetailExtras, images: &mut Assets<Image>, which: u8, s: &str| if s.is_empty() { None } else { extras.text(images, which, s) };
     let (ch_img, ti_img, pg_img, hi_img) = if theater {
-        (tex_for(&mut extras, &mut images, 0, &chapter_s), tex_for(&mut extras, &mut images, 0, &title_s), tex_for(&mut extras, &mut images, 0, &page_s), tex_for(&mut extras, &mut images, 0, &hint_s))
+        (
+            tex_for(&mut extras, &mut images, 0, &chapter_s),
+            tex_for(&mut extras, &mut images, 0, &title_s),
+            tex_for(&mut extras, &mut images, 0, &page_s),
+            [0, 1, 2].map(|k| tex_for(&mut extras, &mut images, 0, &hint_s[k])),
+        )
     } else {
-        (None, None, None, None)
+        (None, None, None, [None, None, None])
     };
     // Options help line / hint
     let (help_img, hint_img) = if options {
@@ -1555,7 +1596,7 @@ fn retail_draw(
             Part::ThBg(k) => theater && *k == usize::from(h.theater.as_ref().map(|u| u.scenes.len() > 0).unwrap_or(false)),
             Part::ThThumb(i) => theater && th.map(|u| *i < u.page_entries().len()).unwrap_or(false),
             Part::ThFrame => theater && th.map(|u| !u.scenes.is_empty()).unwrap_or(false),
-            Part::ThChapter | Part::ThTitle | Part::ThPage | Part::ThHint => theater,
+            Part::ThChapter | Part::ThTitle | Part::ThPage | Part::ThHint(_) | Part::ThIcon(_) => theater,
         };
         *vis = if show { Visibility::Inherited } else { Visibility::Hidden };
         if !show {
@@ -1666,7 +1707,15 @@ fn retail_draw(
             Part::ThChapter => set_text(img, node, &ch_img),
             Part::ThTitle => set_text(img, node, &ti_img),
             Part::ThPage => set_text(img, node, &pg_img),
-            Part::ThHint => set_text(img, node, &hi_img),
+            Part::ThHint(k) => set_text(img, node, &hi_img[*k]),
+            // the icon sheet is loaded with the Theater art (after the nodes were spawned)
+            Part::ThIcon(_) => {
+                if let Some(mut img) = img {
+                    if img.image != tex.icons {
+                        img.image = tex.icons.clone();
+                    }
+                }
+            }
             _ => {}
         }
     }

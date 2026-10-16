@@ -461,6 +461,9 @@ pub struct BattleRuntime {
     /// round 6 BT: the combo shortcut menu (`BtlMenu` mode 0x17, [`crate::shortcut`]) and the action it was opened for `(actor, turn_no)`
     pub shortcut_menu: Option<crate::shortcut::ShortcutMenu>,
     shortcut_for: Option<(usize, i32)>,
+    /// round 6 MN3: the shortcut setting overlay (`BtlMenu` mode 0x18, [`crate::shortcut::SettingMenu`]) and its pending save writes
+    pub shortcut_setting: Option<crate::shortcut::SettingMenu>,
+    shortcut_writes: Vec<(usize, usize, crate::shortcut::Row)>,
     /// per PC id: the attack-style mask of `GetComboKeyData` (menu data table raw 48, byte 7), read once from `CMDMENU.MSD`
     style_masks: Option<Vec<Option<u8>>>,
 }
@@ -758,6 +761,8 @@ fn enter_battle(
         cursor_mem: vec![[-1; 4]; 12],
         shortcut_menu: None,
         shortcut_for: None,
+        shortcut_setting: None,
+        shortcut_writes: vec![],
         style_masks: None,
     });
 }
@@ -997,6 +1002,74 @@ fn load_style_masks(cx: &Cx) -> Vec<Option<u8>> {
     (0..sh2_menu::save::PC_COUNT).map(|pc| msd.as_ref().and_then(|m| m.mdt_data(0x31, pc).get(7).copied())).collect()
 }
 
+/// Round 6 MN3: `BtlMenu` mode 0x18 (`SetComboShortCutSettingMenu`, [`crate::shortcut::SettingMenu`]).  While it is open it takes the pad
+/// (returns `true`); otherwise triangle on an Attack / item / magic / technique row of the open command menu opens it when the shortcut switch
+/// (`BTL0+3` bit 1) is on.  Fused forms are not handled (US keeps their rows at `BTL0+0x119c`).
+fn run_shortcut_setting(rt: &mut BattleRuntime, keys: u16, cx: &Cx, session: &GameSession) -> bool {
+    use crate::shortcut::{self, Row, SettingInput, SettingMenu};
+    use sh2_audio::se_ids as ids;
+    let slots_for = |rt: &mut BattleRuntime, pc: usize, rows: [Row; 4]| -> Option<[shortcut::Slot; 4]> {
+        if rt.style_masks.is_none() {
+            rt.style_masks = Some(load_style_masks(cx));
+        }
+        let mask = rt.style_masks.as_ref().and_then(|m| m.get(pc).copied().flatten());
+        Some(shortcut::slots(rows, &rt.menu.as_ref()?.b, mask, cx.text))
+    };
+    if let Some(s) = rt.shortcut_setting.as_mut() {
+        match s.press(keys) {
+            SettingInput::Picked(k) => {
+                se(ids::DECIDE);
+                let (pc, row) = (s.pc, s.row);
+                let mut rows = s.slots.clone().map(|x| x.row);
+                rows[k] = row;
+                rt.shortcut_writes.push((pc, k, row));
+                if let Some(new) = slots_for(rt, pc, rows) {
+                    if let Some(s) = rt.shortcut_setting.as_mut() {
+                        s.slots = new;
+                    }
+                }
+            }
+            SettingInput::Cancel => {
+                se(ids::CANCEL);
+                rt.shortcut_setting = None;
+                return true;
+            }
+            SettingInput::None => {}
+        }
+        if rt.shortcut_setting.as_mut().map(|s| s.tick(1.0 / 60.0)).unwrap_or(false) {
+            rt.shortcut_setting = None;
+        }
+        return true;
+    }
+    if keys & padbit::TRIANGLE == 0 || !(shortcut_forced() || session.save.btl.combo_shortcut_enabled()) {
+        return false;
+    }
+    let Some(menu) = rt.menu.as_ref().filter(|m| m.b.fused.is_none()) else { return false };
+    let Some(pc) = rt.battle.actor.and_then(|a| rt.setup.pc_ids.get(a).copied().flatten()) else { return false };
+    let t = cx.tables;
+    let flags_of = |kind: u8, id: i32| -> Option<(u16, u8)> {
+        let list = if kind == shortcut::KIND_MAGIC { &t.magic } else { t.groups.get(pc as usize)? };
+        list.iter().find(|r| r.id == id).or_else(|| list.get(id.max(0) as usize)).map(|r| (r.flags, 0))
+    };
+    match shortcut::setting_row(menu, &flags_of) {
+        Ok(Some(row)) => {
+            se(ids::DECIDE);
+            let pc = pc as usize;
+            let rows = [0, 1, 2, 3].map(|k| Row::from_save(&session.save.btl, pc, k));
+            if let Some(slots) = slots_for(rt, pc, rows) {
+                rt.log.push(format!("shortcut setting: {row:?}"));
+                rt.shortcut_setting = Some(SettingMenu::new(pc, row, slots));
+            }
+            true
+        }
+        Ok(None) => false,
+        Err(()) => {
+            se(ids::BUZZER);
+            true
+        }
+    }
+}
+
 /// Round 6 BT: `BtlMenu` mode 0x17 (`SetComboShortCutMenu`) -- opened while a party member's action runs in a Link combo with other members
 /// still to act, closed with the action; L1 / R1 / L2 / R2 hand the next turn to the shown member with its stored command ([`crate::shortcut`]).
 fn run_shortcut_menu(rt: &mut BattleRuntime, keys: u16, cx: &Cx, session: &GameSession) {
@@ -1012,8 +1085,9 @@ fn run_shortcut_menu(rt: &mut BattleRuntime, keys: u16, cx: &Cx, session: &GameS
     let actor_pc = rt.battle.fighters.get(actor).and_then(|f| f.as_ref()).map(|f| !f.is_enemy).unwrap_or(false);
     if rt.shortcut_for.is_none() && actor_pc && matches!(rt.battle.phase, Phase::Attack | Phase::Effect | Phase::RingSkill) {
         rt.shortcut_for = Some((actor, rt.battle.turn_no));
-        // `BTL0+3` combo switch (`SetComboMenuMode`; dev aid `SH2_BATTLE_SHORTCUT=1` forces it), no tutorial fight (`bFlags24` bit 5 stand-in)
-        let enabled = shortcut_forced() || session.save.btl.combo_menu_enabled();
+        // `BTL0+3` bit 1, the combo shortcut switch (round 6 MN3: JP CBattle.c 3435 / 9461 / 11301 test bit 1, not the bit-0 `Combo` command
+        // of `SetComboMenuMode`; dev aid `SH2_BATTLE_SHORTCUT=1` forces it), no tutorial fight (`bFlags24` bit 5 stand-in)
+        let enabled = shortcut_forced() || session.save.btl.combo_shortcut_enabled();
         if enabled && !rt.battle.combo_queue.is_empty() && rt.battle.battle_type == 0 && rt.battle.shortcut.is_none() {
             if rt.style_masks.is_none() {
                 rt.style_masks = Some(load_style_masks(cx));
@@ -1716,6 +1790,18 @@ pub fn battle_tick(
     }
     // round 5 BP hook: the area shapes of the party-side engine measure on the same positions
     rt.battle.positions = rt.positions.iter().map(|p| [p.x, p.y, p.z]).collect();
+    // round 6 MN3: `BtlSocket::Polling` (SLUS 0x365f30..0x365f84) copies the Combo Switch (`MENU+0x276 & 3 != 0`) into `BTL0+3` bit 1 when
+    // the battle starts; mode 0x18 writes its shortcut rows here (the battle loop only reads the session)
+    if matches!(rt.stage, Stage::Intro(_)) {
+        let on = session.save.menu.combo_switch() != 0;
+        if session.save.btl.combo_shortcut_enabled() != on {
+            session.save.btl.set_combo_shortcut(on);
+        }
+    }
+    for (pc, slot, row) in std::mem::take(&mut rt.shortcut_writes) {
+        crate::shortcut::write_row(&mut session.save.btl, pc, slot, row);
+        log::info!("battle: shortcut slot {slot} of PC {pc} set to {row:?}");
+    }
     let keys = pad.menu_keys();
     let win_motion = if rt.win_done { hud_result::WinMotion::Done } else if rt.win_playing { hud_result::WinMotion::Playing } else { hud_result::WinMotion::Unknown };
     match &mut rt.stage {
@@ -2077,6 +2163,10 @@ fn run_battle(rt: &mut BattleRuntime, pad: &GamePad, ring_view: &mut RingView, k
                     let t = hud_result::combo_chance_text(cx.text, rt.battle.combo_queue.len() + 1);
                     rt.mes.post(hud_result::MesKind::TopRight, hud_result::MesClose::Owner, &t);
                 }
+                return;
+            }
+            // round 6 MN3: triangle on a list row opens the shortcut setting overlay (mode 0x18), which then takes the pad
+            if run_shortcut_setting(rt, keys, cx, session) {
                 return;
             }
             let b = if keys & padbit::UP != 0 {
@@ -2627,6 +2717,10 @@ fn draw_battle_ui(rt: &mut BattleRuntime, canvas: &mut UiCanvas, cx: &Cx, hud: O
         // round 6 BT: the combo shortcut menu (a `BtlMenu` window of its own: it stands during the ring and the action)
         if let Some(m) = rt.shortcut_menu.as_ref().filter(|_| !rt.hud_hidden) {
             crate::shortcut::draw(&mut g, m, rt.ticks as f32 / 60.0);
+        }
+        // round 6 MN3: the shortcut setting overlay (mode 0x18) over the open command list
+        if let Some(m) = rt.shortcut_setting.as_ref().filter(|_| !rt.hud_hidden && rt.menu.is_some()) {
+            crate::shortcut::draw_setting(&mut g, m);
         }
         match art.filter(|a| a.font_ok()) {
             Some(a) => {

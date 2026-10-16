@@ -14,6 +14,8 @@
 //! bag 1 (`0xabc + bag * 0x200 + 0x43`; a new game uses bag 1)) and `SH2_BATTLE_MENU=<hex off>:<hex bytes>` for the `MENU` block (`28c:01` = item sort mode 1).
 //! `SH2_BATTLE_TRACE=<file>` writes one line per frame (drive counters, injected pad, battle phase / HP / positions) to compare runs; with
 //! `SH2_FIXED_DT=60` two runs give identical traces and screenshots (round 6 GPA).
+//! `SH2_BATTLE_SHORTCUT_SET=<slot>` (round 6 MN3): triangle on each settled command page opens the shortcut setting overlay (shot `shortcut_setting`)
+//! and the slot's shoulder button assigns the row (shot `shortcut_set`); needs the shortcut switch (`SH2_BATTLE_SHORTCUT=1` or `SH2_BATTLE_MENU=276:01`).
 //! Nothing is registered unless the variable is set.
 
 use bevy::prelude::*;
@@ -460,6 +462,28 @@ fn drive(
                             }
                         }
                     };
+                }
+                // round 6 MN3: `SH2_BATTLE_SHORTCUT_SET=<slot 0..3>`: triangle on the sub-menu row opens the shortcut setting overlay (mode 0x18,
+                // shot `shortcut_setting`), then the slot's shoulder button assigns the row (shot `shortcut_set`)
+                if let Some(slot) = std::env::var("SH2_BATTLE_SHORTCUT_SET").ok().and_then(|v| v.parse::<usize>().ok()).filter(|&s| s < 4) {
+                    match rt.shortcut_setting.as_ref() {
+                        Some(s) if s.picked.is_none() => {
+                            if s.t > 0.4 {
+                                dd.shot("shortcut_setting");
+                            }
+                            inj.raw = if s.t > 0.9 { dd.tap_bits(crate::shortcut::SLOT_BUTTONS[slot]) } else { 0 };
+                        }
+                        Some(s) => {
+                            if s.t > 0.3 {
+                                dd.shot("shortcut_set");
+                            }
+                            inj.raw = 0;
+                        }
+                        None if !dd.taken.contains("shortcut_set") && matches!(page, Page::Main | Page::Item | Page::Magic | Page::Skill) && (shot_age + 2..shot_age + 4).contains(&dd.page_age) => {
+                            inj.raw = padbit::TRIANGLE;
+                        }
+                        None => {}
+                    }
                 }
                 // the script advances once the command is committed (target confirmed, or a page that reports directly)
                 if inj.raw & padbit::CIRCLE != 0 && (matches!(page, Page::Target { .. } | Page::Guard | Page::Fusion | Page::Aroma2 { .. }) || (matches!(page, Page::Main) && want == Root::Tarot && m.roots.get(m.cursor()) == Some(&Root::Tarot))) && dd.last_commit != dd.page_key {

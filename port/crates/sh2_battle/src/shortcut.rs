@@ -2,7 +2,8 @@
 //! 0x605990) -- the retail way a linked combo member joins in.
 //!
 //! **When** (JP CBattle.c ~3436 / ~9472 / ~11320): while a party member's action runs (attack after the ring set-up, effects at their start),
-//! if the combo switch is on (`BTL0+3`, [`sh2_menu::save::BtlSave::combo_menu_enabled`]), other linked members are still to act
+//! if the combo shortcut switch is on (`BTL0+3` bit 1, [`sh2_menu::save::BtlSave::combo_shortcut_enabled`]; round 6 MN3: was bit 0 =
+//! the `Combo` command), other linked members are still to act
 //! (`wTurnPendMask`, the port's [`crate::flow::Battle::combo_queue`]) and the battle is not in a scripted mode (`bFlags24` bit 5), the battle
 //! opens mode 0x17 and counts it in `BTL0+0x1164` (Score word 9, "shortcuts").
 //!
@@ -268,6 +269,165 @@ fn set_b1(btl: &mut sh2_menu::save::BtlSave, pc: usize, slot: usize, v: u8) {
     }
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------------------
+// Round 6 MN3: the shortcut **setting** overlay (`BtlMenu` mode 0x18, `SetComboShortCutSettingMenu`, JP BtlMenu.c 14876 / US 0x60faa0).
+//
+// **Entry** (JP BtlMenu.c 1737 magic list, 2726 item list, 4006 skill list, 7448 attack shapes; US `BtlMenu::Polling` 0x5d2ffc / 0x5d5e04 /
+// 0x5da0d4, `MainMenuFunc` 0x5e6d9c): triangle on a list row while the shortcut switch is on (`BTL0+3` bit 1,
+// [`sh2_menu::save::BtlSave::combo_shortcut_enabled`]) and the actor is not under the AI (`CBattle+0xb4 + actor * 0x4f0` bit 0) stores the
+// row to assign in `BtlMenu+0xb54..0xb57` (`{kind, b1, id}`), remembers the list's mode / step (`+0xb4c / +0xb4e`), plays SE 2 and opens mode
+// 0x18.  Rows: attack shape = `{0, shape, 0xffff}`; item = `{1, list row, item id}`; crest magic = `{2, (MAGI+6 >> 1) & 7, id}` and technique =
+// `{3, (SKIL+6 >> 1) & 7, record}` only when the record's `+4` bits 5..6 are clear, else SE 4 (buzzer).
+//
+// **Steps** (JP BtlMenu.c 6435): 0 draws the overlay (no slot lit); 1: L1 / R1 / L2 / R2 write the row into slot 0 / 1 / 2 / 3 of the actor's
+// `SHORTCUTCommand` rows (`BTL0+0xf44` demo / `+0x10bc` retail + pc * 0x10; US also has fusion-form rows `+0x119c + form * 0x10` and Ouka's
+// per-dress rows `+0x111c / 0x130c..0x132c`, not ported), SE 2, redraw with that slot lit, step 2: one second, then the list again; cross
+// cancels at once (SE 3) without writing.
+//
+// **Layout** (US 0x60faa0, `y0 = ((rect.y - 128) / 2 + 128) - 42` with the list rect `(0, 290, 256, 104)` at US 0x6e5e80 -> 167): black band
+// `y0 .. y0+16` fading in to 0x60, `y0+16 .. y0+68` at 0x60, `y0+68 .. y0+84` fading out; pad emblem halves (37 x 70) at x 220 / 254, y0+8;
+// button frames (32 x 36) at (192, y0+8), (288, y0+8), (173, y0+40), (307, y0+40); the slot texts right-aligned at x 192 (L1) / 173 (L2) and
+// left-aligned at 320 (R1) / 339 (R2), y0+16 / y0+48.  The lit slot is drawn at full alpha, the others at half (all usable ones at full
+// while nothing is lit).  The JRing sprites (pad emblem, button letters, style / element icons) are drawn as panels and text here.
+
+/// `BtlMenu+0xb50` of the US / JP list rect: y of the battle list window (US BATTLE 0x6e5e84).
+pub const SETTING_LIST_Y: f32 = 290.0;
+
+/// The band's top (`fVar16`).
+pub fn setting_y0() -> f32 {
+    ((SETTING_LIST_Y - 128.0) / 2.0 + 128.0) - 42.0
+}
+
+/// The row the triangle key assigns from the open command list, or `Err(())` when the row cannot be assigned (buzzer), `Ok(None)` when the
+/// page has no triangle handler.  `flags_of(kind, id)` = the `MAGI` / `SKIL` record's `+4` flag word and byte 6 (`None` when unknown).
+pub fn setting_row(menu: &crate::ui::BtlMenu, flags_of: &dyn Fn(u8, i32) -> Option<(u16, u8)>) -> Result<Option<Row>, ()> {
+    use crate::ui::{Page, Root};
+    let cur = menu.cursor();
+    let b = &menu.b;
+    let gated = |kind: u8, id: i32| -> Result<Option<Row>, ()> {
+        let (flags, b6) = flags_of(kind, id).unwrap_or((0, 0));
+        if id < 0 || id >= 1000 || flags & 0x60 != 0 {
+            return Err(());
+        }
+        Ok(Some(Row { kind, b1: (b6 >> 1) & 7, id: id as u16 }))
+    };
+    match menu.page() {
+        // the port's inline shape selector (`Attack < Standard >`) stands for retail's shape list (`SetSkill1Menu` rows 1..4 -> style 0..3)
+        Page::Main if menu.roots.get(cur) == Some(&Root::Attack) => Ok(Some(Row { kind: KIND_ATTACK, b1: menu.shape.min(3) as u8, id: 0xffff })),
+        Page::Shape => Ok(Some(Row { kind: KIND_ATTACK, b1: cur.min(3) as u8, id: 0xffff })),
+        Page::Item => match b.items.get(cur) {
+            Some(it) => Ok(Some(Row { kind: KIND_ITEM, b1: cur as u8, id: it.id as u16 })),
+            None => Err(()),
+        },
+        Page::Magic => match b.magic.get(cur) {
+            Some(m) => gated(KIND_MAGIC, m.id),
+            None => Err(()),
+        },
+        Page::Skill => match b.skills.get(cur) {
+            Some(s) => gated(KIND_SKILL, s.index),
+            None => Err(()),
+        },
+        _ => Ok(None),
+    }
+}
+
+/// `BtlMenu` mode 0x18.
+#[derive(Clone, Debug)]
+pub struct SettingMenu {
+    /// party member id (`PCParam` index) whose rows are edited
+    pub pc: usize,
+    /// the row to assign (`BtlMenu+0xb54..`)
+    pub row: Row,
+    /// the member's four slots as shown (refreshed after the write)
+    pub slots: [Slot; 4],
+    /// the slot written (step 2: lit for one second)
+    pub picked: Option<usize>,
+    pub t: f32,
+}
+
+/// What a frame of mode-0x18 input did.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SettingInput {
+    None,
+    /// cross: back to the list, nothing written (SE 3)
+    Cancel,
+    /// a shoulder button wrote slot `k` (SE 2); the caller stores [`SettingMenu::row`] there
+    Picked(usize),
+}
+
+impl SettingMenu {
+    pub fn new(pc: usize, row: Row, slots: [Slot; 4]) -> Self {
+        SettingMenu { pc, row, slots, picked: None, t: 0.0 }
+    }
+
+    /// Step 1 for one frame of newly pressed `keys`.
+    pub fn press(&mut self, keys: u16) -> SettingInput {
+        if self.picked.is_some() {
+            return SettingInput::None;
+        }
+        for (k, &bit) in SLOT_BUTTONS.iter().enumerate() {
+            if keys & bit != 0 {
+                self.picked = Some(k);
+                self.t = 0.0;
+                return SettingInput::Picked(k);
+            }
+        }
+        if keys & sh2_core::game::padbit::CROSS != 0 {
+            return SettingInput::Cancel;
+        }
+        SettingInput::None
+    }
+
+    /// Step 2: `true` one second after the pick (back to the list).
+    pub fn tick(&mut self, dt: f32) -> bool {
+        self.t += dt;
+        self.picked.is_some() && self.t >= 1.0
+    }
+}
+
+/// Write `row` into slot `slot` of party member `pc` (all four bytes, as mode 0x18 step 1 does).
+pub fn write_row(btl: &mut sh2_menu::save::BtlSave, pc: usize, slot: usize, row: Row) {
+    btl.set_shortcut(pc, slot, row.kind, row.id);
+    set_b1(btl, pc, slot, row.b1);
+}
+
+/// Draw mode 0x18 (virtual 512 x 448).
+pub fn draw_setting(g: &mut dyn MenuGfx, m: &SettingMenu) {
+    use bevy::math::Vec2;
+    use sh2_menu::bevy_ui;
+    use sh2_menu::gfx::{Blend, DrawCmd, Vertex};
+    let y0 = setting_y0();
+    let quad = |g: &mut dyn MenuGfx, ya: f32, yb: f32, a0: u8, a1: u8| {
+        let v = |x: f32, y: f32, a: u8| Vertex { pos: Vec2::new(x, y), uv: Vec2::ZERO, color: Rgba::new(0, 0, 0, a) };
+        g.draw(DrawCmd::Quad { tex: None, v: [v(0.0, ya, a0), v(0.0, yb, a1), v(513.0, ya, a0), v(513.0, yb, a1)], blend: Blend::Alpha });
+    };
+    quad(g, y0, y0 + 16.0, 0, 0x60);
+    quad(g, y0 + 16.0, y0 + 68.0, 0x60, 0x60);
+    quad(g, y0 + 68.0, y0 + 84.0, 0x60, 0);
+    // pad emblem (two 37 x 70 halves at x 220 / 254) and the four button frames
+    bevy_ui::panel(g, 222.0, y0 + 10.0, 68.0, 66.0, 0x30);
+    let frames = [(192.0, y0 + 8.0), (288.0, y0 + 8.0), (173.0, y0 + 40.0), (307.0, y0 + 40.0)];
+    // button letters: L1 (223, y0+17), R1 (265, y0+17), L2 (204, y0+49), R2 (281, y0+49)
+    let letters = [(223.0, y0 + 17.0), (265.0, y0 + 17.0), (204.0, y0 + 49.0), (281.0, y0 + 49.0)];
+    // slot texts: (x, right aligned, y)
+    let texts = [(192.0, true, y0 + 16.0), (320.0, false, y0 + 16.0), (173.0, true, y0 + 48.0), (339.0, false, y0 + 48.0)];
+    for k in 0..4 {
+        let lit = m.picked == Some(k);
+        let full = lit || (m.picked.is_none() && (m.slots[k].command.is_none() || m.slots[k].usable));
+        let a = if full { 0x80 } else { 0x40 };
+        let (fx, fy) = frames[k];
+        bevy_ui::panel(g, fx, fy, 32.0, 36.0, if lit { 0x70 } else { 0x40 });
+        let (lx, ly) = letters[k];
+        let flash = lit && ((m.t * 12.0) as i32) % 2 == 0;
+        bevy_ui::text(g, lx, ly, SLOT_NAMES[k], 0, if flash { GOLD } else { Rgba::new(0x80, 0x80, 0x80, a) }, true);
+        let label = if m.slots[k].label.is_empty() { "--------".to_string() } else { m.slots[k].label.clone() };
+        let col = if lit { GOLD } else { Rgba::new(0x80, 0x80, 0x80, a) };
+        let (tx, right, ty) = texts[k];
+        let x = if right { tx - g.measure_text(0, &sh2_menu::sjis::encode(&label)).0 } else { tx };
+        bevy_ui::text(g, x, ty, &label, 0, col, true);
+    }
+}
+
 const WHITE: Rgba = Rgba::new(0x80, 0x80, 0x80, 0x80);
 const GREY: Rgba = Rgba::new(0x50, 0x50, 0x58, 0x80);
 const GOLD: Rgba = Rgba::new(0x80, 0x70, 0x30, 0x80);
@@ -366,6 +526,51 @@ mod tests {
         assert_eq!(m.press(padbit::L1), Input::None, "one pick only");
         assert!(!m.tick(0.5));
         assert!(m.tick(0.6), "closes one second after the pick");
+    }
+
+    #[test]
+    fn setting_rows_come_from_the_open_list() {
+        use crate::flow::Button;
+        use crate::ui::BtlMenu;
+        let mut m = BtlMenu::new(build());
+        // `Attack < High Angle >`: an attack row with the style in byte 1
+        m.press(Button::Right);
+        m.press(Button::Right);
+        let none = |_: u8, _: i32| None;
+        assert_eq!(setting_row(&m, &none), Ok(Some(Row { kind: KIND_ATTACK, b1: 2, id: 0xffff })));
+        // the magic list: `+4` bits 5..6 set = buzzer
+        let magic_root = m.roots.iter().position(|r| *r == crate::ui::Root::Magic).unwrap();
+        while m.cursor() != magic_root {
+            m.press(Button::Down);
+        }
+        m.press(Button::Confirm);
+        let flags = |_: u8, id: i32| Some((if id == 7 { 0 } else { 0x20 }, 0x0c));
+        assert_eq!(setting_row(&m, &flags), Ok(Some(Row { kind: KIND_MAGIC, b1: 6, id: 7 })));
+        m.press(Button::Down);
+        assert_eq!(setting_row(&m, &flags), Err(()));
+    }
+
+    #[test]
+    fn setting_menu_writes_one_slot_or_cancels() {
+        let t = BtlText::default();
+        let row = Row { kind: KIND_ITEM, b1: 0, id: 3 };
+        let mut s = SettingMenu::new(1, row, slots([Row { kind: 0, b1: 0, id: 0xffff }; 4], &build(), None, &t));
+        assert_eq!(s.press(0), SettingInput::None);
+        assert_eq!(s.press(padbit::L2), SettingInput::Picked(2));
+        assert_eq!(s.press(padbit::R1), SettingInput::None, "one pick");
+        assert!(!s.tick(0.5) && s.tick(0.6));
+        let mut c = SettingMenu::new(1, row, s.slots.clone());
+        assert_eq!(c.press(padbit::CROSS), SettingInput::Cancel);
+        // the save row takes all four bytes
+        let mut btl = sh2_menu::save::BtlSave::new_retail();
+        write_row(&mut btl, 1, 2, Row { kind: KIND_ATTACK, b1: 3, id: 0xffff });
+        assert_eq!(Row::from_save(&btl, 1, 2), Row { kind: KIND_ATTACK, b1: 3, id: 0xffff });
+        assert_eq!(Row::from_save(&btl, 1, 2).convert_default().id, 3);
+    }
+
+    #[test]
+    fn setting_band_sits_over_the_list() {
+        assert_eq!(setting_y0(), 167.0);
     }
 
     #[test]

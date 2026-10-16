@@ -558,8 +558,22 @@ impl BtlSave {
     pub fn scenario(&self) -> u32 {
         rd_u32(&self.data, Self::OFF_SCENARIO)
     }
+    /// `BTL0+3` bit 0 (`BtlSaveSec::SetComboMenuMode`, set by the combo tutorial and `SceneInit`): the battle's main menu lists `Combo`
+    /// (`SetMainMenu`, US BATTLE 0x5f6918 / 0x600ca0 `andi 1`; JP BtlMenu.c 10539).
     pub fn combo_menu_enabled(&self) -> bool {
         self.data[Self::OFF_FLAGS] & 1 != 0
+    }
+    /// round 6 MN3: `BTL0+3` bit 1, the **combo shortcut switch** as the battle sees it.  Every battle copies it from the menu's Combo Switch
+    /// (`MENU+0x276 & 3 != 0`, US `BtlSocket::Polling` SLUS 0x365f30..0x365f84, JP BtlSocket.c 299) and reads it for the combo shortcut menu
+    /// (mode 0x17: JP CBattle.c 3435 / 9461 / 11301) and the triangle shortcut setting (mode 0x18: US `BtlMenu::Polling` 0x5d2ffc / 0x5d5e04 /
+    /// 0x5da0d4, `MainMenuFunc` 0x5e6d9c, all `dsll32 30 / dsrl32 31`).
+    pub fn combo_shortcut_enabled(&self) -> bool {
+        self.data[Self::OFF_FLAGS] & 2 != 0
+    }
+    /// `BTL0+3` bit 1 (US `BtlSaveSec` 0x3bc420, the setter the clear-data defaults call with 0).
+    pub fn set_combo_shortcut(&mut self, on: bool) {
+        let f = &mut self.data[Self::OFF_FLAGS];
+        *f = (*f & !2) | ((on as u8) << 1);
     }
     pub fn soul_system_enabled(&self) -> bool {
         self.data[Self::OFF_FLAGS] & 4 != 0
@@ -1118,6 +1132,17 @@ impl MenuSave {
     pub fn battle_cursor_memory(&self) -> bool {
         self.data[Self::OFF_OPT0] >> 6 == 0
     }
+    /// round 6 MN3: the command menu's **Combo Switch** (`MENU+0x276` bits 0..1).  US `CmdTop::SelectMenu` (FIELD 0x4699e8..0x469a20) stores the
+    /// picked row's value there (ON = 1, OFF = 0: the row's place `+0x16`) and `CmdRetailWin11` (0x4e95b4) puts the cursor on that row; each battle sets `BTL0+3` bit 1 = `value != 0`
+    /// ([`BtlSave::combo_shortcut_enabled`]).  JP's Option page wrote the same bits (`Shortcuts` row, `value ^ 1`).
+    pub const OFF_COMBO_SWITCH: usize = 0x276;
+    pub fn combo_switch(&self) -> u8 {
+        self.data[Self::OFF_COMBO_SWITCH] & 3
+    }
+    pub fn set_combo_switch(&mut self, v: u8) {
+        let b = &mut self.data[Self::OFF_COMBO_SWITCH];
+        *b = (*b & !3) | (v & 3);
+    }
     /// Language index (`GetFullPathName` fallback index; retail default 1).
     pub fn language(&self) -> u32 {
         rd_u32(&self.data, Self::OFF_LANGUAGE)
@@ -1485,6 +1510,22 @@ impl SystemFile {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn combo_switch_and_shortcut_bit() {
+        // round 6 MN3: the Combo command (bit 0) and the shortcut switch (bit 1) are separate bits of `BTL0+3`
+        let mut b = BtlSave::new_retail();
+        b.data[BtlSave::OFF_FLAGS] = 1;
+        assert!(b.combo_menu_enabled() && !b.combo_shortcut_enabled());
+        b.set_combo_shortcut(true);
+        assert_eq!(b.data[BtlSave::OFF_FLAGS], 3);
+        b.set_combo_shortcut(false);
+        assert_eq!(b.data[BtlSave::OFF_FLAGS], 1);
+        let mut m = MenuSave::from_section_for(&vec![0u8; MENU_SIZE], Build::Retail).unwrap();
+        m.data[MenuSave::OFF_COMBO_SWITCH] = 0xf0;
+        m.set_combo_switch(1);
+        assert_eq!((m.combo_switch(), m.data[MenuSave::OFF_COMBO_SWITCH]), (1, 0xf1));
+    }
 
     #[test]
     fn default_roundtrip() {
