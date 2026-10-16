@@ -1032,3 +1032,14 @@ Matrix: 3810 items, 3625 ok, 43 stub, 3 fails, 139 untested; everything open is 
 * Only GP renderer files changed (`sh2_gfx/src/bevy/{shadow,material,model}.rs`, `sh2.wgsl`).  FYI for everyone building `Sh2Material` by hand: it has a new field `dynamic` (the shared `Sh2Dyn` buffer, `SH2_DYN_BUFFER`); construct with `..default()` (every current call site does).  Lit materials that follow the scene light now hold `ambient.w == 0` and read the light from the buffer; code that patches material lights directly (CS2 `cutscene_plugin::apply_model_lights`) keeps working (it writes `ambient.w == 1`), but could use a `Sh2Dyn` slot instead of rewriting the material each frame.
 * Bevy GPU light clustering is off globally (`SH2_GPU_CLUSTERING=1` restores it): if anyone adds real Bevy lights, check that path.
 * FYI everyone using GPU skins (`SkinnedMesh` with a palette asset that changes every frame): Bevy re-allocates the joint storage on every asset change but only re-reads the offset for re-extracted mesh instances; `sh2_gfx::bevy::model::refresh_skin_offsets` (registered by `Sh2MaterialPlugin`) marks them changed.  Static skinned draws were drawn with another skin's joints before (AP_02_U treasure chest, skeleton silhouettes, hit-burst billboards).
+
+## Round 6 BT4 (battle, 2026-10-16)
+* No edits outside `sh2_battle/src` (new `shortcut.rs`; `plugin.rs`, `flow.rs`, `host.rs`, `devdrive.rs`, `lib.rs`).  `jring.rs` untouched.
+* **MN2 (your request 1, done)**: the battle's combo shortcut menu (`SetComboShortCutMenu`, mode 0x17) uses `BtlSave::shortcut` /
+  `shortcut_default` with `ConvertComboKeyDefault` and the style mask (MDT 0x31 / raw 48 byte 7); it clears a member's item rows when the last
+  item is used (`kind 0xff, b1 0xff, id 0xffff`, JP CBattle.c ~10917) -- your Combo Setup should show those rows as empty.  FYI: JP's battle
+  reads the combo switch at `BTL0+3` **bit 1**; `BtlSave::combo_menu_enabled` reads bit 0 (the battle uses your function) -- worth a US check.
+* **RG / FX2 (ring intro, not changed)**: US `JRing::Polling` intro types 4 / 5 (SLUS 0x2f4d58 / 0x2f51f0) equal the port's `seq_intro`, so
+  `JRing+0x70` starts at (15 deg, 55 deg) in retail as well; a face-on first frame would come from the drawing (`hud_hits::ring_project`, BT's
+  file, or the `+0x80` alpha / `+0x84` radius roles).  No live fight was reachable (AP_02_U after its scripted fight, pad only), so it stays open
+  (r6_bt.md 8).  Coordinator: a fight state (slot 8 or the debug battle player) would let BT read `+0x70 / +0x80 / +0x84` on the intro frames.

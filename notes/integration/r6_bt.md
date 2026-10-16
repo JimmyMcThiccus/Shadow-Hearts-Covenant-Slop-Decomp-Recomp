@@ -129,4 +129,46 @@ while it loads, it now checks the retail ring zones only when the region held st
 3. (Panic: nothing beyond the x3 SP drain, see 7.)  The AI's skill-block records, dispel test, Joachim filter.
 4. Tutorial pages (battle types 1 / 2).
 5. Last boss: where retail triggers the separation; the separated-core-death case live.
-6. Battle shortcut / combo-key menu (`SetComboShortCutMenu`), RG ring intro orientation (live `JRing+0x70`), the `0x6000_300x` / `1008..100a` ids.
+6. (shortcut menu + UNION HUD done, see 8) The shortcut setting overlay (mode 0x18); RG ring intro orientation (needs a live fight: `JRing+0x70 / +0x80 / +0x84`
+   on the first intro frames, see 8); the `0x6000_300x` / `1008..100a` ids.
+
+## 8. Round 6 BT4 (2026-10-16): combo shortcut menu, UNION HUD, ring intro
+Status: `cargo test -p sh2_battle` 259 green, `cargo check --workspace --all-targets` clean.  Sanity (`sh2_app --us --autoplay --boost 80
+--shots`, dev profile): battle command menu, Judgement Ring, victory, field after battle, menu top checked
+(`screens/r6_bt/bt4_autoplay_sanity.png`); dev drives below.
+* **Combo shortcut menu** (`BtlMenu` mode 0x17 = `SetComboShortCutMenu`, new `shortcut.rs`, JP BtlMenu.c 13257 / 6222, CBattle.c ~3436 / ~9472 /
+  ~11320, `BtlMenuFunc` step 0x28 ~7266, `GetShortCutTarget` ~56084, `BtlMenuCBFunc` case 0x14):
+  * opens while a party member's Attack / Effect / ring-skill action runs when the combo switch is on (`combo_menu_enabled`), other Link
+    members are still to act (`wTurnPendMask` = `combo_queue`) and it is not a tutorial fight; counted in `BattleStats::shortcuts` -> Score
+    word 9 (`BTL0+0x1164`).  Left / Right walk the pending members, L1 / R1 / L2 / R2 = slots 0..3 (`0x400 / 0x800 / 0x100 / 0x200`); a pick
+    plays SE 2 and the menu stays one second; it closes with the action.  Drawn over the bottom band (`MenuPolygon` y 317..449, black 0x40;
+    approximation, the retail pad-emblem sprites from the JRing texture are not used).
+  * rows = `BtlSave::shortcut` + MN2's rules: `ConvertComboKeyDefault` (empty attack row -> `id = (i8) b1`), style `id` only when bit `id` of
+    the member's mask (CMDMENU.MSD attach 13 / 11, MDT 0x31 -> raw 48, byte 7) is set; names / MP / bag / Seal / target class from the
+    member's own `MenuBuild` (`plugin::menu_build`, split out of `build_menu`); usable = attack always, item in the bag, magic / skill MP.
+  * the pick (`Battle::pick_shortcut`) makes the member the next actor in `finish_action`, its command runs from `pending` with no menu and no
+    party panel (`ParamClose`), friendship +100 both ways (`Host::shortcut_taken` -> `BtlHost::grow_friendship`).  Target =
+    `GetShortCutTarget`: attack -> a random living opponent, the current action's target preferred (stand-in for "lying in a damage
+    state"); effects -> the candidate of the side class whose `GetTargetList` (`BtlHost::action_targets`) is largest, ties random.
+  * item rows of the user are cleared (`kind -1, b1 0xff, id 0xffff`) when the last item is used (JP CBattle.c ~10917;
+    `shortcut::clear_item_rows`, `BtlHost::used_item_users`).
+  * Dev aids: `SH2_BATTLE_SHORTCUT=1` (switch counts as on), `SH2_BATTLE_SHORTCUT_PICK=<slot>`; devdrive shots `shortcut_menu` /
+    `shortcut_pick`.  `SH2_BATTLE_DEMO=2 SH2_BATTLE_PARTY=0,5,3,4 SH2_BATTLE_LEVEL=8 SH2_BATTLE_CMDS=link,attack,... SH2_BATTLE_SHORTCUT=1
+    SH2_BATTLE_SHORTCUT_PICK=0`: Yuri links Karin, the menu opens during Karin's ring with Yuri's four styles, L1 hands Yuri the turn
+    (`screens/r6_bt/bt4_shortcut_menu.png`, `bt4_shortcut_pick.png`).  Tests `shortcut::tests::*`,
+    `flow::tests::a_combo_shortcut_runs_the_stored_command_without_a_menu`.
+  * Not ported: the in-menu setting overlay (mode 0x18, `SetComboShortCutSettingMenu`: Triangle on a list row, then a shoulder button stores
+    it), the item kind-1 ring-skill path (phase 5 with `nCmd4 = 3`), the wrap through the `CBattle+0x439c` turn table (the port walks
+    `combo_queue`).  JP reads the switch at `BTL0+3` bit 1, the port's `combo_menu_enabled` (MN2) reads bit 0 -- not checked on US.
+* **UNION hides the HUD**: `BattleRuntime::union_playing` (`ExtraFx::any("union")` or a queued `UNION.EFD`) closes the party panel / turn bar
+  for the program, `union_turn` keeps the enemy-turn plate from coming back until the next turn (`LastBossFunc` step 0).  Checked with
+  `SH2_BATTLE_DEMO=302 SH2_BATTLE_BOSS_JOIN=1 SH2_BATTLE_PARTY=0,5,3,4 SH2_BATTLE_LEVEL=99 SH2_BATTLE_FXSHOTS`: no HUD element on any
+  `xfx_union_*` frame (`screens/r6_bt/bt4_union_no_hud.png`).
+* **Ring intro: not changed, live read not obtained.**  Static US check: the intro of `JRing::Polling` (SLUS 0x2f4d58 type 4 / 0x2f51f0
+  type 5) is the port's `seq_intro` exactly: type 5 sets `+0x80 = +0xb8`, `+0x84 = 0`, `anim_a = -5.497`, `anim_b = 2 pi`, then
+  `+0x70 = (home.x + anim_a, home.y + anim_b, home.z, 0)` wrapped to +-pi (so the first `JRing+0x70` is (15 deg, 55 deg) in retail too).  If
+  retail looks face-on there, the difference is in the drawing (`hud_hits::ring_project` order / signs, or which of `+0x80` / `+0x84` scales
+  the radius: the port uses `+0x84` as radius and `+0x80` as alpha), not in `jring.rs`.  The live main instance was in AP_02_U after its
+  scripted fight; ~20 min of pad-only walking (route east, `CField*` `[0x43ff34]` + 0x2130 = player x / z) found no fight (the east door /
+  box 8 not reached), so no live frames.  Port intro frames: `screens/r6_bt/bt4_port_ring_intro_frames.png` (devdrive `ring_intro_NN`).
+  Needs a save at a fight (slot 8 / debug battle player) to read `JRing+0x70 / +0x80 / +0x84` on the first intro frames.

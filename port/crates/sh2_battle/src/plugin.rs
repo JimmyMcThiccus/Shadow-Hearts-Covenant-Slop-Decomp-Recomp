@@ -403,6 +403,11 @@ pub struct BattleRuntime {
     mes_tags: Vec<(u32, u32)>,
     /// `ParamClose` / `TurnOrderClose` happened (win / lose / escape sequences): the HUD is not drawn
     pub hud_hidden: bool,
+    /// round 6 BT: the last boss's `UNION.EFD` is playing (`effects_bridge::ExtraFx::any("union")`): `LastBossFunc` step 0 closes the party
+    /// panel and the turn bar (`ParamClose` / `TurnOrderClose`) before the program starts, so no HUD element is drawn while it runs
+    pub union_playing: bool,
+    /// the current turn played `UNION` (the enemy-turn plate does not come back after it)
+    pub union_turn: bool,
     /// tick at which the HUD appeared for the current command phase (`hud::draw_hud` slide-in), `None` outside command phases
     pub hud_since: Option<u64>,
     /// fusion id per fighter while fused (the party panel / turn cards show the fusion's name and portrait)
@@ -453,6 +458,11 @@ pub struct BattleRuntime {
     tarot_cash: Option<u8>,
     /// battle cursor memory per fighter (`BtlChr+0x598..0x59e`, [`BtlMenu::path`]); -1 = nothing remembered
     cursor_mem: Vec<[i16; 4]>,
+    /// round 6 BT: the combo shortcut menu (`BtlMenu` mode 0x17, [`crate::shortcut`]) and the action it was opened for `(actor, turn_no)`
+    pub shortcut_menu: Option<crate::shortcut::ShortcutMenu>,
+    shortcut_for: Option<(usize, i32)>,
+    /// per PC id: the attack-style mask of `GetComboKeyData` (menu data table raw 48, byte 7), read once from `CMDMENU.MSD`
+    style_masks: Option<Vec<Option<u8>>>,
 }
 
 /// Presentation state of the `Tarot Card` command (`BtlTarotSelect` + `TarotEffectFunc`): the timeline, the message windows it owns and
@@ -720,6 +730,8 @@ fn enter_battle(
         mes: Default::default(),
         mes_tags: Vec::new(),
         hud_hidden: false,
+        union_playing: false,
+        union_turn: false,
         hud_since: None,
         fused: vec![None; n],
         win_pose: false,
@@ -744,6 +756,9 @@ fn enter_battle(
         gather_plan: vec![],
         tarot_cash: None,
         cursor_mem: vec![[-1; 4]; 12],
+        shortcut_menu: None,
+        shortcut_for: None,
+        style_masks: None,
     });
 }
 
@@ -909,6 +924,18 @@ fn desired_camera(rt: &BattleRuntime) -> Option<CamRequest> {
 
 /// `BtlMenu::SetMainMenu`: the root window of the acting party member with the magic / skill / item lists.
 fn build_menu(rt: &BattleRuntime, actor: usize, session: &GameSession, cx: &Cx) -> BtlMenu {
+    let menu = BtlMenu::new(menu_build(rt, actor, session, cx));
+    // `BtlMenu` ctor: the cursor path of the actor's last command is restored unless the option (`MENU+0x274` >> 6) is set
+    if session.save.menu.battle_cursor_memory() {
+        if let Some(m) = rt.cursor_mem.get(actor) {
+            return menu.with_memory(*m);
+        }
+    }
+    menu
+}
+
+/// The lists behind [`build_menu`] (also read by the combo shortcut menu: names, MP costs, the bag, Seal, target classes).
+fn menu_build(rt: &BattleRuntime, actor: usize, session: &GameSession, cx: &Cx) -> MenuBuild {
     let f = rt.battle.fighters[actor].as_ref().unwrap();
     let pc = f.char_id.max(0) as usize;
     let retail = sh2_core::boot::is_retail();
@@ -921,7 +948,7 @@ fn build_menu(rt: &BattleRuntime, actor: usize, session: &GameSession, cx: &Cx) 
         can_run: rt.battle.escape != EscapeMode::Never,
         // `Link` (連携) needs another living party member and no combo running yet; retail also needs the combo feature unlocked
         // (`BTL0+3` bit 0, `SetComboMenuMode`: live slot 8 with the bit clear has no Combo entry, setting it adds "Combo" after Defend)
-        can_link: rt.battle.combo.is_empty() && alive(rt, false).iter().any(|&i| i != actor) && (!retail || session.save.btl.combo_menu_enabled()),
+        can_link: rt.battle.combo.is_empty() && alive(rt, false).iter().any(|&i| i != actor) && (!retail || session.save.btl.combo_menu_enabled() || shortcut_forced()),
         enemies: alive(rt, true),
         allies: alive(rt, false),
         dead_allies: (0..rt.battle.fighters.len()).filter(|&i| rt.battle.fighters[i].as_ref().map(|x| !x.is_enemy && x.hp <= 0).unwrap_or(false)).collect(),
@@ -949,14 +976,131 @@ fn build_menu(rt: &BattleRuntime, actor: usize, session: &GameSession, cx: &Cx) 
     }
     // round 5 BP hook: Seal, `DecMPp` costs, combo chains, combo magic
     rt.battle.menu_extras(actor, &mut b);
-    let menu = BtlMenu::new(b);
-    // `BtlMenu` ctor: the cursor path of the actor's last command is restored unless the option (`MENU+0x274` >> 6) is set
-    if session.save.menu.battle_cursor_memory() {
-        if let Some(m) = rt.cursor_mem.get(actor) {
-            return menu.with_memory(*m);
+    b
+}
+
+/// Dev aid `SH2_BATTLE_SHORTCUT=1`: the combo switch counts as on (Combo entry + shortcut menu) whatever the save says.
+fn shortcut_forced() -> bool {
+    std::env::var("SH2_BATTLE_SHORTCUT").map(|v| v == "1").unwrap_or(false)
+}
+
+/// The attack-style masks of `GetComboKeyData` per PC id: menu data table demo key 0x31 (retail raw 48 through `us_mdt_type`), record = PC,
+/// data byte 7, from `MENU/DAT/CMDMENU.MSD` attach 13 (retail) / 11 (demo).
+fn load_style_masks(cx: &Cx) -> Vec<Option<u8>> {
+    let retail = sh2_core::boot::is_retail();
+    let msd = cx
+        .files
+        .and_then(|f| f.disc.read("MENU/DAT/CMDMENU.MSD").ok())
+        .and_then(|b| sh2_menu::msd::Msd::parse(b).ok())
+        .and_then(|root| root.attach_scene(if retail { 13 } else { 11 }))
+        .map(|m| if retail { m.with_mdt_map(sh2_menu::msd::us_mdt_type) } else { m });
+    (0..sh2_menu::save::PC_COUNT).map(|pc| msd.as_ref().and_then(|m| m.mdt_data(0x31, pc).get(7).copied())).collect()
+}
+
+/// Round 6 BT: `BtlMenu` mode 0x17 (`SetComboShortCutMenu`) -- opened while a party member's action runs in a Link combo with other members
+/// still to act, closed with the action; L1 / R1 / L2 / R2 hand the next turn to the shown member with its stored command ([`crate::shortcut`]).
+fn run_shortcut_menu(rt: &mut BattleRuntime, keys: u16, cx: &Cx, session: &GameSession) {
+    use crate::shortcut::{self, Command as Sc, Input, Member, Row, ShortcutMenu};
+    // the menu belongs to one action
+    if let Some((a, turn)) = rt.shortcut_for {
+        if rt.battle.actor != Some(a) || rt.battle.turn_no != turn {
+            rt.shortcut_menu = None;
+            rt.shortcut_for = None;
         }
     }
-    menu
+    let Some(actor) = rt.battle.actor else { return };
+    let actor_pc = rt.battle.fighters.get(actor).and_then(|f| f.as_ref()).map(|f| !f.is_enemy).unwrap_or(false);
+    if rt.shortcut_for.is_none() && actor_pc && matches!(rt.battle.phase, Phase::Attack | Phase::Effect | Phase::RingSkill) {
+        rt.shortcut_for = Some((actor, rt.battle.turn_no));
+        // `BTL0+3` combo switch (`SetComboMenuMode`; dev aid `SH2_BATTLE_SHORTCUT=1` forces it), no tutorial fight (`bFlags24` bit 5 stand-in)
+        let enabled = shortcut_forced() || session.save.btl.combo_menu_enabled();
+        if enabled && !rt.battle.combo_queue.is_empty() && rt.battle.battle_type == 0 && rt.battle.shortcut.is_none() {
+            if rt.style_masks.is_none() {
+                rt.style_masks = Some(load_style_masks(cx));
+            }
+            let mut members = vec![];
+            for &m in &rt.battle.combo_queue {
+                let Some(pc) = rt.setup.pc_ids.get(m).copied().flatten() else { continue };
+                if !rt.battle.fighters.get(m).and_then(|f| f.as_ref()).map(|f| f.hp > 0 && !f.removed).unwrap_or(false) {
+                    continue;
+                }
+                let b = menu_build(rt, m, session, cx);
+                let rows = [0, 1, 2, 3].map(|k| Row::from_save(&session.save.btl, pc as usize, k));
+                let mask = rt.style_masks.as_ref().and_then(|v| v.get(pc as usize).copied().flatten());
+                members.push(Member { fighter: m, name: rt.setup.names.get(m).cloned().unwrap_or_default(), slots: shortcut::slots(rows, &b, mask, cx.text) });
+            }
+            rt.shortcut_menu = ShortcutMenu::new(members);
+            if rt.shortcut_menu.is_some() {
+                rt.battle.stats.shortcuts += 1;
+                rt.log.push("shortcut menu".into());
+                log::info!("battle: combo shortcut menu for {:?}", rt.battle.combo_queue);
+            }
+        }
+    }
+    let Some(menu) = rt.shortcut_menu.as_mut() else { return };
+    if menu.tick(1.0 / 60.0) {
+        rt.shortcut_menu = None;
+        return;
+    }
+    // dev aid: `SH2_BATTLE_SHORTCUT_PICK=<slot>` presses that slot's button half a second after the menu opened
+    let keys = match std::env::var("SH2_BATTLE_SHORTCUT_PICK").ok().and_then(|v| v.parse::<usize>().ok()) {
+        Some(k) if k < 4 && menu.chosen.is_none() && menu.t > 0.5 => keys | shortcut::SLOT_BUTTONS[k],
+        _ => keys,
+    };
+    match menu.press(keys) {
+        Input::Moved => se(sh2_audio::se_ids::CURSOR),
+        Input::Picked(m, _) => {
+            let Some((_, cmd)) = menu.picked() else { return };
+            rt.seed = rt.seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            let rand = (rt.seed >> 33) as u32;
+            let b = &rt.battle;
+            let alive_of = |enemy: bool, dead: bool| -> Vec<usize> {
+                (0..b.fighters.len()).filter(|&i| b.fighters[i].as_ref().map(|f| f.is_enemy == enemy && !f.removed && (f.hp > 0) != dead).unwrap_or(false)).collect()
+            };
+            // `GetShortCutTarget`
+            let target = match cmd {
+                Sc::Attack { .. } => {
+                    let reeling: Vec<usize> = std::iter::once(b.cmd.p48).filter(|&t| t >= 0).map(|t| t as usize).collect();
+                    shortcut::attack_target(&alive_of(true, false), &reeling, rand)
+                }
+                _ => {
+                    let cands = match cmd.class() {
+                        crate::ai::TargetClass::SelfOnly => vec![m],
+                        crate::ai::TargetClass::Ally { revive: true } => alive_of(false, true),
+                        crate::ai::TargetClass::Ally { revive: false } => alive_of(false, false),
+                        crate::ai::TargetClass::Opponent | crate::ai::TargetClass::OpponentsAlive => alive_of(true, false),
+                        crate::ai::TargetClass::Everyone => {
+                            let mut v = alive_of(false, false);
+                            v.extend(alive_of(true, false));
+                            v
+                        }
+                    };
+                    let radius: Vec<f32> = (0..b.fighters.len()).map(|i| b.ext.get(i).map(|e| e.radius).unwrap_or(3.0)).collect();
+                    let count = |t: usize| -> usize {
+                        let Some((_, _, c)) = cmd.event(m, t).apply(false) else { return 1 };
+                        b.host.action_targets(m, &c, &b.fighters, &b.positions, &radius).len()
+                    };
+                    shortcut::effect_target(&cands, &count, rand)
+                }
+            };
+            match target {
+                Some(t) => {
+                    let ev = cmd.event(m, t);
+                    se(sh2_audio::se_ids::DECIDE);
+                    log::info!("battle: shortcut {ev:?} for {m}");
+                    rt.log.push(format!("shortcut pick: {ev:?}"));
+                    rt.battle.pick_shortcut(m, ev);
+                }
+                None => {
+                    se(sh2_audio::se_ids::BUZZER);
+                    if let Some(menu) = rt.shortcut_menu.as_mut() {
+                        menu.chosen = None;
+                    }
+                }
+            }
+        }
+        Input::None => {}
+    }
 }
 
 /// Start the effect program of the pending action (`CBattle::EffectFunc` -> `BtlEff`).
@@ -1137,6 +1281,8 @@ fn start_engine_fx(rt: Option<ResMut<BattleRuntime>>, extra: Option<ResMut<crate
     let (Some(mut rt), Some(mut extra), Some(disc)) = (rt, extra, disc) else { return };
     // `SH2_BATTLE_ENGINE_FX=0` turns them off (FX fixed the program camera, request 13)
     let off = std::env::var("SH2_BATTLE_ENGINE_FX").map(|v| v == "0").unwrap_or(false);
+    // `LastBossFunc` step 0: the HUD closes for the whole `UNION` program (set again below when one starts this frame)
+    rt.union_playing = extra.any("union") || rt.battle.host.engine_fx.iter().any(|(p, _, _)| p.contains("UNION") && !off);
     for (path, gen, tar) in std::mem::take(&mut rt.battle.host.engine_fx) {
         if off {
             continue;
@@ -1606,11 +1752,21 @@ pub fn battle_tick(
     }
     // bag items used by the party are consumed
     let used: Vec<i32> = std::mem::take(&mut rt.battle.host.used_items);
+    let users: Vec<usize> = std::mem::take(&mut rt.battle.host.used_item_users);
     if !used.is_empty() {
         let bag = session.save.btl.bag() as usize * sh2_menu::save::BtlSave::BAG_STRIDE;
-        for id in used {
+        for (k, id) in used.into_iter().enumerate() {
+            let mut gone = false;
             if let Some(slot) = session.save.btl.data.get_mut(sh2_menu::save::BtlSave::OFF_ITEMS + bag + id.max(0) as usize) {
                 *slot = slot.saturating_sub(1);
+                gone = *slot == 0;
+            }
+            // round 6 BT (JP CBattle.c ~10917): the user's shortcut rows of an item that ran out are cleared
+            if let (true, Some(pc)) = (gone, users.get(k).and_then(|&u| rt.setup.pc_ids.get(u).copied().flatten())) {
+                let cleared = crate::shortcut::clear_item_rows(&mut session.save.btl, pc as usize, id);
+                if !cleared.is_empty() {
+                    log::info!("battle: item {id} ran out, shortcut slots {cleared:?} of PC {pc} cleared");
+                }
             }
         }
     }
@@ -1832,6 +1988,7 @@ fn run_battle(rt: &mut BattleRuntime, pad: &GamePad, ring_view: &mut RingView, k
     let dt = 1.0 / 60.0;
     step_fx(rt, dt);
     dev_fx_list(rt, cx);
+    run_shortcut_menu(rt, keys, cx, session);
     // ring in progress
     if let Some(ring) = rt.ring.as_mut() {
         let done = ring.tick(pad.press());
@@ -1893,6 +2050,17 @@ fn run_battle(rt: &mut BattleRuntime, pad: &GamePad, ring_view: &mut RingView, k
             if rt.menu.is_none() {
                 // the menu of the next combo member waits for the leader's walk / the last reaction
                 if rt.anim_busy {
+                    return;
+                }
+                // round 6 BT: a combo shortcut picked the command (`BtlMenuFunc` step 0x28): no menu, no party panel (`aMenuRes[0] >= 0` -> `ParamClose`)
+                if rt.battle.has_pending() {
+                    rt.panel_open = false;
+                    rt.log.push(format!("shortcut: {:?}", rt.battle.actor));
+                    rt.battle.poll();
+                    rt.ring_done = false;
+                    rt.attack_started = false;
+                    rt.fx_phase = FxPhase::Idle;
+                    rt.wait = 0.15;
                     return;
                 }
                 // `ParamOpen` / `TurnOrderOpen` first, the command menu 0.3 s later (live 07h..07k, 07e)
@@ -2404,8 +2572,14 @@ fn draw_battle_ui(rt: &mut BattleRuntime, canvas: &mut UiCanvas, cx: &Cx, hud: O
         // the HUD exists during command phases only (no element during the Judgement Ring, the actions or the win / lose sequences); an enemy's
         // turn shows the Turn Priority plate for ~1.2 s from the turn start (live `06d`: the plate stands while the Revenant walks up)
         let actor_enemy = rt.battle.actor.and_then(|a| rt.battle.fighters.get(a).and_then(|f| f.as_ref())).map(|f| f.is_enemy).unwrap_or(false);
-        let base = matches!(rt.stage, Stage::Running) && !rt.hud_hidden && rt.ring.is_none();
-        let enemy_turn = actor_enemy && matches!(rt.battle.phase, Phase::TurnSelect | Phase::TurnBefore | Phase::Command | Phase::Attack | Phase::Effect) && rt.hud_since.map(|t| rt.ticks < t + 72).unwrap_or(true);
+        let base = matches!(rt.stage, Stage::Running) && !rt.hud_hidden && rt.ring.is_none() && !rt.union_playing;
+        // round 6 BT: once `UNION` has closed the HUD it stays closed for the rest of that turn (`LastBossFunc` -> turn end)
+        if rt.union_playing {
+            rt.union_turn = true;
+        } else if matches!(rt.battle.phase, Phase::TurnSelect | Phase::TurnBefore) {
+            rt.union_turn = false;
+        }
+        let enemy_turn = actor_enemy && !rt.union_turn && matches!(rt.battle.phase, Phase::TurnSelect | Phase::TurnBefore | Phase::Command | Phase::Attack | Phase::Effect) && rt.hud_since.map(|t| rt.ticks < t + 72).unwrap_or(true);
         let command = base && (rt.battle.phase == Phase::Command || enemy_turn);
         if rt.battle.phase == Phase::Fusion {
             if let Some(a) = rt.battle.actor {
@@ -2449,6 +2623,10 @@ fn draw_battle_ui(rt: &mut BattleRuntime, canvas: &mut UiCanvas, cx: &Cx, hud: O
         // live retail: no HUD element at all while the Judgement Ring runs (`battle_live/01a..01m`)
         if !rt.hud_hidden && rt.ring.is_none() {
             crate::hud::draw_hud(&mut g, h, &v, art.and_then(|a| a.icons));
+        }
+        // round 6 BT: the combo shortcut menu (a `BtlMenu` window of its own: it stands during the ring and the action)
+        if let Some(m) = rt.shortcut_menu.as_ref().filter(|_| !rt.hud_hidden) {
+            crate::shortcut::draw(&mut g, m, rt.ticks as f32 / 60.0);
         }
         match art.filter(|a| a.font_ok()) {
             Some(a) => {

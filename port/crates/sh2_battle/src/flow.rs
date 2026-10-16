@@ -530,6 +530,8 @@ pub trait Host {
     }
     /// The Link combo changed (`CBattle+0x36` members, leader first; empty = no combo).
     fn combo_changed(&mut self, _members: &[usize]) {}
+    /// round 6 BT: a combo shortcut handed the turn from `prev` to `next` (`BtlMenuFunc` step 0x28: their friendship grows by 100 both ways)
+    fn shortcut_taken(&mut self, _prev: usize, _next: usize) {}
     /// `FUSM` row `id`: `(name, model number, SP upkeep)` of a fusion monster, `None` when the tables are not available.
     fn fusion_info(&self, _id: i32) -> Option<(String, u32, i32)> {
         None
@@ -745,6 +747,9 @@ pub struct Battle<H: Host> {
     pub unique_owned: Vec<u8>,
     /// `MonsterSet` flags >> 2 (`CBattle+0x4866`): 1 / 2 = the tutorial fights ("Battle Basics" / "Combos"), see [`crate::bridge::BattleSetup::battle_type`]
     pub battle_type: u8,
+    /// round 6 BT: the combo shortcut picked during the running action (`aMenuRes`, [`crate::shortcut`]): `(member, command)`; the member
+    /// acts next with that command and no menu (`BtlMenuFunc` step 0x28)
+    pub shortcut: Option<(usize, MenuEvent)>,
     pending: Option<MenuEvent>,
 }
 
@@ -772,6 +777,8 @@ pub struct BattleStats {
     pub max_damage: u32,
     /// Link combos completed
     pub combos: u32,
+    /// round 6 BT: combo shortcut menus opened (`BTL0+0x1164`, Score word 9)
+    pub shortcuts: u32,
     /// per PC id (0..14): went berserk, fell, attack rings (total / all areas hit), perfect rings (total / every hit a strike)
     pub berserk: [u32; 14],
     pub unconscious: [u32; 14],
@@ -841,6 +848,7 @@ impl<H: Host> Battle<H> {
             bag: vec![],
             unique_owned: vec![],
             battle_type: 0,
+            shortcut: None,
             pending: None,
         }
     }
@@ -973,6 +981,21 @@ impl<H: Host> Battle<H> {
     /// Provide the command for the current actor (what `BtlMenu` does via the callback).
     pub fn submit(&mut self, ev: MenuEvent) {
         self.pending = Some(ev);
+    }
+
+    /// A command is waiting for the next [`Battle::poll`] (a combo shortcut skips the command menu).
+    pub fn has_pending(&self) -> bool {
+        self.pending.is_some()
+    }
+
+    /// round 6 BT: the combo shortcut menu (`BtlMenu` mode 0x17) picked `ev` for the linked member `member` -- ignored unless the member is
+    /// still to act in this combo (`wTurnPendMask`).
+    pub fn pick_shortcut(&mut self, member: usize, ev: MenuEvent) -> bool {
+        if !self.combo_queue.contains(&member) {
+            return false;
+        }
+        self.shortcut = Some((member, ev));
+        true
     }
 
     /// Advance one tick of the state machine.  Returns `true` while the battle is running.
@@ -2147,6 +2170,18 @@ impl<H: Host> Battle<H> {
             f.turns_taken += 1;
         }
         self.turn_no += 1;
+        // a combo shortcut (`aMenuRes[0] >= 0`): the picked member acts next (`GetNextTurnChr(aMenuRes[0])`) with its stored command, no menu
+        if let Some((m, ev)) = self.shortcut.take() {
+            let alive = self.fighters.get(m).and_then(|f| f.as_ref()).map(|f| f.hp > 0 && !f.removed).unwrap_or(false);
+            if let (true, Some(k)) = (alive, self.combo_queue.iter().position(|&q| q == m)) {
+                self.combo_queue.remove(k);
+                self.host.shortcut_taken(a, m);
+                self.actor = Some(m);
+                self.pending = Some(ev);
+                self.goto(Phase::Command, 0);
+                return;
+            }
+        }
         // a combo member is done: the next member acts inside the same slot, otherwise the combo ends
         if !self.combo_queue.is_empty() {
             let next = self.combo_queue.remove(0);
@@ -2349,6 +2384,7 @@ pub fn write_score(st: &BattleStats, btl: &mut sh2_menu::save::BtlSave, chapter:
     word(2, &|v| v.max(st.max_hits));
     word(3, &|v| v.saturating_add(st.total_hits));
     word(5, &|v| v.saturating_add(st.combos));
+    word(9, &|v| v.saturating_add(st.shortcuts));
     word(6, &|v| v.max(st.max_damage));
     if won && st.unconscious.iter().all(|&n| n == 0) {
         word(7, &|v| v.saturating_add(1));
@@ -2533,6 +2569,64 @@ mod tests {
         // the partner (1) chose first, then the leader (0), inside one slot
         assert_eq!(&order[..2], &[1, 0], "{order:?}");
         assert!(b.events.iter().any(|e| matches!(e, BattleEvent::ComboLink { leader: 0, partner: 1 })));
+    }
+
+    struct Shortcuts(Vec<(usize, usize)>);
+    impl Host for Shortcuts {
+        fn choose_ai_command(&mut self, actor: usize, _f: &[Option<Fighter>]) -> MenuEvent {
+            MenuEvent::Guard { actor: actor as i32 }
+        }
+        fn shortcut_taken(&mut self, prev: usize, next: usize) {
+            self.0.push((prev, next));
+        }
+    }
+
+    /// Round 6 BT: a combo shortcut picked during the partner's action hands the slot to the leader with the stored command -- no menu
+    /// (`BtlMenuFunc` step 0x28), the friendship hook sees the hand-over.
+    #[test]
+    fn a_combo_shortcut_runs_the_stored_command_without_a_menu() {
+        let mut f = vec![fighter(false, 100, 50, 30), fighter(false, 100, 40, 30), fighter(true, 400, 5, 10)];
+        f[0].char_id = 0;
+        f[1].char_id = 1;
+        let mut b = Battle::new(Shortcuts(vec![]), f, Ambush::None, rules::EscapeMode::Never, 5);
+        let mut linked = false;
+        let mut picked = false;
+        let mut menus: Vec<usize> = vec![];
+        let mut leader_attacked = false;
+        for _ in 0..4000 {
+            if !b.poll() {
+                break;
+            }
+            // the partner's action is running: the shortcut menu picks the leader's attack (slot 0)
+            if linked && !picked && b.actor == Some(1) && b.phase == Phase::Attack {
+                assert!(!b.pick_shortcut(1, MenuEvent::Guard { actor: 1 }), "only members still to act");
+                assert!(b.pick_shortcut(0, MenuEvent::Attack { actor: 0, target: 2, kind: 1, skill: -1 }));
+                picked = true;
+            }
+            if picked && b.actor == Some(0) && b.phase == Phase::Attack {
+                assert_eq!(b.cmd.p4c, 1, "the stored style");
+                leader_attacked = true;
+                break;
+            }
+            if b.phase == Phase::Command && !b.has_pending() {
+                let a = b.actor.unwrap();
+                if b.fighters[a].as_ref().unwrap().is_enemy {
+                    continue;
+                }
+                menus.push(a);
+                if !linked && a == 0 {
+                    linked = true;
+                    b.submit(MenuEvent::Link { actor: 0, target: 1 });
+                } else if !linked {
+                    b.submit(MenuEvent::Guard { actor: a as i32 });
+                } else {
+                    b.submit(MenuEvent::Attack { actor: a as i32, target: 2, kind: 0, skill: -1 });
+                }
+            }
+        }
+        assert!(picked && leader_attacked, "menus {menus:?}");
+        assert_eq!(menus.iter().filter(|&&a| a == 0).count(), 1, "the leader got no second menu: {menus:?}");
+        assert_eq!(b.host.0, vec![(1, 0)]);
     }
 
     struct Friends(i32);

@@ -40,6 +40,9 @@ pub struct BtlHost {
     pub pos: Vec<[f32; 3]>,
     /// bag items consumed since the last drain
     pub used_items: Vec<i32>,
+    /// round 6 BT: the fighter slot that used each of [`BtlHost::used_items`] (same order; the shortcut rows of the user are cleared when
+    /// the last item is gone, `shortcut::clear_item_rows`)
+    pub used_item_users: Vec<usize>,
     /// `MONSTERParam` ids photographed by Snap Shot since the last drain (the owner of the save sets their library "snapped" bit,
     /// JP `BtlFree` command kind 6: `BtlSave+0xdcf`, retail `+0xf63`)
     pub snapped: Vec<u16>,
@@ -180,6 +183,7 @@ impl BtlHost {
             atk_flag: vec![true; slots],
             pos: vec![[0.0; 3]; slots],
             used_items: vec![],
+            used_item_users: vec![],
             snapped: vec![],
             last: None,
             ai_log: vec![],
@@ -544,6 +548,9 @@ impl Host for BtlHost {
     fn combo_changed(&mut self, members: &[usize]) {
         self.combo = members.to_vec();
     }
+    fn shortcut_taken(&mut self, prev: usize, next: usize) {
+        self.grow_friendship(prev, next);
+    }
 
     fn choose_ai_command(&mut self, actor: usize, f: &[Option<Fighter>]) -> MenuEvent {
         if !self.boss_parts.is_empty() && self.models.get(actor) == Some(&499) {
@@ -719,6 +726,7 @@ impl Host for BtlHost {
                 f.mp = (f.mp - cost).max(0);
                 if cmd.p4c == EffectKind::Item as i32 {
                     self.used_items.push(cmd.p44);
+                    self.used_item_users.push(actor);
                 }
             }
         }

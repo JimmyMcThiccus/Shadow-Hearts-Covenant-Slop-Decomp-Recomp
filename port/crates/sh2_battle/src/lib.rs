@@ -30,6 +30,7 @@ pub mod pkb_compat;
 pub mod plugin;
 pub mod ring;
 pub mod rules;
+pub mod shortcut;
 pub mod stage;
 pub mod structs;
 pub mod tarot;

@@ -470,6 +470,15 @@ fn drive(
             if !rt.battle.combo.is_empty() && matches!(rt.stage, Stage::Running) && rt.menu.is_none() {
                 dd.shot("combo_form");
             }
+            // round 6 BT: the combo shortcut menu (`BtlMenu` mode 0x17) once it stands, and right after a pick
+            if let Some(m) = rt.shortcut_menu.as_ref() {
+                if m.chosen.is_none() && m.t > 0.3 {
+                    dd.shot("shortcut_menu");
+                }
+                if m.chosen.is_some() && m.t > 0.2 {
+                    dd.shot("shortcut_pick");
+                }
+            }
             // Lucia's `Tarot Card` (`SH2_BATTLE_CMDS=tarot`, recipe `lucia`): photographs of every stage of the command; the stop press comes
             // `SH2_TAROT_STOP` seconds into the spin (default 0.6), the result window is confirmed after 0.6 s
             if dd.tarot_press > 0 {
@@ -544,6 +553,11 @@ fn drive(
             }
             if ring.active {
                 dd.ring_age += 1;
+                // round 6 BT: the first intro frames (ring intro orientation vs live retail)
+                if matches!(dd.ring_age, 2 | 6 | 12 | 20) {
+                    let n = format!("ring_intro_{:02}", dd.ring_age);
+                    dd.shot(&n);
+                }
                 if dd.ring_age == 30 {
                     dd.shot(if matches!(rt.battle.phase, Phase::Attack) { "judgement_ring" } else { "effect_ring" });
                 }
