@@ -14,6 +14,8 @@ pub struct CmnArt {
     frame: Option<TextureId>,
     arrow: Option<TextureId>,
     flare: Option<TextureId>,
+    /// round 6 MN3: attach 6, the pad icon sheet (8 x 2 cells of 16 x 20; row 1 = pad bits 8..15)
+    icons: Option<TextureId>,
 }
 
 fn blit(g: &mut dyn MenuGfx, tex: Option<TextureId>, x: f32, y: f32, w: f32, h: f32, uv: (f32, f32, f32, f32), c: Rgba) {
@@ -29,8 +31,14 @@ impl CmnArt {
             let img = sh2_gfx::texture::decode_menu_texture(msd.attach_data(i)?, 0).ok()?;
             Some(textures.add(images, img.width, img.height, img.pixels))
         };
-        let (frame, arrow, flare) = (tex(8), tex(2), tex(3));
-        Some(CmnArt { msd, frame, arrow, flare })
+        let (frame, arrow, flare, icons) = (tex(8), tex(2), tex(3), tex(6));
+        Some(CmnArt { msd, frame, arrow, flare, icons })
+    }
+
+    /// Round 6 MN3: the 16 x 20 icon of pad bit `bit` (8..15: L2 R2 L1 R1 triangle circle cross square) with its top left at `(x, y)`.
+    pub fn pad_icon(&self, g: &mut dyn MenuGfx, bit: u16, x: f32, y: f32, alpha: u8) {
+        let c = (bit.clamp(8, 15) - 8) as f32 * 16.0;
+        blit(g, self.icons, x, y, 16.0, 20.0, (c, 20.0, c + 16.0, 40.0), Rgba::new(0x80, 0x80, 0x80, alpha));
     }
 
     /// `MenuWindowGeneral`: `(x, y, w, h)` is the outer rectangle (see `sh2_field::cmd_common::general_frame`).

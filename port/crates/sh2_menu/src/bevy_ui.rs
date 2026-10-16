@@ -149,6 +149,18 @@ impl MenuGfx for LayerGfx<'_> {
         let w: f32 = s.chars().map(|c| if (c as u32) < 0x100 { px * 0.5 } else { px }).sum();
         (w, px)
     }
+    fn measure_run(&self, font_number: u8, text: &[u8], hscale: f32, shadow: Option<(u8, u8)>) -> f32 {
+        if let Some(b) = &self.fonts {
+            let (slot, scale) = font_slot(b, font_number);
+            if let Some(f) = b.get(slot) {
+                let (prop, extra) = crate::gfx::run_layout(false, hscale, shadow);
+                let s = sjis::strip_codes(&sjis::decode(text));
+                let w = s.lines().map(|l| f.measure_layout(l, extra, prop)).fold(0.0f32, f32::max);
+                return w * scale * hscale;
+            }
+        }
+        self.measure_text(font_number, text).0 * hscale
+    }
     fn play_se(&mut self, se: MenuSe) {
         self.ses.push(se);
     }
@@ -444,11 +456,11 @@ pub fn render_canvas(
         });
         let empty = Vec::new();
         let cmds = if alive { &canvas.layers[&id].cmds } else { &empty };
-        // field-font text (message windows, name plates) is drawn with the game's bitmap / hi-res font as textured quads; other text on
-        // these layers keeps the system font
+        // field-font text (message windows, name plates) and narrow `MenuText` runs (round 6 MN3: the Game Over `[x]: Skip`) are drawn
+        // with the game's bitmap / hi-res font as textured quads; other text on these layers keeps the system font
         let expanded;
         let cmds = match canvas.fonts.clone() {
-            Some(b) if cmds.iter().any(|c| matches!(c, DrawCmd::Text(t) if t.font_number == FIELD_FONT)) => {
+            Some(b) if cmds.iter().any(|c| matches!(c, DrawCmd::Text(t) if t.font_number == FIELD_FONT || t.hscale < 1.0)) => {
                 let ppu = windows.iter().next().map(|w| w.physical_height() as f32 / VIRT_H).unwrap_or(1.0);
                 expanded = expand_text(cmds.clone(), &b, &mut sprite_pools, &mut textures, &mut images, false, ppu, Some(FIELD_FONT));
                 &expanded
@@ -475,6 +487,17 @@ pub fn render_canvas(
                             Some(handle) => {
                                 bg.set_if_neq(BackgroundColor(Color::NONE));
                                 let color = col(c, 1.0);
+                                // round 6 MN3: a sub-rectangle of the texture (sprite sheets: the pad icons); UVs are texels (sprite
+                                // convention) or 0..1 (the full-screen pictures), the whole image when they cover it
+                                let rect = tex.and_then(|t| textures.size(t)).and_then(|(tw, th)| {
+                                    let (u0, u1) = (v.iter().map(|p| p.uv.x).fold(f32::MAX, f32::min), v.iter().map(|p| p.uv.x).fold(f32::MIN, f32::max));
+                                    let (v0, v1) = (v.iter().map(|p| p.uv.y).fold(f32::MAX, f32::min), v.iter().map(|p| p.uv.y).fold(f32::MIN, f32::max));
+                                    let norm = u1 <= 1.0 && v1 <= 1.0;
+                                    let (sx, sy) = if norm { (tw as f32, th as f32) } else { (1.0, 1.0) };
+                                    let r = Rect::new(u0 * sx, v0 * sy, u1 * sx, v1 * sy);
+                                    let full = r.min.x <= 0.0 && r.min.y <= 0.0 && r.max.x >= tw as f32 - 0.5 && r.max.y >= th as f32 - 0.5;
+                                    (!full && r.width() > 0.0 && r.height() > 0.0).then_some(r)
+                                });
                                 match img {
                                     Some(mut im) => {
                                         if im.image != *handle {
@@ -483,9 +506,12 @@ pub fn render_canvas(
                                         if im.color != color {
                                             im.color = color;
                                         }
+                                        if im.rect != rect {
+                                            im.rect = rect;
+                                        }
                                     }
                                     None => {
-                                        commands.entity(e).insert(ImageNode { image: handle.clone(), color, ..default() });
+                                        commands.entity(e).insert(ImageNode { image: handle.clone(), color, rect, ..default() });
                                     }
                                 }
                             }
@@ -720,7 +746,7 @@ fn expand_text(cmds: Vec<DrawCmd>, bank: &FontBank, pools: &mut SpritePools, tex
             out.push(cmd);
             continue;
         };
-        if only.is_some_and(|n| n != t.font_number) {
+        if only.is_some_and(|n| n != t.font_number && t.hscale >= 1.0) {
             out.push(DrawCmd::Text(t));
             continue;
         }
@@ -741,8 +767,9 @@ fn expand_text(cmds: Vec<DrawCmd>, bank: &FontBank, pools: &mut SpritePools, tex
             // round 6 MN3: retail `FontDraw::Order` adds the item's shadow x to the pen of every glyph (hires_fonts.md); fitted on live
             // captures of narrow menu text (Graveyard notes line 418 vs 397 px, `SE.  0/ 40` 85 vs 75 px: `(width + 1) * 0.8`).  Only the
             // narrow (`MenuText` flag bit 3) runs take it, the wide HUD / field runs keep their measured layouts.
-            let spacing = t.spacing as i32 + if t.hscale < 1.0 { t.shadow.map(|s| s.0 as i32).unwrap_or(0) } else { 0 };
-            let key = (line.to_string(), slot, t.clut_set, spacing.clamp(-128, 127) as i8, k as u8 | (t.proportional as u8) << 7);
+            let (prop, extra) = crate::gfx::run_layout(t.proportional, t.hscale, t.shadow);
+            let spacing = t.spacing as i32 + extra;
+            let key = (line.to_string(), slot, t.clut_set, spacing.clamp(-128, 127) as i8, k as u8 | (prop as u8) << 7);
             let frame = pools.frame;
             let entry = match pools.text.get_mut(&key) {
                 Some(e) => {
@@ -750,7 +777,7 @@ fn expand_text(cmds: Vec<DrawCmd>, bank: &FontBank, pools: &mut SpritePools, tex
                     (e.0, e.1, e.2)
                 }
                 None => {
-                    let Some(img) = crate::hifont::render_scaled_layout(font, line, t.clut_set as usize, spacing, k, t.proportional) else { continue };
+                    let Some(img) = crate::hifont::render_scaled_layout(font, line, t.clut_set as usize, spacing, k, prop) else { continue };
                     // the bitmap fallback comes back at 1x
                     let f = (img.height / font.cell_h.max(1) as u32).max(1);
                     let (lw, lh) = (img.width / f, img.height / f);
@@ -1040,6 +1067,15 @@ impl Plugin for BevyUiPlugin {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn narrow_shadowed_runs_use_the_retail_pen() {
+        use crate::gfx::run_layout;
+        assert_eq!(run_layout(false, 0.8, Some((1, 1))), (true, 1), "MenuText: proportional + shadow x");
+        assert_eq!(run_layout(false, 0.8, None), (false, 0));
+        assert_eq!(run_layout(false, 1.0, Some((1, 1))), (false, 0), "wide runs keep their layout");
+        assert_eq!(run_layout(true, 1.0, Some((0, 1))), (true, 0), "field windows");
+    }
 
     #[test]
     fn transparent_texels_take_their_neighbours_colour() {

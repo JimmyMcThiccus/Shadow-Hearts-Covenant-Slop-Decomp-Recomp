@@ -77,7 +77,7 @@ pub fn draw_pc_card(g: &mut dyn MenuGfx, sc: &CmdScenes, card: &SceneTex, face: 
     let (nx, ny, nhs) = at(4);
     text_run_h(g, x + nx, y + ny, &v.name, 0, white(a), Some((1, 0)), nhs);
     if arrows {
-        let (tw, _) = g.measure_text(0, &sh2_menu::sjis::encode(&v.name));
+        let tw = run_width(g, 0, &v.name, nhs, Some((1, 0))) / nhs.max(0.01);
         if let Some(t) = sc.cmn.s.t(4) {
             blit(g, Some(t), x + nx - 26.0, y + ny, 24.0, 22.0, (0.0, 2.0 * 22.0, 24.0, 3.0 * 22.0), white(a));
             blit(g, Some(t), x + nx + tw * nhs + 2.0, y + ny, 24.0, 22.0, (0.0, 3.0 * 22.0, 24.0, 4.0 * 22.0), white(a));

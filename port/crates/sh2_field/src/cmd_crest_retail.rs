@@ -800,8 +800,8 @@ impl RetailCrestPage {
             if let (Some(t), Some(b)) = (f.msd.menu_text(0), f.msd.resource_bytes(0)) {
                 let hs = TextRun::hscale_of(t.flags);
                 let label = sj(b);
-                let (tw, _) = g.measure_text(0, &sh2_menu::sjis::encode(&label));
-                text_run_h(g, bx + (bw - tw * hs) * 0.5, by + t.y - 1.0, &label, 0, white(a), Some((1, 1)), hs);
+                let tw = run_width(g, 0, &label, hs, Some((1, 1)));
+                text_run_h(g, bx + (bw - tw) * 0.5, by + t.y - 1.0, &label, 0, white(a), Some((1, 1)), hs);
             }
         }
         let hs = s.msd.menu_text(0).map(|t| TextRun::hscale_of(t.flags)).unwrap_or(1.0);

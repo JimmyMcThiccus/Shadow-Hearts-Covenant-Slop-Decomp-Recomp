@@ -595,8 +595,9 @@ impl RetailRingPage {
             let c = if active && i == self.sel { rgb(CYAN, a) } else { white(a) };
             let label = self.scene.msd.text(5 + i).map(sj).unwrap_or_default();
             let pts = if i % 2 == 1 { self.st.strike[i / 2] } else { self.st.zone[i / 2] };
-            text_run_h(g, x, yy - 1.0, &label, 0, c, None, 0.8);
-            text_run_h(g, x + vx, yy - 1.0, &cfmt("%2d", &[(pts as i32).into()]), 0, c, None, 0.8);
+            text_run_h(g, x, yy - 1.0, &label, 0, c, Some((1, 1)), 0.8);
+            // round 6 MN3: three columns (live `rc_main_a`: the digit's right edge at x 237, one space further than `%2d`)
+            text_run_h(g, x + vx, yy - 1.0, &cfmt("%3d", &[(pts as i32).into()]), 0, c, Some((1, 1)), 0.8);
             if active && i == self.sel {
                 // the `>` / `<` marks of an editable value (common attach 4)
                 if let Some(t) = self.sc.cmn.s.t(4) {
@@ -615,9 +616,9 @@ impl RetailRingPage {
         let text = if self.st.item >= 0 { self.item_names.get(self.st.item as usize).cloned().unwrap_or_default() } else { self.scene.msd.text(22).map(sj).unwrap_or_default() };
         if self.st.item >= 0 {
             ring_icon(g, &self.sc, x - 6.0, y - 1.0, a);
-            text_run_h(g, x + 10.0, y - 1.0, &text, 0, white(a), None, 0.8);
+            text_run_h(g, x + 10.0, y - 1.0, &text, 0, white(a), Some((1, 1)), 0.8);
         } else {
-            text_run_h(g, x - 4.0, y - 1.0, &text, 0, white(a), None, 0.8);
+            text_run_h(g, x - 4.0, y - 1.0, &text, 0, white(a), Some((1, 1)), 0.8);
         }
     }
 
@@ -628,7 +629,7 @@ impl RetailRingPage {
         for (k, &h) in self.count_rows().iter().enumerate() {
             let cur = if active { k == self.sel } else { h == self.st.hits };
             let c = if cur { rgb(CYAN, a) } else { white(a) };
-            text_run_h(g, x, y + k as f32 * ROW_H - 1.0, &self.scene.msd.text(14 + h as usize).map(sj).unwrap_or_default(), 0, c, None, 0.8);
+            text_run_h(g, x, y + k as f32 * ROW_H - 1.0, &self.scene.msd.text(14 + h as usize).map(sj).unwrap_or_default(), 0, c, Some((1, 1)), 0.8);
         }
     }
 
@@ -639,7 +640,7 @@ impl RetailRingPage {
         for (k, t) in self.types.iter().take(4).enumerate() {
             let cur = if active { k == self.sel } else { k == self.st.ring_type as usize };
             let c = if cur { rgb(CYAN, a) } else { white(a) };
-            text_run_h(g, x, y + k as f32 * ROW_H - 1.0, &t.0, 0, c, None, 0.8);
+            text_run_h(g, x, y + k as f32 * ROW_H - 1.0, &t.0, 0, c, Some((1, 1)), 0.8);
         }
     }
 
@@ -658,10 +659,11 @@ impl RetailRingPage {
             let (tx, ty) = self.scene.msd.menu_text(rec).map(|t| (t.x, t.y)).unwrap_or((22.0 + 60.0 * k as f32, 4.0));
             let cur = if active { k == self.sel } else { (k == 0) == self.st.auto };
             let c = if cur { rgb(CYAN, a) } else { white(a) };
-            text_run_h(g, x + tx, y + ty - 1.0, &self.scene.msd.text(20 + k).map(sj).unwrap_or_default(), 0, c, None, 0.8);
+            text_run_h(g, x + tx, y + ty - 1.0, &self.scene.msd.text(20 + k).map(sj).unwrap_or_default(), 0, c, Some((1, 1)), 0.8);
         }
     }
 
+    /// (round 6 MN3: the rows carry the records' 1 px shadow like live `rc_main_a`, which also widens them by the shadow-x pen step)
     /// The `Ring Items / Held` fence (attach 6) at `at` with icon, name and `%3d` held per row; `sel` = the picked row (cyan).
     fn draw_items(&self, g: &mut dyn MenuGfx, at: (f32, f32), rows: &[ItemRow], sel: Option<usize>, a: u8) {
         if let Some(f) = &self.f_items {
@@ -676,11 +678,11 @@ impl RetailRingPage {
             if r.slot != usize::MAX {
                 ring_icon(g, &self.sc, x, yy - 1.0, a);
             }
-            text_run_h(g, x + 16.0, yy - 1.0, &r.name, 0, c, None, 0.8);
+            text_run_h(g, x + 16.0, yy - 1.0, &r.name, 0, c, Some((1, 1)), 0.8);
             if r.held >= 0 {
                 let v = cfmt("%3d", &[r.held.into()]);
-                let w = g.measure_text(0, &sh2_menu::sjis::encode(&v)).0 * 0.8;
-                text_run_h(g, x + 194.0 - w, yy - 1.0, &v, 0, c, None, 0.8);
+                let w = run_width(g, 0, &v, 0.8, Some((1, 1)));
+                text_run_h(g, x + 194.0 - w, yy - 1.0, &v, 0, c, Some((1, 1)), 0.8);
             }
         }
     }

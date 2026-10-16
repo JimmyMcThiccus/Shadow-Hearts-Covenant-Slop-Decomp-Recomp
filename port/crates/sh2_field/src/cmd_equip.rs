@@ -1266,7 +1266,7 @@ impl EquipPage {
         let name = &self.v.name;
         text_run_h(g, x + nx, y + ny, name, 0, white(a), Some((1, 0)), nhs);
         if matches!(r.mode, RMode::Menu | RMode::Slots) && self.pcs.len() > 1 {
-            let (tw, _) = g.measure_text(0, &sh2_menu::sjis::encode(name));
+            let tw = run_width(g, 0, name, nhs, Some((1, 0))) / nhs.max(0.01);
             if let Some(t) = self.sc.cmn.s.t(4) {
                 let c = white(a);
                 blit(g, Some(t), x + nx - 26.0, y + ny, 24.0, 22.0, (0.0, 2.0 * 22.0, 24.0, 3.0 * 22.0), c);

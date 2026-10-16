@@ -135,7 +135,26 @@ pub trait MenuGfx {
     fn measure_text(&self, _font_number: u8, text: &[u8]) -> (f32, f32) {
         (text.len() as f32 * 8.0, 16.0)
     }
+    /// Round 6 MN3: displayed width of a one-line run as the backend lays it out ([`run_layout`]: narrow runs are proportional and step
+    /// the shadow x per glyph), times `hscale`.  The default is the plain [`measure_text`](Self::measure_text) width.
+    fn measure_run(&self, font_number: u8, text: &[u8], hscale: f32, shadow: Option<(u8, u8)>) -> f32 {
+        let _ = shadow;
+        self.measure_text(font_number, text).0 * hscale
+    }
     fn play_se(&mut self, _se: MenuSe) {}
+}
+
+/// Round 6 MN3: the layout retail `FontDraw::Order` gives a run: `(proportional, extra pen per glyph)`.  Every retail `MenuText` is
+/// proportional and adds its shadow x to the pen; the port applies that to the narrow (`MenuText` flag bit 3) runs with an x shadow and
+/// to the field windows (`proportional` set).  Narrow runs drawn without a shadow and the wide HUD / port-made runs keep the `xo + width`
+/// cell layout (for the menu gothic it is within ~0.4 px per glyph of `prop + 1`, and many of those runs omit a shadow retail draws).
+/// Fitted on live captures: Graveyard notes 422 px (prop + 1: 425, `xo + width`: 404), Ring Custom notes 236 (prop + 1: 239).
+pub fn run_layout(proportional: bool, hscale: f32, shadow: Option<(u8, u8)>) -> (bool, i32) {
+    let sx = shadow.map(|s| s.0 as i32).unwrap_or(0);
+    if hscale < 1.0 && sx > 0 {
+        return (true, sx);
+    }
+    (proportional, 0)
 }
 
 /// Test / headless backend: records commands.

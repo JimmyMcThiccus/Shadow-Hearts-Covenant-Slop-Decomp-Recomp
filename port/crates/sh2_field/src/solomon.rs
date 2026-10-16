@@ -28,7 +28,7 @@ use sh2_menu::gfx::{Blend, DrawCmd, MenuGfx, MenuSe, Rgba, TextureId};
 use sh2_menu::save::BtlSave;
 
 use crate::cmd_page::Env;
-use crate::cmd_ui::{blit, fill, text_right, text_run, vtx};
+use crate::cmd_ui::{blit, fill, text_right, text_run, text_run_h, vtx};
 use crate::fscreen::{coded_text, window, wrap_text, FieldScreen, ScreenFlow, ScreenIo, DT_MS};
 use crate::overlay_data::OverlayImage;
 
@@ -1013,7 +1013,8 @@ impl SolomonScreen {
                 fill(g, 306.0, y - 2.0, 178.0, 24.0, Rgba::new(0x50, 0x70, 0xc0, 0x50));
             }
             let dis = i == 2 && self.board.resettable(&self.d).is_empty();
-            text_run(g, 318.0, y, s, 0, if dis { Rgba::new(0x50, 0x50, 0x50, 0x80) } else { Rgba::new(0x80, 0x80, 0x80, 0x80) }, Some((1, 1)));
+            // round 6 MN3: narrow like a retail `MenuText` ("Solomon's Decipher Text" overflowed the 190 px window at full width)
+            text_run_h(g, 318.0, y, s, 0, if dis { Rgba::new(0x50, 0x50, 0x50, 0x80) } else { Rgba::new(0x80, 0x80, 0x80, 0x80) }, Some((1, 1)), sh2_menu::gfx::NARROW);
         }
         window(g, 8.0, 420.0, 496.0, 22.0, 1.0);
         text_run(g, 16.0, 422.0, self.d.text.menu_note.get(self.menu_sel).map(|s| s.as_str()).unwrap_or(""), 14, Rgba::new(0x80, 0x80, 0x80, 0x80), Some((1, 1)));

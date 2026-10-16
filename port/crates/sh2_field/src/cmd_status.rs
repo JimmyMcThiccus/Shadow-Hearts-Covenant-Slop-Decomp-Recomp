@@ -912,7 +912,7 @@ impl StatusPage {
             text_run_h(g, nx, ny, &self.v.name, 0, white(a), Some((1, 0)), hs);
             if self.pcs.len() > 1 {
                 if let Some(tex) = self.sc.cmn.s.t(4) {
-                    let tw = g.measure_text(0, &sh2_menu::sjis::encode(&self.v.name)).0 * hs;
+                    let tw = run_width(g, 0, &self.v.name, hs, Some((1, 0)));
                     blit(g, Some(tex), nx - 24.0, ny, 24.0, 22.0, (0.0, 2.0 * 22.0, 24.0, 3.0 * 22.0), white(a));
                     blit(g, Some(tex), nx + tw + 2.0, ny, 24.0, 22.0, (0.0, 3.0 * 22.0, 24.0, 4.0 * 22.0), white(a));
                 }

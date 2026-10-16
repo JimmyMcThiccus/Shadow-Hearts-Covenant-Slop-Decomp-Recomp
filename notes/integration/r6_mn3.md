@@ -7,6 +7,7 @@
 | 1. combo switch bit | **fixed** (both sides) | see "Combo switch" below: bit 0 = the battle's `Combo` command, bit 1 = the shortcut switch, copied from `MENU+0x276` at each battle start |
 | 2. shortcut setting overlay (mode 0x18) | **done** | `sh2_battle/src/shortcut.rs` (`setting_row`, `SettingMenu`, `write_row`, `draw_setting`) + `plugin.rs` `run_shortcut_setting` hook; shots `screens/r6_mn3/shortcut_setting.png`, `shortcut_set.png` |
 | 3. title Options / Theater hi-res | **checked + fixed** | text crisp at 1440x1080; Theater hints rebuilt as retail (3 lines + pad icons), title texts proportional + 0.8 narrow, Options cursor stuck on Vibration fixed, Sound box 6 px lower |
+| 5. third pass (measure / weight / Game Over) | **done** | see "Third pass"; shops / Solomon / tailor not compared live (no capture reachable) |
 | 4. MN2 open items (second pass) | **Graveyard / Combo Magic / Library checked against live, fixed** | see "Task 4" below; Library data view and the soul charge 3D still not compared live |
 
 `cargo check --workspace --all-targets` clean; `cargo test -p sh2_menu -p sh2_battle` green (262 + 88 + 4), `cargo test -p sh2_field --lib cmd_` green.
@@ -83,6 +84,30 @@ snapped, combo 0 seen) and `goto:grave / combomagic / library`; before / after i
 * Still different: the lavender `GRADE.` / `No.` / `Monsters` labels are thinner in the hi-res face than the live bitmap (colour equal),
   the Library report's first line has a `:` after the START icon (live none), Library data view not compared (no live capture with Snap
   Shot data).
+
+## Third pass (2026-10-16): measure_text, label weight, shops / Game Over
+
+* **Narrow text layout corrected.**  Measuring both live notes lines again showed the task-4 rule (`xo + width` plus the shadow x) ~5 %
+  too wide; retail is **proportional** plus the shadow x (Graveyard notes 422 px live: prop + 1 425, Ring Custom 236: 239).  New
+  `sh2_menu::gfx::run_layout(proportional, hscale, shadow)`: a narrow run with an x shadow is proportional and steps the shadow x per
+  glyph; everything else keeps its old layout (narrow runs drawn without a shadow stay `xo + width`, which is close to prop + 1 for the
+  menu gothic and protects screens whose runs omit a shadow retail draws).  Now within 1 px of live on three notes lines.
+* **`measure_text` for narrow text**: new `MenuGfx::measure_run(font, text, hscale, shadow)` (the sprite-layer backend measures with
+  `run_layout`), `cmd_ui::run_width`; the centred / arrow-placed narrow runs (crest / item / magic / plist headers, item / magic names, the
+  Graveyard question and Combo Setup heads, the name arrows of the cards) use it.  Right-aligned check against live `rc_main_a`: the Ring
+  Items `Held` digits and the Area `Equip` values (now `%3d` with the records' shadow) sit within 2-3 px of live; the Ring Custom rows
+  carry the 1 px shadow live shows (`cmp_ring_area_before/after.png`).
+* **Lavender labels** (`GRADE.`, `No.`, `Monsters`: the outlined command font `CMDMENU.MSD` #1): the fit's lightest-within-2 % rule gave
+  84 % of the bitmap's body ink (`examples/mn3_weight.rs`); for outlined fonts the growth whose ink area matches the bitmap now wins among
+  those within 50 % of the best score (grow 0 -> 0.8, ink 1.03); fonts 0 / 1 unchanged (0.95, same fits).  `SH2_HIFONT_DEBUG=1` prints the
+  table.  Still different: the outline face is narrower than the blocky bitmap letters; the colour matches.
+* **Game Over** (live `battle_live/07a_game_over.png` shows GO_002; port shot with `SH2_BATTLE_MENU=29c:0200`): the picture matches; the
+  `[x]: Skip` prompt is now the confirm button's icon from the common sheet and a narrow gothic run (was an "x" glyph in the system font).
+  For that the low canvas layers expand narrow runs with the game font too and honour quad UV sub-rectangles (`ImageNode::rect`).
+* **Shops / Solomon / tailor**: no live capture exists and the user's PCSX2 sits in AP_02_U (no shop; warping would move the user's game),
+  so they were only re-shot at 1440 x 1080 (`t5_shop_buy_1440.png`, `t5_tailor_1440.png`); fixed the Solomon menu's "Solomon's Decipher
+  Text" overflowing its window (narrow like a `MenuText`).  A live check needs a state at a shop / Solomon / tailor (coordinator).
+* **Zodiac tile names**: no FS2 request in requests.md yet.
 
 ## Open (priority order)
 

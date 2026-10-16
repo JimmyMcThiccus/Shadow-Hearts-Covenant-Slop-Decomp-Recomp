@@ -279,6 +279,18 @@ fn glyph_error(face: &Face, c: char, lv: &[u8], adv: usize, cell_h: usize, grow:
     Some(err / (bw * bh) as f32)
 }
 
+/// Round 6 MN3: ink area of `c` drawn with `face` (grown by `grow`) over the game glyph's body area (`lv` levels / 3).
+fn glyph_area(face: &Face, c: char, lv: &[u8], adv: usize, cell_h: usize, grow: f32) -> Option<(f32, f32)> {
+    const SS: usize = 2;
+    let (x0, y0, x1, y1) = ink_box(lv, adv, cell_h)?;
+    let (bw, bh) = (x1 - x0, y1 - y0);
+    let s = shape(face, c)?;
+    let cov = raster(&s, bw * SS, bh * SS, grow * SS as f32);
+    let drawn = cov.iter().sum::<f32>() / (SS * SS) as f32;
+    let game = lv.iter().map(|&l| l as f32 / 3.0).sum::<f32>();
+    Some((drawn, game))
+}
+
 fn compute_fit(font: &GameFont, faces: &[Face]) -> Option<Fit> {
     let outline = is_outline(&font.palette(0));
     let glyphs: Vec<(char, usize, Vec<u8>)> = FIT_CHARS.chars().filter_map(|c| font.glyph_levels(c).map(|(_, adv, lv)| (c, adv, body(&lv, outline)))).collect();
@@ -297,7 +309,27 @@ fn compute_fit(font: &GameFont, faces: &[Face]) -> Option<Fit> {
         }
         // the lightest weight within 2 % of this face's best: growth closes counters at high resolution sooner than the score shows
         let Some(min) = per_grow.iter().map(|g| g.1).reduce(f32::min) else { continue };
-        let Some(&(grow, e)) = per_grow.iter().find(|g| g.1 <= min * 1.02) else { continue };
+        let Some(&(mut grow, e)) = per_grow.iter().find(|g| g.1 <= min * 1.02) else { continue };
+        // round 6 MN3: the outlined command font (body = level 3 only, a rim drawn around it) came out ~22 % lighter than the bitmap with the
+        // lightest-within-2 % rule (live: the lavender `GRADE.` / `No.` / `Monsters` labels were thin); for it the growth that matches the
+        // body's ink area wins, among the growths within 50 % of the best score: the score fits the grown outline into the bitmap's ink box,
+        // so it always prefers the thinnest stroke (BIZ UDGothic: grow 0 = 0.84 of the bitmap's ink, error 0.165; 0.8 = 0.96, error 0.233).
+        // `SH2_HIFONT_DEBUG=1` prints the table; `examples/mn3_weight.rs` the rendered ratio per font.
+        if outline {
+            let area = |g: f32| -> f32 {
+                let (d, t) = glyphs.iter().filter_map(|(c, adv, lv)| glyph_area(face, *c, lv, *adv, font.cell_h, g)).fold((0.0, 0.0), |a, b| (a.0 + b.0, a.1 + b.1));
+                if t > 0.0 { d / t } else { 1.0 }
+            };
+            if std::env::var_os("SH2_HIFONT_DEBUG").is_some() {
+                for g in &per_grow {
+                    eprintln!("hifont outline fit: face {fi} grow {:.2} error {:.4} area {:.3}", g.0, g.1, area(g.0));
+                }
+            }
+            // (the face's acceptance keeps its best score: the area match is a weight correction, not a worse fit)
+            if let Some(&(g2, _)) = per_grow.iter().filter(|g| g.1 <= min * 1.5).min_by(|a, b| (area(a.0) - 1.0).abs().total_cmp(&(area(b.0) - 1.0).abs())) {
+                grow = g2;
+            }
+        }
         if best.as_ref().is_none_or(|b| min < b.error) {
             best = Some(Fit { face: fi, grow, error: e, alts: Vec::new(), outline });
         }

@@ -857,9 +857,26 @@ fn gameover_tick(
                 bevy_ui::text(&mut g, 150.0, 190.0, "GAME OVER", 3, Rgba::new(0x80, 0x20, 0x20, a), true);
             }
             // retail: the `[x]: Skip` prompt at the bottom right (live 07a: icon x 386..393, text x 398..442, y 396..413)
+            // round 6 MN3: the confirm button's icon of the common sheet (US default: cross) and a narrow `MenuText` (was an "x" glyph and
+            // the wide layout)
             if sh2_core::boot::is_retail() && rt.window_open >= 1.0 && !rt.closing {
-                bevy_ui::text(&mut g, 384.0, 397.0, "x", 0, Rgba::new(0x30, 0x60, 0x80, 0x80), true);
-                bevy_ui::text(&mut g, 398.0, 396.0, ": Skip", 0, Rgba::new(0x80, 0x80, 0x80, 0x80), true);
+                match cmn.1.as_ref() {
+                    Some(art) => art.pad_icon(&mut g, sh2_core::game::default_buttons()[1], 381.0, 394.0, 0x80),
+                    None => bevy_ui::text(&mut g, 384.0, 397.0, "x", 0, Rgba::new(0x30, 0x60, 0x80, 0x80), true),
+                }
+                g.draw(DrawCmd::Text(crate::gfx::TextRun {
+                    pos: glam::Vec2::new(398.0, 396.0),
+                    text: crate::sjis::encode(": Skip"),
+                    font_number: 0,
+                    clut_set: 0,
+                    spacing: 0,
+                    color: Rgba::new(0x80, 0x80, 0x80, 0x80),
+                    shadow: Some((1, 1)),
+                    glyph_alpha: Vec::new(),
+                    visible: usize::MAX,
+                    hscale: crate::gfx::NARROW,
+                    proportional: false,
+                }));
             }
         } else {
             // `GAMEOVER.MSD`: window 1 (161, 130) 190 x 70 = `MenuWindowGeneral`; texts "Load data?" (27, 0), "Yes" (65, 25), "No" (65, 46) relative to it; the common cursor

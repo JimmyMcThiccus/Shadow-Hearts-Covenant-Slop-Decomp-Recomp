@@ -307,6 +307,12 @@ pub fn text_rec(g: &mut dyn MenuGfx, x: f32, y: f32, s: &str, r: &sh2_menu::msd:
     }));
 }
 
+/// Round 6 MN3: displayed width of a text run as `bevy_ui::expand_text` lays it out (`sh2_menu::gfx::run_layout`: narrow runs are
+/// proportional and step the shadow x per glyph, like retail `FontDraw::Order`), times `hscale`.  Use it to centre / right-align narrow text.
+pub fn run_width(g: &dyn MenuGfx, font: u8, s: &str, hscale: f32, shadow: Option<(u8, u8)>) -> f32 {
+    g.measure_run(font, &sjis::encode(s), hscale, shadow)
+}
+
 /// Right aligned text: the right edge at `x_right` (16 px menu font metrics).
 pub fn text_right(g: &mut dyn MenuGfx, x_right: f32, y: f32, s: &str, font: u8, c: Rgba, shadow: Option<(u8, u8)>) {
     let (w, _) = g.measure_text(font, &sjis::encode(s));

@@ -279,8 +279,8 @@ impl Page for GraveyardPage {
             let q = self.blocked.as_deref().unwrap_or(&self.question);
             let hs = 0.8;
             let qx = m.message(0).map(|r| r.common.x).unwrap_or(150.0);
-            let (tw, _) = g.measure_text(0, &sh2_menu::sjis::encode(q));
-            text_run_h(g, x + qx - tw * hs * 0.5, y, q, 0, white(a), Some((1, 1)), hs);
+            let tw = run_width(g, 0, q, hs, Some((1, 1)));
+            text_run_h(g, x + qx - tw * 0.5, y, q, 0, white(a), Some((1, 1)), hs);
             if self.blocked.is_none() {
                 for (i, s) in [&self.yes, &self.no].into_iter().enumerate() {
                     let t = m.menu_text(i);
@@ -1250,8 +1250,8 @@ impl ComboKeyPage {
             }
             if let Some(t) = m.menu_text(0) {
                 let head = m.resource_bytes(1).map(sj).unwrap_or_default();
-                let (tw, _) = g.measure_text(0, &sh2_menu::sjis::encode(&head));
-                text_run_h(g, fx + 72.0 - tw * 0.4, fy + t.y - 1.0, &head, 0, white(a), Some((1, 1)), 0.8);
+                let tw = run_width(g, 0, &head, 0.8, Some((1, 1)));
+                text_run_h(g, fx + 72.0 - tw * 0.5, fy + t.y - 1.0, &head, 0, white(a), Some((1, 1)), 0.8);
             }
         }
         match self.mode {
