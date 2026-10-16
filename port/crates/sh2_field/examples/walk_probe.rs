@@ -69,8 +69,15 @@ fn main() {
         let b1 = bytes(&g);
         let changed: Vec<String> = (0..b1.len()).filter(|&i| b0.get(i) != b1.get(i)).map(|i| format!("{i:#x}:{:#x}>{:#x}", b0.get(i).copied().unwrap_or(0), b1[i])).collect();
         if let Some(b) = g.rt.vm.branch_trace.take().filter(|_| branches) {
-            for l in b.iter().take(200) {
-                println!("    branch {l}");
+            // repeated decisions (wait loops) once, with a count
+            let mut i = 0;
+            while i < b.len() {
+                let mut n = 1;
+                while i + n < b.len() && b[i + n] == b[i] {
+                    n += 1;
+                }
+                println!("    branch {}{}", b[i], if n > 1 { format!(" (x{n})") } else { String::new() });
+                i += n;
             }
         }
         println!("{act} {:?}: {stop:?} | {} | regs {changed:?} | {}", pol.seen, texts.join(" // "), show(&b1));

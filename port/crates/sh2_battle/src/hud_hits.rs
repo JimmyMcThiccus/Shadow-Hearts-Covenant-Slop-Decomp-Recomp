@@ -1442,6 +1442,29 @@ pub fn party_event_texts(hits: &mut HitFx, ev: &crate::flow::PartyEvent, is_enem
             let s = crate::hud_result::message(text, id, &name(*chr));
             Some(if s.is_empty() { format!("{} {}", name(*chr), if *first { "has gone berserk!" } else { "is berserk!" }) } else { s })
         }
+        // round 6 BT: the berserk antics' messages (`SetBtlMessage` 0x7c / 0x7d after 0x7b "%s searched the ground.", 0x7e / 0x81, 0x7f)
+        P::BerserkAntic { chr, antic } => {
+            use crate::flow::Antic;
+            let (id, arg, fallback) = match antic {
+                Antic::Approach { .. } => return None,
+                Antic::Search { item: Some(_), name: item } => (0x7c, item.clone(), format!("You found \"{item}\"!")),
+                Antic::Search { item: None, .. } => (0x7d, String::new(), "But there was nothing there.".to_string()),
+                Antic::Talk { cornelia: true } => (0x7e, name(*chr), format!("{} is playing with Cornelia.", name(*chr))),
+                Antic::Talk { cornelia: false } => (0x81, name(*chr), format!("{} is showing off.", name(*chr))),
+                Antic::Pose => (0x7f, name(*chr), format!("{} lost consciousness!", name(*chr))),
+            };
+            let s = crate::hud_result::message(text, id, &arg);
+            let s = if s.is_empty() { fallback } else { s };
+            // the search first says "%s searched the ground." (0x7b)
+            Some(match antic {
+                Antic::Search { .. } => {
+                    let first = crate::hud_result::message(text, 0x7b, &name(*chr));
+                    let first = if first.is_empty() { format!("{} searched the ground.", name(*chr)) } else { first };
+                    format!("{first} {s}")
+                }
+                _ => s,
+            })
+        }
         P::Album { name: album, .. } => {
             let s = crate::hud_result::message(text, 0x7a, album);
             Some(if s.is_empty() { format!("You got the \"{album}\" Album!") } else { s })

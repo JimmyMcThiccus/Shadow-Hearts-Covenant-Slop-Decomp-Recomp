@@ -188,8 +188,8 @@ pub struct Policy {
     pub seen: Vec<usize>,
     /// result the field ring reports (`RingControl`), `None` = the host default (first area's colour)
     pub ring: Option<i32>,
-    /// buttons pressed one by one (every 20 ticks) while no message / selection window is open -- a pad-driven gimmick inside an event
-    /// (the Vessel's altar ring: left / right, then circle); the scripted presses replace the default circle presses until used up
+    /// buttons pressed one by one (every 20 ticks, `0` = a pause) while the script itself polls the pad (`get_pad`) -- a pad-driven
+    /// gimmick inside an event (the Vessel's altar ring: left / right, then circle); they replace the default circle presses then
     pub pads: Vec<u16>,
 }
 
@@ -227,7 +227,8 @@ pub struct Game {
     quiet: u32,
     last_calls: u64,
     /// last window text printed (`SH2_WALK_TEXT=MAP`)
-    last_txt: String,
+    last_txt: String,    /// `CScript::pad_reads` at the last tick (scripted pads, `Policy::pads`)
+    pad_reads: u64,
 }
 
 /// Button minigames the walker plays like a player who reads the screen.  TD_14_U (Todo lab shooting range, "destroy the 30 targets"):
@@ -334,7 +335,7 @@ impl Game {
         let prev = std::mem::replace(&mut session.map, map.to_string());
         let mut rt = crate::plugin::build_runtime_carry(&env.pkb, None, Some(env.tables.clone()), map, entry, &session, carry)?;
         rt.st.prev_map = if prev != map { prev } else { session.chr_pos.as_ref().map(|_| String::new()).unwrap_or_default() };
-        Some(Game { rt, session: GameSessionBox(session), battle: env.battle.clone(), party_log: vec![], idle_root: 0, no_ctrl: 0, pad: 0, quiet: 0, last_calls: 0, last_txt: String::new() })
+        Some(Game { rt, session: GameSessionBox(session), battle: env.battle.clone(), party_log: vec![], idle_root: 0, no_ctrl: 0, pad: 0, quiet: 0, last_calls: 0, last_txt: String::new(), pad_reads: 0 })
     }
 
     /// Resume a walk checkpoint ([`read_checkpoint`]): the resumed map has no models from the previous one, so the player (slot 0 = the
@@ -408,9 +409,17 @@ impl Game {
             press |= self.pad;
             self.pad = 0;
         }
-        // (a fully typed help window may stay up while the gimmick runs: the presses go on then)
-        if !policy.pads.is_empty() && (!rt.st.msg_active() || Self::msg_settled(&rt.st)) && !rt.st.ui.select.active {
-            press = if t % 20 == 0 { policy.pads.remove(0) } else { 0 };
+        // only while the script itself polls the pad (`get_pad` since the last tick), so that messages and prompts before the gimmick
+        // are answered as usual; one scripted press per 20 ticks, nothing in between
+        let polled = rt.vm.pad_reads != self.pad_reads;
+        self.pad_reads = rt.vm.pad_reads;
+        if !policy.pads.is_empty() && polled && !rt.st.ui.select.active {
+            // held for 8 ticks (the gimmick reads the raw pad once per animation step), then released until the next 20-tick slot
+            let p = policy.pads[0];
+            press = if t % 20 < 8 { p } else { 0 };
+            if t % 20 == 19 {
+                policy.pads.remove(0);
+            }
         }
         if let Some(b) = minigame_press(rt) {
             press = if t % 12 == 0 { b } else { 0 };
@@ -1678,7 +1687,7 @@ impl WalkerView {
     }
 }
 
-/// Button names of a plan step / `walk_probe --pads`: `L,R,U,D` (d-pad), `O` circle, `X` cross, `T` triangle, `S` square.
+/// Button names of a plan step / `walk_probe --pads`: `L,R,U,D` (d-pad), `O` circle, `X` cross, `T` triangle, `S` square, `W` no button.
 pub fn parse_pads(s: &str) -> Vec<u16> {
     s.split(',')
         .filter_map(|c| match c.trim() {
@@ -1690,6 +1699,8 @@ pub fn parse_pads(s: &str) -> Vec<u16> {
             "X" => Some(padbit::CROSS),
             "T" => Some(padbit::TRIANGLE),
             "S" => Some(padbit::SQUARE),
+            // a pause: 20 ticks without any press (an animation before the gimmick reads the pad again)
+            "W" => Some(0),
             _ => None,
         })
         .collect()

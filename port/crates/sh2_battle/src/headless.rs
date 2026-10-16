@@ -292,6 +292,10 @@ pub fn run_set(data: &BattleData, tables: &Arc<ActionTables>, disc: &PkbDisc, se
                 seen_ev += 1;
             }
         }
+        // a berserk Lucia draws a Tarot card by herself (the pick ring stops on its own after a second)
+        if b.phase == Phase::Tarot {
+            b.tarot_auto(25);
+        }
         if b.phase == Phase::TurnSelect {
             run.turns = b.events.iter().filter(|e| matches!(e, BattleEvent::TurnStart { .. })).count() as u32;
             if run.turns >= turn_cap {

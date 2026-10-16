@@ -1142,11 +1142,33 @@ fn start_engine_fx(rt: Option<ResMut<BattleRuntime>>, extra: Option<ResMut<crate
             continue;
         }
         let tag = if path.contains("UNION") { "union" } else { "bd" };
-        if extra.start(&disc, &path, tag, gen, tar).is_some() && tag == "bd" {
+        // `LastBossFunc` step 1 (JP 0x45f620): `UNION` gets the core (the actor) and then its living parts in the order 500, 501, 502 as the
+        // generator set, and the same list as the target set (`SetGenModel(n, +0x3c34)` / `SetTarModel(n, +0x3d24)`); the program spawns one
+        // thread per extra generator and waits for them
+        let units = if tag == "union" { union_units(&rt, gen) } else { vec![gen] };
+        let started = if units.len() > 1 { extra.start_sets(&disc, &path, tag, &units, &units) } else { extra.start(&disc, &path, tag, gen, tar) };
+        if started.is_some() && tag == "bd" {
             // the boss's death program is watched: the victory waits a little for it (retail phase 0x13 steps)
             rt.wait = rt.wait.max(2.5);
         }
     }
+}
+
+/// The `UNION` model set (`LastBossFunc`): the core, then the living enemy units of CHR 500, 501, 502 (retail also skips a part carrying
+/// status 0x47 with value bit 0x20, not modelled).
+fn union_units(rt: &BattleRuntime, core: usize) -> Vec<usize> {
+    let mut out = vec![core];
+    for chr in [500, 501, 502] {
+        let hit = (0..rt.battle.fighters.len()).find(|&k| {
+            k != core
+                && crate::flow::Host::chr_model(&rt.battle.host, k) == chr
+                // `removed` is not checked: the join (`after_ai_command`) takes the parts out of the turn order before the program starts,
+                // retail's `LastBossSpecial` runs only after `UNION` (step 2), and joined parts are still units of the set when they separate
+                && rt.battle.fighters[k].as_ref().is_some_and(|f| f.is_enemy && f.hp > 0)
+        });
+        out.extend(hit);
+    }
+    out
 }
 
 /// Run the effect clock (30 Hz) and collect its events.
@@ -1529,7 +1551,9 @@ pub fn battle_tick(
     if rt.ticks % 30 == 1 {
         let n = rt.battle.bag.len();
         let lost = rt.battle.stats.bag_lost.clone();
-        rt.battle.bag = (0..n).map(|i| session.save.btl.item_count(i).saturating_sub(lost.iter().filter(|&&x| x == i as i32).count() as u8)).collect();
+        let found = rt.battle.stats.bag_found.clone();
+        let count = |v: &Vec<i32>, i: usize| v.iter().filter(|&&x| x == i as i32).count() as u8;
+        rt.battle.bag = (0..n).map(|i| session.save.btl.item_count(i).saturating_add(count(&found, i)).min(99).saturating_sub(count(&lost, i))).collect();
     }
     if session.save.btl.is_retail() {
         for &k in &rt.battle.stats.albums {

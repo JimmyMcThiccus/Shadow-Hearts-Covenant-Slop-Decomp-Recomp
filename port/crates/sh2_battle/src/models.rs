@@ -879,6 +879,16 @@ pub fn drive_battle_models(
                     m.ch.walk_beside(pp, pr, &*asset);
                 }
             }
+            // round 6 BT: a berserk member runs up next to somebody (retail phase 0x0f, `FindAdjacentEffectPos`) and stays there
+            BattleEvent::Party(crate::flow::PartyEvent::BerserkAntic { chr, antic: crate::flow::Antic::Approach { target } }) => {
+                let others: Vec<(Vec3, f32)> = models.iter().filter(|(m, _, _)| m.chr != *chr && !m.ch.is_dead_act()).map(|(m, _, _)| (m.pos, m.radius)).collect();
+                let to = ent(st, *target).and_then(|pe| models.get(pe).ok().map(|x| (x.0.pos, x.0.radius)));
+                if let (Some((pp, pr)), Some(Ok((mut m, _, _)))) = (to, ent(st, *chr).map(|en| models.get_mut(en))) {
+                    let asset = m.asset.clone();
+                    m.ch.obstacles = others;
+                    m.ch.walk_beside(pp, pr, &*asset);
+                }
+            }
             BattleEvent::Defeat => {
                 for en in st.entities.iter().flatten() {
                     if let Ok((mut m, _, _)) = models.get_mut(*en) {

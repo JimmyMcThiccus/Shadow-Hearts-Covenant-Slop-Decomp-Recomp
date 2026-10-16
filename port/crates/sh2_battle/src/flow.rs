@@ -655,7 +655,27 @@ pub enum PartyEvent {
     BagStolen { by: usize, item: i32 },
     /// Snap Shot: `SetBtlMessage(0x7a)` "You got the "%s" Album!" (album `index` = Anastasia's `SKIL` group 4 record)
     Album { index: u8, name: String },
+    /// round 6 BT: a berserk party member's antic (retail phases 0x0f..0x12, `Retail_CBattle_Phase0F..12`, US 0x493450..0x4952d0); the turn
+    /// ends after it (`nCmdKind = 1`, turn push 3.0)
+    BerserkAntic { chr: usize, antic: Antic },
 }
+
+/// The berserk antics phases of the retail battle (US `CBattle::Polling` 0x0f..0x12).
+#[derive(Clone, Debug, PartialEq)]
+pub enum Antic {
+    /// 0x0f: run up next to `target` (`FindAdjacentEffectPos`) and stay there (Blanca)
+    Approach { target: usize },
+    /// 0x10: `SetBtlMessage(0x7b)` "%s searched the ground." then 50 %: `item` found (0x7c "You found "%s"!", bag + 1, at most 99) or nothing
+    /// (0x7d "But there was nothing there.") (Anastasia)
+    Search { item: Option<i32>, name: String },
+    /// 0x11: `SetBtlMessage(0x7e)` "%s is playing with Cornelia." (Gepetto) / 0x81 "%s is showing off." (Joachim)
+    Talk { cornelia: bool },
+    /// 0x12: falls down (`bState 0x26`, `0x7000_0005`) with `SetBtlMessage(0x7f)` "%s lost consciousness!" (Karin)
+    Pose,
+}
+
+/// `Retail_CBattle_Phase10_BerserkFindItem` (US 0x493ed0): the weights of items 0..40 the search can turn up (BATTLE.BIN 0x6e2e80).
+pub const BERSERK_FIND_WEIGHTS: [u8; 41] = [100, 50, 25, 13, 80, 40, 20, 10, 64, 32, 16, 8, 40, 20, 10, 20, 10, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10, 1, 1, 1, 0, 0, 10, 1, 1, 1, 0, 0, 0, 0, 0];
 
 pub struct Battle<H: Host> {
     pub phase: Phase,
@@ -766,6 +786,8 @@ pub struct BattleStats {
     pub albums: Vec<u8>,
     /// round 6 BT: items monsters stole out of the party's bag (taken off the save's bag at the end)
     pub bag_lost: Vec<i32>,
+    /// round 6 BT: items a berserk member found on the ground ([`Antic::Search`]; added to the save's bag at the end, at most 99)
+    pub bag_found: Vec<i32>,
 }
 
 
@@ -1629,7 +1651,7 @@ impl<H: Host> Battle<H> {
         let ext = self.ext.get(i).cloned().unwrap_or_default();
         let sealed = rules::status_of(&me.status) & rules::status_bits::SEAL != 0;
         let last = ext.berserk_last;
-        let set_last = |b: &mut Self, v: u8| {
+        let set_last = |b: &mut Self, v: u16| {
             if let Some(e) = b.ext.get_mut(i) {
                 e.berserk_last = v;
             }
@@ -1648,45 +1670,140 @@ impl<H: Host> Battle<H> {
                 return MenuEvent::Fusion { id };
             }
         }
-        // the special-skill branch of the jump-table tail (US 0x694778; PCs 8..11 go there directly): with a 20 % chance one record of the
-        // character's own `SKIL` group (every record, no learned mask) that has a target; `BtlChr+0x1c2` = 22 (23 for PC 11), never twice in a
-        // row, not under Seal
-        if (8..=11).contains(&ext.pc) && !sealed && last != if ext.pc == 11 { 23 } else { 22 } {
-            if let Some(t) = self.engine.clone() {
-                let radius: Vec<f32> = self.ext.iter().map(|e| e.radius).collect();
-                let group = t.groups.get(ext.pc as usize).cloned().unwrap_or_default();
-                let mut usable: Vec<(usize, Vec<usize>)> = vec![];
-                for (k, rec) in group.iter().enumerate() {
-                    if rec.empty {
-                        continue;
-                    }
-                    let reach: Vec<usize> = if rec.side_class() == 0 {
-                        vec![i]
-                    } else {
-                        (0..self.fighters.len())
-                            .filter(|&u| self.fighters[u].as_ref().map(|f| !f.removed && (f.hp > 0 || rec.revive)).unwrap_or(false))
-                            .filter(|&u| !crate::actions::target_list(&self.fighters, &self.positions, &radius, i, u as i32, rec.side_class(), rec.shape(), rec.size(), rec.revive, true).is_empty())
-                            .collect()
-                    };
-                    if !reach.is_empty() {
-                        usable.push((k, reach));
+        let pc = ext.pc;
+        let rand10k = |b: &mut Self| b.rng.rand() % 10000;
+        // the per-character antics blocks of the jump table (US 0x691090 .. 0x694198, disassembled round 6 BT); each falls through to the
+        // generic item / crest / attack path (0x695058) when nothing was chosen.  `rand() % 10000 <= n` as retail compares (`slti n + 1`).
+        match pc {
+            // Blanca (0x691090): 50 % run up next to a random living unit (either side; retail also wants the spot beside it inside the arena)
+            // -- phase 0x0f, `+0x1c2` = 326; else 15 % one of her wolf-bout skills (`GetRegDat(0x3c, 1)` under the `BTL0+0xfd7` tier mask), 13
+            1 => {
+                if last != 326 {
+                    let others = self.berserk_units(i);
+                    if rand10k(self) <= 5000 && !others.is_empty() {
+                        let t = others[self.rng.rand() as usize % others.len()];
+                        set_last(self, 326);
+                        return self.berserk_antic(i, Antic::Approach { target: t });
                     }
                 }
-                if !usable.is_empty() && self.rng.rand() % 10000 <= 2000 {
-                    let (k, reach) = usable[self.rng.rand() as usize % usable.len()].clone();
-                    let rec = &group[k];
-                    let side = rec.side_class();
-                    let target = if side == 0 {
-                        i as i32
-                    } else if side == 3 || rec.shape() == 5 {
-                        -1
-                    } else {
-                        reach[self.rng.rand() as usize % reach.len()] as i32
-                    };
-                    set_last(self, if ext.pc == 11 { 23 } else { 22 });
-                    return MenuEvent::Special { a: rec.id, b: target, enemy_like: false };
+                if last != 13 && !sealed {
+                    if let Some(ev) = self.berserk_skill(i, 1, ext.skill_mask, 1500, 13) {
+                        return ev;
+                    }
                 }
             }
+            // Gepetto (0x691f10): 30 % plays with Cornelia (phase 0x11, 126); else 20 % a Marionette skill (`MENU+0x2fc` mask), 14
+            2 => {
+                if rand10k(self) <= 3000 && last != 126 {
+                    set_last(self, 126);
+                    return self.berserk_antic(i, Antic::Talk { cornelia: true });
+                }
+                if last != 14 && !sealed {
+                    if let Some(ev) = self.berserk_skill(i, 2, ext.skill_mask, 2000, 14) {
+                        return ev;
+                    }
+                }
+            }
+            // Lucia (0x692818): 40 % the Tarot Card (phase 0x0d, 15; retail also needs `CBattle+0x24` bit 5 clear), not under Seal
+            3 => {
+                if rand10k(self) <= 4000 && !sealed {
+                    set_last(self, 15);
+                    return MenuEvent::Tarot;
+                }
+            }
+            // Anastasia (0x6928a0): 10 % searches the ground (phase 0x10, 124); else 40 % a Snap Shot (phase 10, kind 7, 17) of a random living
+            // unit other than herself (retail aims at nobody, `-1`, when a party slot byte `+0x36b..0x36d` of the global block is 70)
+            4 => {
+                if rand10k(self) <= 1000 && last != 124 {
+                    set_last(self, 124);
+                    let item = if rand10k(self) < 5001 {
+                        let total: u32 = BERSERK_FIND_WEIGHTS.iter().map(|&w| w as u32).sum();
+                        let r = self.rng.rand() as u32 % total;
+                        let (mut acc, mut k) = (0u32, 0usize);
+                        while k < BERSERK_FIND_WEIGHTS.len() {
+                            acc += BERSERK_FIND_WEIGHTS[k] as u32;
+                            if acc >= r {
+                                break;
+                            }
+                            k += 1;
+                        }
+                        Some(k.min(BERSERK_FIND_WEIGHTS.len() - 1) as i32)
+                    } else {
+                        None
+                    };
+                    if let Some(id) = item {
+                        if let Some(n) = self.bag.get_mut(id as usize) {
+                            *n = n.saturating_add(1).min(99);
+                        }
+                        self.stats.bag_found.push(id);
+                    }
+                    let name = match (item, self.engine.as_ref()) {
+                        (Some(id), Some(t)) => t.item_name(id as usize).to_string(),
+                        _ => String::new(),
+                    };
+                    return self.berserk_antic(i, Antic::Search { item, name });
+                }
+                if rand10k(self) <= 4000 && last != 17 && !sealed {
+                    let others = self.berserk_units(i);
+                    if !others.is_empty() {
+                        let t = others[self.rng.rand() as usize % others.len()];
+                        set_last(self, 17);
+                        return MenuEvent::Snap { target: t as i32 };
+                    }
+                }
+            }
+            // Karin (0x692b80): 10 % faints (phase 0x12, 127); else 20 % a Sword Art (`GetRegDat(0x3c, 5)`, the arts memorised), 19
+            5 => {
+                if rand10k(self) <= 1000 && last != 127 {
+                    set_last(self, 127);
+                    return self.berserk_antic(i, Antic::Pose);
+                }
+                if last != 19 && !sealed {
+                    if let Some(ev) = self.berserk_skill(i, 5, ext.skill_mask, 2000, 19) {
+                        return ev;
+                    }
+                }
+            }
+            // Joachim (0x693838): 30 % shows off (phase 0x11, 129); else 30 % a Muscle Art (`BTL0+0xfcb` mask), 20.  Retail skips both when a
+            // story word (`[gp-0x7c94]+0x750`) is 1 and the showing off when it is 2 (not modelled).
+            6 => {
+                if rand10k(self) <= 3000 && last != 129 {
+                    set_last(self, 129);
+                    return self.berserk_antic(i, Antic::Talk { cornelia: false });
+                }
+                if last != 20 && !sealed {
+                    if let Some(ev) = self.berserk_skill(i, 6, ext.skill_mask, 3000, 20) {
+                        return ev;
+                    }
+                }
+            }
+            // Kurando (0x694198): 75 % attacks the nearest living unit (either side, floor distance), `+0x1c2` = 0.  The other 25 % may try to
+            // run away (phase 8, step 50, under conditions on statuses 81 / 84 and `CBattle+0x4654`; not modelled) before the generic path.
+            7 => {
+                let me_p = self.positions.get(i).copied().unwrap_or([0.0; 3]);
+                let d = |k: usize| {
+                    let p = self.positions.get(k).copied().unwrap_or([0.0; 3]);
+                    (p[0] - me_p[0]).powi(2) + (p[2] - me_p[2]).powi(2)
+                };
+                let near = self.berserk_units(i).into_iter().min_by(|&a, &b| d(a).total_cmp(&d(b)));
+                if let Some(t) = near {
+                    if rand10k(self) <= 7500 {
+                        set_last(self, 0);
+                        return MenuEvent::Attack { actor: i as i32, target: t as i32, kind: 0, skill: -1 };
+                    }
+                }
+            }
+            // the special-skill branch of the jump-table tail (US 0x694778; PCs 8..11 go there directly): 20 %, every record of the group (no
+            // learned mask), 22 (23 for PC 11)
+            8..=11 => {
+                let code = if pc == 11 { 23 } else { 22 };
+                if last != code && !sealed {
+                    if let Some(ev) = self.berserk_skill(i, pc as usize, u64::MAX, 2000, code) {
+                        return ev;
+                    }
+                }
+            }
+            _ => {}
         }
         // the item branch (US BATTLE.BIN 0x690270 generic path, decompiled round 6 BT): every item of the bag whose class `(rec+4 & 0x1f) >> 3`
         // and `(rec+4 & 0x7f) >> 5` are not 0 / 3 and that has a target; 15 % (50 % for Anastasia, PC 4); target = the user for side 0,
@@ -1785,6 +1902,60 @@ impl<H: Host> Battle<H> {
         let any: Vec<usize> = (0..self.fighters.len()).filter(|&k| k != i && self.fighters[k].as_ref().map(|f| f.hp > 0 && !f.removed).unwrap_or(false)).collect();
         let t = if any.is_empty() { 0 } else { any[self.rng.rand() as usize % any.len()] };
         MenuEvent::Attack { actor: i as i32, target: t as i32, kind: 0, skill: -1 }
+    }
+
+    /// The living units a berserk member can pick (either side, not itself; retail: present, not removed, HP > 0).
+    fn berserk_units(&self, i: usize) -> Vec<usize> {
+        (0..self.fighters.len()).filter(|&k| k != i && self.fighters[k].as_ref().is_some_and(|f| f.hp > 0 && !f.removed)).collect()
+    }
+
+    /// A berserk antic: reported to the presentation, then the turn ends (`nCmdKind = 1`, `flTurnPush = 3.0`).
+    fn berserk_antic(&mut self, i: usize, antic: Antic) -> MenuEvent {
+        self.events.push(BattleEvent::Party(PartyEvent::BerserkAntic { chr: i, antic }));
+        MenuEvent::Wait { actor: i as i32 }
+    }
+
+    /// The berserk skill pick of the antics blocks (Blanca, Gepetto, Karin, Joachim) and of the tail (PCs 8..11): every record `k` of `SKIL`
+    /// group `group` with bit `k` of `mask` that has a target; `chance` of 10000; the target is the user for side 0, everybody (`-1`) for
+    /// side 3 / shape 5, else a random unit the skill can reach (either side); `BtlChr+0x1c2` = `code`.
+    fn berserk_skill(&mut self, i: usize, group: usize, mask: u64, chance: i32, code: u16) -> Option<MenuEvent> {
+        let t = self.engine.clone()?;
+        let radius: Vec<f32> = self.ext.iter().map(|e| e.radius).collect();
+        let recs = t.groups.get(group).cloned().unwrap_or_default();
+        let mut usable: Vec<(usize, Vec<usize>)> = vec![];
+        for (k, rec) in recs.iter().enumerate() {
+            if rec.empty || (k < 64 && mask & (1 << k) == 0) {
+                continue;
+            }
+            let reach: Vec<usize> = if rec.side_class() == 0 {
+                vec![i]
+            } else {
+                (0..self.fighters.len())
+                    .filter(|&u| self.fighters[u].as_ref().map(|f| !f.removed && (f.hp > 0 || rec.revive)).unwrap_or(false))
+                    .filter(|&u| !crate::actions::target_list(&self.fighters, &self.positions, &radius, i, u as i32, rec.side_class(), rec.shape(), rec.size(), rec.revive, true).is_empty())
+                    .collect()
+            };
+            if !reach.is_empty() {
+                usable.push((k, reach));
+            }
+        }
+        if usable.is_empty() || self.rng.rand() % 10000 > chance {
+            return None;
+        }
+        let (k, reach) = usable[self.rng.rand() as usize % usable.len()].clone();
+        let rec = &recs[k];
+        let side = rec.side_class();
+        let target = if side == 0 {
+            i as i32
+        } else if side == 3 || rec.shape() == 5 {
+            -1
+        } else {
+            reach[self.rng.rand() as usize % reach.len()] as i32
+        };
+        if let Some(e) = self.ext.get_mut(i) {
+            e.berserk_last = code;
+        }
+        Some(MenuEvent::Special { a: rec.id, b: target, enemy_like: false })
     }
 
     /// An item / crest spell / skill of a party member through the party-side engine ([`crate::actions::resolve_action`]).  The host still sees
@@ -1993,7 +2164,7 @@ pub fn party_setup<H: Host>(b: &mut Battle<H>, data: &crate::data::BattleData, t
     if session.save.btl.is_retail() {
         b.unique_owned = (0..13).map(|k| session.save.btl.retail.get(0xc1c + k).copied().unwrap_or(0)).collect();
     }
-    b.engine = Some(tables);
+    b.engine = Some(tables.clone());
     b.party_cash = session.cash() as i32;
     if session.save.btl.is_retail() {
         let r = &session.save.btl.retail;
@@ -2023,6 +2194,8 @@ pub fn party_setup<H: Host>(b: &mut Battle<H>, data: &crate::data::BattleData, t
                     for (k, c) in rec.skills.iter().enumerate().take(8) {
                         ext.crests[k] = *c;
                     }
+                    let src = crate::menu_data::MenuSource { btl: &session.save.btl, menu: &session.save.menu, pc: pc as usize, retail: session.save.btl.is_retail() };
+                    ext.skill_mask = src.skill_mask(tables.groups.get(pc as usize).map(|g| g.len()).unwrap_or(0));
                     // Yuri (0..0x14) / Kurando (0x15, 0x16): the fusion forms at the souls' levels (`BTL0+0xf24 + FUSM[0x1d]`)
                     let range: Vec<usize> = match pc {
                         0 => (0..0x15).collect(),
@@ -2088,6 +2261,14 @@ pub fn apply_battle_end<H: Host>(b: &Battle<H>, session: &mut sh2_menu::session:
     write_score(&b.stats, &mut session.save.btl, chapter, won);
     let bag = session.save.btl.bag() as usize * sh2_menu::save::BtlSave::BAG_STRIDE;
     for &item in &b.stats.stolen_items {
+        if item >= 0 {
+            if let Some(slot) = session.save.btl.data.get_mut(sh2_menu::save::BtlSave::OFF_ITEMS + bag + item as usize) {
+                *slot = slot.saturating_add(1).min(99);
+            }
+        }
+    }
+    // items found by a berserk member's search
+    for &item in &b.stats.bag_found {
         if item >= 0 {
             if let Some(slot) = session.save.btl.data.get_mut(sh2_menu::save::BtlSave::OFF_ITEMS + bag + item as usize) {
                 *slot = slot.saturating_add(1).min(99);
@@ -2638,13 +2819,76 @@ mod bp_flow_tests {
             }
         }
         eprintln!("berserk items: Karin {} / 400, Anastasia {} / 400", runs[0], runs[1]);
+        // Karin: 90 % past her fainting antic x 15 %; Anastasia: 90 % past the search x 60 % past the Snap Shot x 50 %
         assert!(runs[0] > 30 && runs[0] < 100, "{runs:?}");
-        assert!(runs[1] > 150 && runs[1] < 260, "{runs:?}");
-        // an empty bag: never
+        assert!(runs[1] > 70 && runs[1] < 150, "{runs:?}");
+        // an empty bag: never (Karin: Anastasia's search could fill it)
+        b.ext[0].pc = 5;
         b.bag = vec![0; tables.items.len()];
         for _ in 0..100 {
             assert!(!matches!(b.berserk_command(0), MenuEvent::Item { .. }));
         }
+    }
+
+    /// Round 6 BT: the per-character antics of `BerserkFunc` (US 0x691090..0x694198) at their retail rates, never twice in a row.
+    #[test]
+    fn berserk_antics_follow_the_retail_blocks() {
+        let Some((data, tables, s)) = us() else { return };
+        let (mut b, _) = battle(&data, &tables, &s, &[5], 2);
+        b.bag = vec![0; tables.items.len()];
+        let n = 2000;
+        let count = |b: &mut Battle<crate::host::BtlHost>, pc: i32, want: &dyn Fn(&MenuEvent, &[BattleEvent]) -> bool| {
+            b.ext[0].pc = pc;
+            let mut k = 0;
+            for _ in 0..n {
+                b.ext[0].berserk_last = 0;
+                let before = b.events.len();
+                let ev = b.berserk_command(0);
+                if want(&ev, &b.events[before..]) {
+                    k += 1;
+                }
+            }
+            k as f32 / n as f32
+        };
+        fn antic(e: &[BattleEvent], a: fn(&Antic) -> bool) -> bool {
+            e.iter().any(|e| matches!(e, BattleEvent::Party(PartyEvent::BerserkAntic { antic, .. }) if a(antic)))
+        }
+        let blanca = count(&mut b, 1, &|_, e| antic(e, |a| matches!(a, Antic::Approach { .. })));
+        let gepetto = count(&mut b, 2, &|_, e| antic(e, |a| matches!(a, Antic::Talk { cornelia: true })));
+        let lucia = count(&mut b, 3, &|e, _| matches!(e, MenuEvent::Tarot));
+        let search = count(&mut b, 4, &|_, e| antic(e, |a| matches!(a, Antic::Search { .. })));
+        let snap = count(&mut b, 4, &|e, _| matches!(e, MenuEvent::Snap { .. }));
+        let karin = count(&mut b, 5, &|_, e| antic(e, |a| matches!(a, Antic::Pose)));
+        let joachim = count(&mut b, 6, &|_, e| antic(e, |a| matches!(a, Antic::Talk { cornelia: false })));
+        let kurando = count(&mut b, 7, &|e, _| matches!(e, MenuEvent::Attack { .. }));
+        eprintln!("antics: Blanca {blanca} Gepetto {gepetto} Lucia {lucia} search {search} snap {snap} Karin {karin} Joachim {joachim} Kurando attacks {kurando}");
+        let near = |x: f32, p: f32| (x - p).abs() < 0.04;
+        assert!(near(blanca, 0.5) && near(gepetto, 0.3) && near(lucia, 0.4) && near(search, 0.1) && near(snap, 0.36) && near(karin, 0.1) && near(joachim, 0.3));
+        // Kurando: 75 % on the nearest unit, the rest goes through the generic path (no items, crest spells or a random attack)
+        assert!(kurando > 0.74);
+        // never twice in a row
+        b.ext[0].pc = 1;
+        for _ in 0..200 {
+            b.ext[0].berserk_last = 326;
+            let before = b.events.len();
+            b.berserk_command(0);
+            assert!(!b.events[before..].iter().any(|e| matches!(e, BattleEvent::Party(PartyEvent::BerserkAntic { .. }))));
+        }
+        // a found item goes into the bag (and is written to the save at the end)
+        b.ext[0].pc = 4;
+        let mut found = None;
+        for _ in 0..1000 {
+            b.ext[0].berserk_last = 0;
+            let before = b.events.len();
+            b.berserk_command(0);
+            if let Some(BattleEvent::Party(PartyEvent::BerserkAntic { antic: Antic::Search { item: Some(id), .. }, .. })) = b.events[before..].first() {
+                found = Some(*id);
+                break;
+            }
+        }
+        let id = found.expect("a search found something");
+        assert!((id as usize) < BERSERK_FIND_WEIGHTS.len() && BERSERK_FIND_WEIGHTS[id as usize] > 0 && b.bag[id as usize] >= 1);
+        assert!(b.stats.bag_found.contains(&id));
     }
 
     #[test]

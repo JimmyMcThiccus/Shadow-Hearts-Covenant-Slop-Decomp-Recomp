@@ -1488,8 +1488,9 @@ pub struct FighterExt {
     pub items_stolen: u8,
     /// `BtlChr+0xb6` bit 2: the character went berserk (Sanity ran out) -- it acts by itself (`BerserkFunc`)
     pub berserk: bool,
-    /// `BtlChr+0x1c2`: what `BerserkFunc` chose last (0 attack, 7 crest spell, 8 item, 12 fusion)
-    pub berserk_last: u8,
+    /// `BtlChr+0x1c2`: what `BerserkFunc` chose last (0 attack, 7 crest spell, 8 item, 12 fusion; the antics 13..20 skills, 15 tarot,
+    /// 17 snap, 124..129 / 326 the antics phases)
+    pub berserk_last: u16,
     /// the `JRCI` ring item effect words of the character's ring (retail `PAtkEffectFunc`, `GetRegDat(0x46)` row `PCParam+0x68`), applied to
     /// every physical hit with the ring grade as power
     pub ring_item: Option<[u32; 4]>,
@@ -1507,6 +1508,9 @@ pub struct FighterExt {
     pub base_element: u8,
     /// Yuri / Kurando: per `FUSM` row the growth bonuses at the soul's current level (`GetRegDat(0x33, id)` row `BTL0+0xf24+FUSM[0x1d]` - 1)
     pub fusions: Vec<FusionForm>,
+    /// round 6 BT: the character's special-command list (`SetSkill1Menu` mask, [`crate::menu_data::MenuSource::skill_mask`]): bit `k` =
+    /// record `k` of its `SKIL` group; the berserk antics pick from it
+    pub skill_mask: u64,
 }
 
 /// What a fusion changes on the character (`FusMonInit` 0x49fb10 + the getters' fused branch).

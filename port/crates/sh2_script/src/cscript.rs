@@ -198,6 +198,9 @@ pub struct CScript {
     pad: PadState,
     /// debugging aid: when `Some`, every conditional jump / switch decision is appended (`ip`, opcode, tested value, target)
     pub branch_trace: Option<Vec<String>>,
+    /// number of `get_pad` (builtin 0xac) calls so far: tells a host whether the script itself is polling the pad (a pad-driven
+    /// gimmick such as the Vessel's altar ring) rather than waiting on a message key
+    pub pad_reads: u64,
 }
 
 fn rd16(b: &[u8], o: usize) -> u32 {
@@ -238,6 +241,7 @@ impl CScript {
             insn_budget: 0,
             pad: PadState::default(),
             branch_trace: None,
+            pad_reads: 0,
         }
     }
 
@@ -1367,6 +1371,7 @@ impl CScript {
                 ExResult::Void
             }
             0xac => {
+                self.pad_reads += 1;
                 let (mode, mask) = (a(&self.mem, 0) as u8, a(&self.mem, 1) & 0xffff);
                 let v = if mode == 4 || mode == 3 {
                     self.pad.consumed |= mask;

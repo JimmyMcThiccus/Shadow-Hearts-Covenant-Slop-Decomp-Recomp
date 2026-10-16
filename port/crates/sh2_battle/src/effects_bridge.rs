@@ -623,6 +623,10 @@ pub struct ExtraRun {
     /// fighter indices of `GetModelSet(0, 0)` / `GetModelSet(1, 0)`
     pub gen: usize,
     pub tar: usize,
+    /// round 6 BT: the whole model sets when the engine passes several units (`SetGenModel(n, set)` / `SetTarModel(n, set)`, e.g. `UNION`:
+    /// the core and its living parts); empty = `[gen]` / `[tar]`
+    pub gens: Vec<usize>,
+    pub tars: Vec<usize>,
     banks: HashMap<u32, Arc<Vec<u8>>>,
     /// `btlCameraControlStatus(0)` seen: the program's `EFCM` camera drives the battle camera
     pub cam_control: bool,
@@ -653,7 +657,7 @@ impl ExtraFx {
         match FxProgram::new(EXTRA_FX_ID + key, bytes, FxContext::default()) {
             Ok(prog) => {
                 log::info!("battle: engine effect {path} ({tag}, gen {gen}, tar {tar})");
-                self.runs.push(ExtraRun { key, tag, prog, acc: 0.0, gen, tar, banks: HashMap::new(), cam_control: false, events: vec![], hidden: vec![] });
+                self.runs.push(ExtraRun { key, tag, prog, acc: 0.0, gen, tar, gens: vec![], tars: vec![], banks: HashMap::new(), cam_control: false, events: vec![], hidden: vec![] });
                 Some(key)
             }
             Err(e) => {
@@ -661,6 +665,16 @@ impl ExtraFx {
                 None
             }
         }
+    }
+    /// Round 6 BT: [`Self::start`] with several generator / target units (`SetGenModel(n, set)` / `SetTarModel(n, set)`); the first of
+    /// each list is the run's `gen` / `tar`.
+    pub fn start_sets(&mut self, disc: &Sh2Disc, path: &str, tag: &'static str, gens: &[usize], tars: &[usize]) -> Option<i32> {
+        let key = self.start(disc, path, tag, gens.first().copied().unwrap_or(0), tars.first().copied().unwrap_or(0))?;
+        if let Some(r) = self.get_mut(key) {
+            r.gens = gens.to_vec();
+            r.tars = tars.to_vec();
+        }
+        Some(key)
     }
     pub fn get_mut(&mut self, key: i32) -> Option<&mut ExtraRun> {
         self.runs.iter_mut().find(|r| r.key == key)
@@ -709,11 +723,12 @@ pub fn step_extra_fx(
     let mut views: Vec<FxView> = vec![];
     for run in extra.runs.iter_mut() {
         let env = FxEnv {
-            gen: vec![fighter_fx_actor(&rt, &models, &anims, &gts, run.gen)],
-            targets: vec![fighter_fx_actor(&rt, &models, &anims, &gts, run.tar)],
+            gen: if run.gens.is_empty() { vec![run.gen] } else { run.gens.clone() }.into_iter().map(|c| fighter_fx_actor(&rt, &models, &anims, &gts, c)).collect(),
+            targets: if run.tars.is_empty() { vec![run.tar] } else { run.tars.clone() }.into_iter().map(|c| fighter_fx_actor(&rt, &models, &anims, &gts, c)).collect(),
             scene_lights: rt.scene_lights.clone(),
         };
         if !run.prog.finished {
+            let units = (env.gen.len(), env.targets.len());
             run.acc += dt;
             let mut guard = 0;
             while run.acc >= 1.0 / 30.0 && !run.prog.finished && guard < 6 {
@@ -737,7 +752,7 @@ pub fn step_extra_fx(
                         e if forward_audio_event(&e) => {}
                         // `btlCharactorShow(side, idx | -1, on)`: side 0 = the run's generating fighter, 1 = its target, -1 = every fighter
                         FxEvent::ActorShow { side, idx, show } => {
-                            let list: Vec<usize> = if idx < 0 { models.iter().map(|m| m.chr).collect() } else { vec![if side == 0 { run.gen } else { run.tar }] };
+                            let list: Vec<usize> = if idx < 0 { models.iter().map(|m| m.chr).collect() } else { vec![if side == 0 { run.gens.get(idx as usize).copied().unwrap_or(run.gen) } else { run.tars.get(idx as usize).copied().unwrap_or(run.tar) }] };
                             for chr in list {
                                 for m in models.iter().filter(|m| m.chr == chr) {
                                     // the character and its weapon models (`BtlModel` draws both)
@@ -757,6 +772,10 @@ pub fn step_extra_fx(
                         e => run.events.push(e),
                     }
                 }
+            }
+            if run.prog.finished {
+                // round 6 BT: how the engine program ended (`MAX_TICKS` = cut)
+                log::info!("battle: engine effect {} ({}) ended after {} ticks{}, {} gen / {} tar units", run.key, run.tag, run.prog.ticks, if run.prog.ended_deadlocked { " (deadlock)" } else { "" }, units.0, units.1);
             }
         }
         if !run.prog.finished {
