@@ -24,6 +24,8 @@ pub struct BtlHud {
     /// `BTL_002` entries (result screen, damage digits)
     pub tex2: HashMap<usize, (TextureId, (u32, u32))>,
     pub faces: HashMap<u32, TextureId>,
+    /// `FI_` portraits cut to the Turn Priority capsule (36 x 46 `JRCTex` stand-ins for the retail 33 x 46 card textures of `CBattle + 0x4484 + 4 * (BtlChr+0x5b1)`)
+    pub card_faces: HashMap<u32, TextureId>,
     /// Tarot card faces by card id (`BTLDATA/TAROT/TC_%03d.BIN` entry 4, 160 x 256) and the purple card back (entry 3 of `TC_000`); retail only
     pub tarot: HashMap<u8, TextureId>,
     pub tarot_back: Option<TextureId>,
@@ -108,6 +110,10 @@ pub struct HudTurn {
     pub fighter: usize,
     /// coloured outline (the target's / partner's / acting enemy's cards)
     pub outline: Option<Rgba>,
+    /// `SetSelectChr` mode of this fighter (1 ally marker, 2 enemy marker): what [`crate::hud_turn`] draws as the outline
+    pub sel: u8,
+    /// card colour rule of `TurnOrderDisp::MakePacket` (berserk red / knocked out yellow)
+    pub tint: crate::hud_turn::Tint,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -185,6 +191,8 @@ pub struct HudTargetPlate {
     pub letter: u8,
     /// `(hp, max)` once known: allies always, enemies once the monster is in the library (`TargetInfo`: the "defeated" bit of `BtlSave`)
     pub hp_known: Option<(i32, i32)>,
+    /// the real `(hp, max)`: the gauge fill shows it even while the digits are `?????` (`TargetInfo::MakePacket` divides `BtlChr+0x130` by `+0x12c`)
+    pub gauge: (i32, i32),
     /// the target is a party member (portrait instead of the letter card)
     pub ally: bool,
     /// draw the plate itself (false = only the arrow over the target: the Combo partner page has no plate, live `04i`)
@@ -222,6 +230,18 @@ pub struct HudView {
     pub hud_age: f32,
     /// the Tarot Card draw replaces the whole HUD
     pub tarot: Option<HudTarot>,
+    /// the retail `TurnOrderDisp` state (slide offset, scale, glow phase); the default is an open plate at scale 1
+    pub turn_disp: crate::hud_turn::TurnOrderDisp,
+    /// colour rule of the acting fighter's face / letter
+    pub actor_tint: crate::hud_turn::Tint,
+    /// `TurnOrderDisp +0x5c`: the select markers (2 bits per fighter) of the open target page
+    pub select: u32,
+    /// the runtime keeps `turn_disp` (otherwise `show_plate` / `hud_age` decide)
+    pub turn_disp_driven: bool,
+    /// fighter index of the acting fighter (the select mask test of the glow)
+    pub actor_fighter: Option<usize>,
+    /// `CBattle + 0x32`: fighters (bit per index) that still have to act in the running Combo (rail pips under their cards)
+    pub combo_pending: u32,
 }
 
 // ------------------------------------------------------------------------------------------------------------------
@@ -376,61 +396,62 @@ fn label(g: &mut dyn MenuGfx, hud: &BtlHud, i: usize, x: f32, y: f32) {
 // elements
 // ------------------------------------------------------------------------------------------------------------------
 
-/// One `Turn Priority` card; `sx` squeezes it horizontally (the strip compresses to a 20 px pitch while a target is chosen and the cards shrink with it).
-/// A focused fighter's cards carry a coloured outline (green = ally target / partner, red = enemy target or the enemy whose turn it is): the card
-/// silhouette drawn 1.5 px larger in the outline colour under the card.
-fn card(g: &mut dyn MenuGfx, hud: &BtlHud, x: f32, y: f32, t: &HudTurn, sx: f32) {
-    if let Some(o) = t.outline {
-        let (tex_id, src, dst) = if t.enemy {
-            let (col, row) = ((t.letter / 4) as f32, (t.letter % 4) as f32);
-            (tex::LETTERS, (col * 36.0, row * 46.0, 36.0, 46.0), (x, y, 36.0 * sx, 46.0))
-        } else {
-            (tex::CARDS, (0.0, 0.0, 33.0, 48.0), (x + sx, y, 33.0 * sx, 46.0))
-        };
-        for (dx, dy) in [(-1.5, 0.0), (1.5, 0.0), (0.0, -1.5), (0.0, 1.5), (-1.0, -1.0), (1.0, 1.0), (-1.0, 1.0), (1.0, -1.0)] {
-            spr(g, hud, tex_id, src, (dst.0 + dx, dst.1 + dy, dst.2, dst.3), o, Blend::Alpha);
-        }
-    }
-    if t.enemy {
-        let (col, row) = ((t.letter / 4) as f32, (t.letter % 4) as f32);
-        spr(g, hud, tex::LETTERS, (col * 36.0, row * 46.0, 36.0, 46.0), (x, y, 36.0 * sx, 46.0), Rgba::new(0x4c, 0x46, 0x48, 0x4a), Blend::Alpha);
-    } else {
-        spr(g, hud, tex::CARDS, (0.0, 0.0, 33.0, 48.0), (x + sx, y, 33.0 * sx, 46.0), Rgba::new(0x5a, 0x52, 0x54, 0x4a), Blend::Alpha);
-        if let Some(&f) = hud.faces.get(&t.model) {
-            spr_id(g, f, (104, 128), (4.0, 2.0, 96.0, 100.0), (x + 4.0 * sx, y + 4.0, 28.0 * sx, 36.0), Rgba::new(0x78, 0x78, 0x78, 0x58), Blend::Alpha);
-        }
-    }
-}
-
-/// Outline colours of the live captures: green (21,177,130) for allies, red (188,24,20) for enemies.
+/// Outline colours of the live captures: green (21,177,130) for allies, red (188,24,20) for enemies (the retail packet's 0x01 7d 5a / 0x80 00 00).
 pub const OUTLINE_ALLY: Rgba = Rgba { r: 0x0a, g: 0x58, b: 0x41, a: 0x80 };
 pub const OUTLINE_ENEMY: Rgba = Rgba { r: 0x5e, g: 0x0c, b: 0x0a, a: 0x80 };
 
-/// `Turn Priority` plate; `oy` is the slide-in offset (negative = still coming down from the top).
+/// `Turn Priority` plate: draws the primitives of `TurnOrderDisp::MakePacket` ([`crate::hud_turn::TurnOrderDisp::layout`]) with the slide offset, scale
+/// and glow phase of `v.turn_disp`.  `oy` is an extra offset (kept for the dev demos).
 pub fn draw_turn_priority(g: &mut dyn MenuGfx, hud: &BtlHud, v: &HudView, oy: f32) {
-    spr(g, hud, tex::EMBLEM, (0.0, 0.0, 92.0, 112.0), (12.0, 11.0 + oy, 92.0, 112.0), white(0x80), Blend::Alpha);
-    if let Some((model, enemy, letter)) = v.actor_model {
-        if enemy {
-            // an enemy's turn: the orange flame oval (entry 21, additive, breathing) under the big letter in red (live `06d` / `13a`)
-            let k = 1.0 + 0.08 * (v.time * 7.0).sin();
-            if hud.t(tex::FLAME).is_some() {
-                spr(g, hud, tex::FLAME, (0.0, 0.0, 36.0, 60.0), (52.0 - 22.0 * k, 65.0 + oy - 30.0 * k, 44.0 * k, 60.0 * k), Rgba::new(0x60, 0x3c, 0x1c, 0x80), Blend::Add);
-            } else if hud.t(tex::GLOW).is_some() {
-                spr(g, hud, tex::GLOW, (0.0, 0.0, 32.0, 32.0), (22.0, 30.0 + oy, 52.0, 56.0), Rgba::new(0x48, 0x22, 0x0c, 0x80), Blend::Add);
-            }
-            let (col, row) = ((letter / 4) as f32, (letter % 4) as f32);
-            spr(g, hud, tex::BIGLETTERS, (col * 36.0, row * 48.0, 36.0, 48.0), (30.0, 34.0 + oy, 36.0, 48.0), Rgba::new(0x80, 0x2c, 0x1c, 0x80), Blend::Alpha);
-        } else if let Some(&f) = hud.faces.get(&model) {
-            spr_id(g, f, (104, 128), (0.0, 0.0, 104.0, 128.0), (22.0, 24.0 + oy, 52.0, 64.0), white(0x80), Blend::Alpha);
+    use crate::hud_turn::{Actor, Card, Input, Prim, Tex};
+    let mut disp = v.turn_disp;
+    disp.y += oy;
+    // the select markers come from the cards' `sel` fields (`SetSelectChr` of the target page)
+    disp.select = v.select;
+    for t in &v.turns {
+        if t.sel != 0 {
+            disp.set_select_chr(t.fighter, t.sel as u32);
         }
     }
-    spr(g, hud, tex::TITLE, (0.0, 0.0, 98.0, 16.0), (80.0, 26.0 + oy, 98.0, 16.0), white(0x80), Blend::Alpha);
-    spr(g, hud, tex::TITLE, (0.0, 22.0, 98.0, 28.0), (42.0, 62.0 + oy, 98.0, 28.0), white(0x80), Blend::Alpha);
-    // the strip is compressed while an *enemy* target is being chosen (pitch 20 in `04g` / `04j`; ally and partner pages keep 26: `04e`, `04i`)
-    let step = if v.plate.as_ref().map(|p| !p.ally).unwrap_or(false) { CARD_PITCH_TARGET } else { CARD_PITCH };
-    // earlier cards lie on top of later ones
-    for (i, t) in v.turns.iter().take(9).enumerate().rev() {
-        card(g, hud, 84.0 + i as f32 * step, 41.0 + oy, t, step / CARD_PITCH);
+    let (enemy, letter, model) = match v.actor_model {
+        Some((m, e, l)) => (e, l, m),
+        None => (false, 0, 0),
+    };
+    let actor_chr = v.actor_fighter.unwrap_or(usize::MAX);
+    let actor = Actor { enemy, letter, model, chr: actor_chr, tint: v.actor_tint };
+    let cards: Vec<Card> = v.turns.iter().take(9).map(|t| Card { enemy: t.enemy, letter: t.letter, model: t.model, chr: t.fighter, tint: t.tint }).collect();
+    let rgba = |c: [u8; 4]| Rgba::new(c[0], c[1], c[2], c[3]);
+    for p in disp.layout(&Input { actor, cards: &cards, pending: v.combo_pending }) {
+        match p {
+            Prim::Sprite(sp) => {
+                let (u0, v0, u1, v1) = sp.uv;
+                let (x0, y0, x1, y1) = sp.dst;
+                match sp.tex {
+                    Tex::Btl(k) => spr(g, hud, k as usize, (u0, v0, u1 - u0, v1 - v0), (x0, y0, x1 - x0, y1 - y0), rgba(sp.rgba), Blend::Alpha),
+                    Tex::Face(m) => {
+                        if let Some(&f) = hud.faces.get(&m) {
+                            spr_id(g, f, (104, 128), (0.0, 0.0, 104.0, 128.0), (x0, y0, x1 - x0, y1 - y0), rgba(sp.rgba), Blend::Alpha);
+                        }
+                    }
+                    Tex::CardFace(m) => {
+                        // the retail card is a 33 x 46 portrait texture with its own capsule outline: the port cuts the `FI_` face with the capsule mask
+                        if let Some(&f) = hud.card_faces.get(&m) {
+                            spr_id(g, f, (CARD_W as u32, CARD_H as u32), (0.0, 0.0, CARD_W as f32, CARD_H as f32), (x0, y0, x1 - x0, y1 - y0), rgba(sp.rgba), Blend::Alpha);
+                        }
+                    }
+                }
+            }
+            Prim::Strip(st) => {
+                let id = match st.tex {
+                    Tex::Btl(k) => hud.t(k as usize),
+                    _ => None,
+                };
+                if let Some((id, (tw, th))) = id {
+                    let vtx = |i: usize| Vertex { pos: Vec2::new(st.pos[i].0, st.pos[i].1), uv: Vec2::new(st.uv[i].0 / tw as f32, st.uv[i].1 / th as f32), color: rgba(st.rgba) };
+                    g.draw(DrawCmd::Quad { tex: Some(id), v: [vtx(0), vtx(1), vtx(2), vtx(3)], blend: Blend::Alpha });
+                }
+            }
+        }
     }
 }
 
@@ -637,28 +658,12 @@ pub fn draw_command(g: &mut dyn MenuGfx, hud: &BtlHud, m: &HudMenu, time: f32, o
     }
 }
 
-/// Target plate (`TargetInfo`, top right): a flat dark frame from (294, 52) to 118 px down, its right edge 20 px past the name (live: 411 for
-/// `Nicolai`, 434 for `Revenant①`), a thin grey rim, the curl ornament at two corners, the letter card or the ally's portrait (305, 63, 34 x 42),
-/// the name at y 64, `HP` at (338, 88), five digit columns from x 357 (`?????` or the value right-aligned at 401), the 62 px gauge at (339, 99)
-/// with a light end cap, and the arrow over the target (red 16 x 24 for enemies, dark blue for allies).
-pub fn draw_plate(g: &mut dyn MenuGfx, hud: &BtlHud, p: &HudTargetPlate, icons: Option<(TextureId, (u32, u32))>) {
+/// Target plate (`TargetInfo`, top right): the packet of `TargetInfo::MakePacket` ([`crate::hud_target::layout`]) -- the gradient fill with the entry-8 frame
+/// pieces, the card, the name at y 63, the `HP` row with the italic digits and the gauge, the MP row / class ring / camera of a photographed enemy and the
+/// status icon rows -- and the arrow over the target (red 16 x 24 for enemies, dark blue for allies).  `time` drives the pulse of the class ring.
+pub fn draw_plate(g: &mut dyn MenuGfx, hud: &BtlHud, p: &HudTargetPlate, icons: Option<(TextureId, (u32, u32))>, time: f32) {
     if p.frame {
-        draw_plate_frame(g, hud, p);
-        // status row (live `i3`): lavender separator at y 113, icons from x 309, 20 px pitch, y 120
-        if p.snapped.is_none() && !p.icons.is_empty() {
-            let c = Rgba::new(0x41, 0x3e, 0x4b, 0x80);
-            let z = Rgba::new(0x41, 0x3e, 0x4b, 0);
-            grad(g, 303.0, 113.0, 30.0, 2.0, z, z, c, c);
-            grad(g, 333.0, 113.0, 70.0, 2.0, c, c, c, c);
-            grad(g, 403.0, 113.0, 22.0, 2.0, c, c, z, z);
-            if let Some((id, size)) = icons {
-                for (k, (kind, frame)) in p.icons.iter().take(4).enumerate() {
-                    let frames = crate::hud_hits::ICON_FRAMES[(*kind as usize).min(crate::hud_hits::icon::COUNT - 1)];
-                    let (cc, r, _) = frames[(*frame).min(frames.len() - 1)];
-                    spr_id(g, id, size, (cc as f32 * 48.0 + 1.0, r as f32 * 56.0 + 1.0, 46.0, 53.0), (309.0 + k as f32 * 21.0, 120.0, 19.0, 23.0), white(0x80), Blend::Alpha);
-                }
-            }
-        }
+        draw_plate_frame(g, hud, p, icons, time);
     }
     // the arrow over the target (live `04g`: red (183,31,26)..(219,86,69), x 248..263, y 157..180; `04e`: dark blue for an ally)
     let (x, y) = p.arrow;
@@ -673,55 +678,62 @@ pub fn draw_plate(g: &mut dyn MenuGfx, hud: &BtlHud, p: &HudTargetPlate, icons: 
     }
 }
 
-fn draw_plate_frame(g: &mut dyn MenuGfx, hud: &BtlHud, p: &HudTargetPlate) {
+fn draw_plate_frame(g: &mut dyn MenuGfx, hud: &BtlHud, p: &HudTargetPlate, icons: Option<(TextureId, (u32, u32))>, time: f32) {
+    use crate::hud_target::{layout, Input, Kind, Prim, Tex};
     let name_w = sh2_menu::gfx::MenuGfx::measure_text(g, 0, p.name.as_bytes()).0;
-    // a photographed enemy's plate is taller (to y 139) and wider (to x 483) for the MP row and the two icons (live `12d`)
-    let (x0, y0, h) = (294.0, 52.0, if p.snapped.is_some() { 87.0 } else if !p.icons.is_empty() { 95.0 } else { 66.0 });
-    let right = (339.0 + name_w + 20.0).max(if p.snapped.is_some() { 483.0 } else { 411.0 });
-    let w = right - x0;
-    let rim = Rgba::new(0x2c, 0x2c, 0x32, 0x80);
-    let fill = Rgba::new(0x04, 0x04, 0x06, 0x74);
-    grad(g, x0, y0, w, h, rim, rim, rim, rim);
-    grad(g, x0 + 1.0, y0 + 1.0, w - 2.0, h - 2.0, fill, fill, fill, fill);
-    spr(g, hud, tex::ORNAMENT, (0.0, 0.0, 36.0, 52.0), (287.0, 46.0, 36.0, 52.0), white(0x80), Blend::Alpha);
-    // the same curl mirrored at the bottom-right corner (the texture's right half is the corner piece of the JP plate, not used by the retail one)
-    spr(g, hud, tex::ORNAMENT, (36.0, 52.0, -36.0, -52.0), (right + 7.0 - 36.0, y0 + h + 6.0 - 52.0, 36.0, 52.0), white(0x80), Blend::Alpha);
-    if p.ally {
-        if let Some(&f) = hud.faces.get(&p.model) {
-            spr_id(g, f, (104, 128), (4.0, 2.0, 96.0, 100.0), (305.0, 63.0, 34.0, 42.0), white(0x80), Blend::Alpha);
-        }
+    let kind = if p.ally {
+        Kind::Party
+    } else if p.snapped.is_some() {
+        Kind::Photo
     } else {
-        let (col, row) = ((p.letter / 4) as f32, (p.letter % 4) as f32);
-        spr(g, hud, tex::LETTERS, (col * 36.0, row * 46.0, 36.0, 46.0), (302.0, 62.0, 36.0, 46.0), white(0x80), Blend::Alpha);
-    }
-    text(g, 339.0, 64.0, &p.name, white(0x80));
-    label(g, hud, 0, 338.0, 88.0);
-    let frac = match p.hp_known {
-        Some((hp, max)) => {
-            // `%5d`: blank leading positions, the digits end at the fifth column
-            number(g, hud, 357.0 + 5.0 * DIGIT_PITCH, 88.0, &hp.max(0).to_string(), hp_colour(hp, max));
-            (hp.max(0) as f32 / max.max(1) as f32).clamp(0.0, 1.0)
-        }
-        None => {
-            number_left(g, hud, 357.0, 88.0, "?????", white(0x80));
-            1.0
-        }
+        Kind::Enemy
     };
-    grad(g, 338.0, 98.0, 64.0, 6.0, Rgba::new(0, 0, 0, 0x78), Rgba::new(0, 0, 0, 0x78), Rgba::new(0, 0, 0, 0x78), Rgba::new(0, 0, 0, 0x78));
-    spr(g, hud, tex::BARS, (0.0, 0.0, 50.0 * frac, 4.0), (339.0, 99.0, 62.0 * frac, 4.0), white(0x80), Blend::Alpha);
-    grad(g, 401.0, 99.0, 1.0, 4.0, Rgba::new(0x58, 0x58, 0x58, 0x80), Rgba::new(0x58, 0x58, 0x58, 0x80), Rgba::new(0x58, 0x58, 0x58, 0x80), Rgba::new(0x58, 0x58, 0x58, 0x80));
-    if let Some((mp, max_mp, element)) = p.snapped {
-        // MP row (label at y 109, gauge at 120), the class ring with the element kanji at (414, 96) and the small portrait card at (458, 95)
-        label(g, hud, 1, 338.0, 109.0);
-        number(g, hud, 357.0 + 5.0 * DIGIT_PITCH, 109.0, &mp.max(0).to_string(), white(0x80));
-        let frac = (mp.max(0) as f32 / max_mp.max(1) as f32).clamp(0.0, 1.0);
-        grad(g, 338.0, 119.0, 64.0, 6.0, Rgba::new(0, 0, 0, 0x78), Rgba::new(0, 0, 0, 0x78), Rgba::new(0, 0, 0, 0x78), Rgba::new(0, 0, 0, 0x78));
-        spr(g, hud, tex::BARS, (52.0, 0.0, 50.0 * frac, 4.0), (339.0, 120.0, 62.0 * frac, 4.0), white(0x80), Blend::Alpha);
-        spr(g, hud, tex::CLASS_RING, (1.0, 0.0, 38.0, 44.0), (414.0, 96.0, 28.0, 26.0), white(0x80), Blend::Alpha);
-        spr(g, hud, tex::ELEMENTS, (1.0 + element.min(6) as f32 * 22.0, 0.0, 19.0, 28.0), (420.0, 97.0, 16.0, 24.0), white(0x80), Blend::Alpha);
-        let (col, row) = ((p.letter / 4) as f32, (p.letter % 4) as f32);
-        spr(g, hud, tex::LETTERS, (col * 36.0, row * 46.0, 36.0, 46.0), (458.0, 95.0, 20.0, 26.0), white(0x80), Blend::Alpha);
+    let (hp, max_hp) = p.hp_known.unwrap_or(p.gauge);
+    let (mp, max_mp, element) = p.snapped.unwrap_or((0, 0, 6));
+    // `TargetInfo::Polling`: the pulse phase advances 2 rad / s and wraps at pi
+    let phase = (time * 2.0 + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
+    let input = Input { kind, hp_visible: p.hp_known.is_some() || p.ally, name_w, letter: p.letter, model: p.model, hp, max_hp, mp, max_mp, element, icons: p.icons.len().min(22), phase };
+    let rgba = |c: [u8; 4]| Rgba::new(c[0], c[1], c[2], c[3]);
+    // flat quads: the GS colour is straight 0..255, the port's convention is 0x80 = 1.0
+    let flat = |c: [u8; 4]| Rgba::new(c[0] / 2, c[1] / 2, c[2] / 2, c[3]);
+    for prim in layout(&input) {
+        match prim {
+            Prim::Flat { pos, col } => {
+                let v = |i: usize| Vertex { pos: Vec2::new(pos[i].0, pos[i].1), uv: Vec2::ZERO, color: flat(col[i]) };
+                g.draw(DrawCmd::Quad { tex: None, v: [v(0), v(1), v(2), v(3)], blend: Blend::Alpha });
+            }
+            Prim::Sprite { tex, uv, dst, rgba: c } => {
+                let src = (uv.0, uv.1, uv.2 - uv.0, uv.3 - uv.1);
+                let d = (dst.0, dst.1, dst.2 - dst.0, dst.3 - dst.1);
+                match tex {
+                    Tex::Btl(k) => spr(g, hud, k as usize, src, d, rgba(c), Blend::Alpha),
+                    Tex::Card(m) => {
+                        if let Some(&f) = hud.card_faces.get(&m) {
+                            spr_id(g, f, (CARD_W as u32, CARD_H as u32), src, d, rgba(c), Blend::Alpha);
+                        }
+                    }
+                }
+            }
+            Prim::Strip { tex: Tex::Btl(k), v, rgba: c } => {
+                if let Some((id, (tw, th))) = hud.t(k as usize) {
+                    let vt = |i: usize| Vertex { pos: Vec2::new(v[i].0, v[i].1), uv: Vec2::new(v[i].2 / tw as f32, v[i].3 / th as f32), color: rgba(c) };
+                    for q in 0..3 {
+                        g.draw(DrawCmd::Quad { tex: Some(id), v: [vt(q * 2), vt(q * 2 + 1), vt(q * 2 + 2), vt(q * 2 + 3)], blend: Blend::Alpha });
+                    }
+                }
+            }
+            Prim::Strip { .. } => {}
+            Prim::Icon { n, x, y } => {
+                if let (Some((kind, frame)), Some((id, size))) = (p.icons.get(n), icons) {
+                    let frames = crate::hud_hits::ICON_FRAMES[(*kind as usize).min(crate::hud_hits::icon::COUNT - 1)];
+                    let (cc, r, _) = frames[(*frame).min(frames.len() - 1)];
+                    spr_id(g, id, size, (cc as f32 * 48.0 + 1.0, r as f32 * 56.0 + 1.0, 46.0, 53.0), (x, y, 19.0, 23.0), white(0x80), Blend::Alpha);
+                }
+            }
+        }
     }
+    // the name (the retail packet draws a pre-rendered name image at 0.8 width; the port draws the game font)
+    text(g, 339.0, 64.0, &p.name, white(0x80));
 }
 
 /// The Tarot Card draw (no other HUD is shown).  Cards 72 x 144 at a 120 px pitch from y 150 (live `10e`: cards at x 165..237 / 285..356 ...),
@@ -801,10 +813,11 @@ pub fn apply_demo(v: &mut HudView, demo: &str) {
             v.menu = Some(HudMenu { targets: Some((targets, 0)), help: "Select skill target.".into(), ..Default::default() });
             v.show_menu = true;
             let snapped = (demo == "snapped").then_some((0, 20, 2));
-            v.plate = Some(HudTargetPlate { name: "Revenant\u{2460}".into(), letter: 0, hp_known: snapped.map(|_| (17, 17)), ally: false, model: 0, frame: true, blue: demo == "snap", snapped, arrow: (256.0, 160.0), extra: vec![], icons: vec![] });
+            v.plate = Some(HudTargetPlate { name: "Revenant\u{2460}".into(), letter: 0, hp_known: snapped.map(|_| (17, 17)), gauge: (17, 17), ally: false, model: 0, frame: true, blue: demo == "snap", snapped, arrow: (256.0, 160.0), extra: vec![], icons: vec![] });
             v.party.retain(|p| p.acting);
             for t in v.turns.iter_mut().filter(|t| t.enemy && t.letter == 0) {
                 t.outline = Some(if demo == "snap" { OUTLINE_ALLY } else { OUTLINE_ENEMY });
+                t.sel = if demo == "snap" { 1 } else { 2 };
             }
         }
         "icons" => {
@@ -888,6 +901,30 @@ pub fn draw_result(g: &mut dyn MenuGfx, hud: &BtlHud, r: &HudResult) {
     }
 }
 
+/// Turn Priority card texture size (the face area inside the 37 x 50 capsule of entry 19, which starts one texel in).
+pub const CARD_W: usize = 36;
+pub const CARD_H: usize = 46;
+
+/// A card portrait: the `FI_` face (texels (4,2)-(100,102)) scaled to 36 x 46 with the alpha of the capsule of entry 19 (so the card has the slanted
+/// capsule outline).  `face` = (rgba, w, h), `capsule` = (rgba, w).
+pub fn card_face_pixels(face: (&[u8], usize, usize), capsule: (&[u8], usize)) -> Vec<u8> {
+    let (fp, fw, fh) = face;
+    let (cp, cw) = capsule;
+    let mut out = vec![0u8; CARD_W * CARD_H * 4];
+    for y in 0..CARD_H {
+        for x in 0..CARD_W {
+            let sx = (4.0 + (x as f32 + 0.5) / CARD_W as f32 * 96.0).clamp(0.0, fw as f32 - 1.0) as usize;
+            let sy = (2.0 + (y as f32 + 0.5) / CARD_H as f32 * 100.0).clamp(0.0, fh as f32 - 1.0) as usize;
+            let s = (sy * fw + sx) * 4;
+            let a = cp[((y + 1) * cw + x + 1) * 4 + 3];
+            let o = (y * CARD_W + x) * 4;
+            out[o..o + 3].copy_from_slice(&fp[s..s + 3]);
+            out[o + 3] = a;
+        }
+    }
+    out
+}
+
 /// Slide-in distances / speed of the HUD elements at the start of a command phase (`ParamDisp` 300 px from the right, `TurnOrderDisp` 96 px from
 /// above, both at 2250 px/s; the command window follows from the left about 0.3 s later -- live `07h`..`07k`).
 pub const SLIDE_SPEED: f32 = 2250.0;
@@ -910,7 +947,12 @@ pub fn draw_hud(g: &mut dyn MenuGfx, hud: &BtlHud, v: &HudView, icons: Option<(T
         draw_tarot(g, hud, t, v.time);
         return;
     }
-    if v.show_plate {
+    // the plate slides by itself (`TurnOrderDisp::Polling`, state kept by the runtime); a view without a driven plate opens it by the age
+    if v.turn_disp_driven {
+        if !v.turn_disp.hidden() {
+            draw_turn_priority(g, hud, v, 0.0);
+        }
+    } else if v.show_plate {
         draw_turn_priority(g, hud, v, -slide(SLIDE_TURN, v.hud_age));
     }
     if v.show_party {
@@ -922,7 +964,7 @@ pub fn draw_hud(g: &mut dyn MenuGfx, hud: &BtlHud, v: &HudView, icons: Option<(T
         }
     }
     if let (true, Some(p)) = (v.show_menu, &v.plate) {
-        draw_plate(g, hud, p, icons);
+        draw_plate(g, hud, p, icons, v.time);
     }
     if v.show_plate && !v.combo.is_empty() {
         draw_combo(g, hud, &v.combo);
@@ -992,9 +1034,16 @@ pub fn load_hud(
                 }
             }
         }
+        // the capsule of entry 19 (texels (1,1)-(37,47) are the card face area) cuts the card portraits
+        let capsule = disc.read("BTLDATA/BTL_000.BIN").ok().and_then(|b| crate::stage::sections(&b).into_iter().filter(|(t, _)| t == "tex").nth(19).and_then(|(_, sec)| sh2_gfx::texture::decode_jrc(sec, 0, 0).ok()));
         for model in 0..80u32 {
             let Ok(b) = disc.read(&format!("MENU/FACE/FI_{model:03}.TEX")) else { continue };
             if let Some(i) = sh2_menu::plugin::decode_tex_file(&b) {
+                if let Some(c) = capsule.as_ref().filter(|c| c.width >= 38 && c.height >= 48) {
+                    let px = card_face_pixels((&i.pixels, i.width as usize, i.height as usize), (&c.pixels, c.width as usize));
+                    let id = textures.add(&mut images, CARD_W as u32, CARD_H as u32, px);
+                    hud.card_faces.insert(model, id);
+                }
                 let id = textures.add(&mut images, i.width, i.height, i.pixels);
                 hud.faces.insert(model, id);
             }

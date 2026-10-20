@@ -34,6 +34,10 @@ pub struct Player {
     /// visible `yaw` turns towards it at 2 pi * dt rad/s (PINE-measured, notes/integration/pine_us_refinement.md)
     pub move_yaw: f32,
     pub moving: bool,
+    /// xz distance moved in the last 60 Hz tick (pad or script move): drives the gait motion's playback rate
+    pub step: f32,
+    /// distance a script move (`AutoMove` / `PathMove` of the controlled model) walked this tick, consumed by the next [`FieldSim::tick`]
+    pub script_step: f32,
     /// walking animation phase (render only)
     pub anim: f32,
 }
@@ -135,7 +139,7 @@ impl FieldSim {
         let mut sim = FieldSim {
             map: map.to_string(),
             field,
-            player: Player { pos, yaw, gait: Gait::Walk, move_yaw: yaw, moving: false, anim: 0.0 },
+            player: Player { pos, yaw, gait: Gait::Walk, move_yaw: yaw, moving: false, step: 0.0, script_step: 0.0, anim: 0.0 },
             enc,
             enc_table: [30, 40, 50],
             cur_box: -1,
@@ -263,7 +267,9 @@ impl FieldSim {
     pub fn tick(&mut self, real: u16, press: u16, frozen: bool) -> Vec<SimEvent> {
         self.ticks += 1;
         let mut ev = Vec::new();
-        self.player.moving = false;
+        // the script VM runs before this tick: a script move of the controlled model this tick keeps it walking
+        self.player.step = std::mem::take(&mut self.player.script_step);
+        self.player.moving = self.player.step > 0.01;
         if !frozen {
             self.control(real);
             // event boxes (walk-on)
@@ -363,6 +369,7 @@ impl FieldSim {
         let moved = ((self.player.pos[0] - old[0]).powi(2) + (self.player.pos[2] - old[2]).powi(2)).sqrt();
         if moved > 0.01 {
             self.player.moving = true;
+            self.player.step = moved;
             self.player.anim += moved * 0.12;
             self.walked += moved;
             // JP UpdateMoveDistance: only counts while the encounter rate is non-zero

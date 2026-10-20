@@ -79,6 +79,17 @@ pub struct RingView {
     pub in_zone: bool,
     /// pointer angle (degrees, clockwise from 12 o'clock)
     pub angle: f32,
+    /// seconds the closing shatter (`CutJRing` / `CrackJRing`) has been running, if it is
+    pub shatter: Option<f32>,
+    /// a `ComboTrial` label (prompt / verdict) is on screen
+    pub trial: bool,
+    /// the combo trial is waiting for a button and the glyph of it is facing the player: the pad bit that answers it
+    pub combo_press: Option<u16>,
+}
+
+/// Dev aid `SH2_RING_END_OK=<kind>`: the closing animation of a successful ring (retail 4 = `CutJRing`; 3 = `CrackJRing`) to look at either one.
+fn dev_end_ok() -> i16 {
+    std::env::var("SH2_RING_END_OK").ok().and_then(|v| v.parse().ok()).unwrap_or(4)
 }
 
 /// Public view of the battle for tests / the autoplayer.
@@ -188,7 +199,7 @@ impl RingRun {
         let mut r = JRing::new(0);
         r.custom_data = custom.map(|raw| jring::JrCustom { raw });
         r.data_loaded = true;
-        r.set_mode(5, jring::ring_type::SINGLE, 1, 4, 3);
+        r.set_mode(5, jring::ring_type::SINGLE, 1, dev_end_ok(), 3);
         r.center = (1024.0 / 3.0, 224.0);
         for &(start, width) in steps {
             r.add_step_area(start, width, None, 0);
@@ -214,7 +225,7 @@ impl RingRun {
         let mut r = JRing::new(0);
         r.custom_data = custom.map(|raw| jring::JrCustom { raw });
         r.data_loaded = true;
-        r.set_mode(5, jring::ring_type::SINGLE, 1, 4, 3);
+        r.set_mode(5, jring::ring_type::SINGLE, 1, dev_end_ok(), 3);
         // live retail `JRing+0x68/+0x6c` = (341.33, 224): the ring sits at two thirds of the width for every attack / spell ring seen
         r.center = (1024.0 / 3.0, 224.0);
         for (i, &(start, width, strike)) in areas.iter().enumerate() {
@@ -241,7 +252,7 @@ impl RingRun {
         let mut rng = XorShift(seed | 1);
         let mut r = JRing::new(0);
         r.data_loaded = true;
-        r.set_mode(5, jring::ring_type::SINGLE, 1, 4, 3);
+        r.set_mode(5, jring::ring_type::SINGLE, 1, dev_end_ok(), 3);
         r.center = (1024.0 / 3.0, 224.0);
         for &(start, width, tag) in areas {
             r.add_step_area(start, width, None, tag);
@@ -282,7 +293,13 @@ impl RingRun {
             && (r.cur_area as usize) < jring::MAX_AREAS
             && r.areas[r.cur_area as usize].kind.is_some()
             && jring::easy_area_hit_check(angle, r.areas[r.cur_area as usize].start, r.areas[r.cur_area as usize].width);
-        RingView { active: true, in_zone, angle }
+        let combo_press = (r.state == jring::state::COMBO && r.sub == 2 && r.e8 >= 2).then(|| match r.combo_button {
+            3 => jring::PAD_SQUARE,
+            2 => jring::PAD_TRIANGLE,
+            1 => jring::PAD_CROSS,
+            _ => jring::PAD_CIRCLE,
+        });
+        RingView { active: true, in_zone, angle, shatter: r.shard.as_ref().map(|s| s.elapsed), trial: r.trial_a.is_some() || r.trial_b.is_some(), combo_press }
     }
 }
 
@@ -351,6 +368,8 @@ pub struct BattleRuntime {
     /// set by `models::drive_battle_models` every frame: the attacker is still running to / swinging at its target, the rules engine must not resolve the
     /// attack before the damage frame (`MotionEventCallBack`, first `MosEvent` of the swing)
     pub anim_hold: bool,
+    /// the attacker's first bullet (`Bullet1`, class 0x16 hit rows) is still flying: the hit resolves when it lands (`bullets::drive_bullets`)
+    pub bullet_hold: bool,
     /// seconds of every hit of the swing in progress after its first hit (`models::drive_battle_models`); the damage results after the first one are shown then
     pub hit_offsets: Vec<f32>,
     /// index of the next damage result of the action (0 = first)
@@ -410,6 +429,9 @@ pub struct BattleRuntime {
     pub union_turn: bool,
     /// tick at which the HUD appeared for the current command phase (`hud::draw_hud` slide-in), `None` outside command phases
     pub hud_since: Option<u64>,
+    /// the retail `TurnOrderDisp` object (slide state, scale, glow phase) and the tick it was last polled at (`hud_turn`)
+    pub turn_disp: crate::hud_turn::TurnOrderDisp,
+    pub turn_disp_tick: u64,
     /// fusion id per fighter while fused (the party panel / turn cards show the fusion's name and portrait)
     pub fused: Vec<Option<i32>>,
     /// the win pose motion (0x33) was requested by the win sequence
@@ -690,6 +712,7 @@ fn enter_battle(
         ring_done: false,
         attack_started: false,
         anim_hold: false,
+        bullet_hold: false,
         anim_busy: false,
         hit_offsets: vec![],
         dmg_idx: 0,
@@ -736,6 +759,8 @@ fn enter_battle(
         union_playing: false,
         union_turn: false,
         hud_since: None,
+        turn_disp: crate::hud_turn::TurnOrderDisp::new(),
+        turn_disp_tick: 0,
         fused: vec![None; n],
         win_pose: false,
         win_playing: false,
@@ -1578,6 +1603,9 @@ fn consume_events(rt: &mut BattleRuntime, text: &BtlText) -> Option<(Option<rule
                 rt.wait = rt.wait.max(2.3);
             }
             BattleEvent::SanityDrop { .. } | BattleEvent::PhaseChanged(_) | BattleEvent::ComboLink { .. } => {}
+            // a wall / bystander hit of a knock-down slide: its number was shown the frame the slide reported it (`wall_involve::drive_wall_involve`, the turn
+            // flow may not consume events while the slide holds the action open)
+            BattleEvent::Bump { .. } => {}
             // party-side engine reports (BP): shown by their presentation code when it lands; ignored here meanwhile
             // round 5 BP hook: floating MP / SP / status texts, "Miss", the berserk / paralysed messages
             BattleEvent::Party(p) => {
@@ -1618,6 +1646,24 @@ fn consume_events(rt: &mut BattleRuntime, text: &BtlText) -> Option<(Option<rule
         Some((victory, defeat, escaped))
     } else {
         None
+    }
+}
+
+/// The number of a wall / bystander hit of a knock-down slide (`EffectMesCall` of `WallHitDamageSet` / `InvolveDamageSet`): the floating number and the hit
+/// counters, no weapon sparks (the wall effect model and the sound are started by the caller).
+pub(crate) fn show_bump(rt: &mut BattleRuntime, text: &BtlText, target: usize, amount: i32) {
+    let (t, color) = if amount < 0 {
+        (format!("+{}", -amount), Rgba::new(0x40, 0xff, 0x60, 0x80))
+    } else if amount == 0 {
+        (text.mes(8).to_string(), Rgba::new(0xc0, 0xc0, 0xc0, 0x80))
+    } else {
+        (format!("{amount}"), Rgba::NEUTRAL)
+    };
+    rt.floaters.push(Floater { target, text: t, t: 0.0, color });
+    let is_enemy = rt.setup.fighters.get(target).map(|f| f.is_enemy).unwrap_or(true);
+    rt.hits.on_damage(target, amount, false, is_enemy, text.mes(8), text.mes(7), text.mes(11));
+    if let Some(a) = rt.anims.get_mut(target) {
+        a.hit = 0.4;
     }
 }
 
@@ -1701,6 +1747,7 @@ pub fn battle_tick(
         f.t += dt;
     }
     rt.floaters.retain(|f| f.t < 1.3);
+    rt.hits.select_mask = rt.turn_disp.select;
     rt.hits.tick(dt);
     for d in rt.delayed_dmg.iter_mut() {
         d.0 -= dt;
@@ -2249,6 +2296,27 @@ fn run_battle(rt: &mut BattleRuntime, pad: &GamePad, ring_view: &mut RingView, k
                     ring.ring.make_gamble_area();
                 }
             }
+            // `CBattle` ring set-up (JP CBattle.c 8660): a combo member with partners still waiting (`wTurnPendMask != 0`) gets the combo trial after its last hit
+            // (`JRing::SetCombo(window)`): 0.9 / 0.75 / 0.6 / 0.5 s by how many members already acted (`nComboCnt`) plus the mean friendship of the waiting members
+            // (`PCParam` affinity / 100) / 500
+            if actor_is_pc && !rt.battle.combo_queue.is_empty() && std::env::var_os("SH2_COMBO_TRIAL").map_or(true, |v| v != "off") {
+                if let Some(a) = rt.battle.actor {
+                    let done = rt.battle.combo.len().saturating_sub(rt.battle.combo_queue.len() + 1);
+                    let base = match done {
+                        0 => 0.9,
+                        1 => 0.75,
+                        2 => 0.6,
+                        _ => 0.5,
+                    };
+                    let n = rt.battle.combo_queue.len() as f32;
+                    let friends: f32 = rt.battle.combo_queue.iter().map(|&m| rt.battle.host.friend(a, m) as f32 / 100.0).sum();
+                    ring.ring.set_combo(base + friends / (n * 500.0));
+                }
+                // `nComboCnt != 0`: `JRing+0x42 |= 0x80` (no end wait) for the members after the leader
+                if rt.battle.combo.len() > rt.battle.combo_queue.len() + 1 {
+                    ring.ring.no_end_wait = true;
+                }
+            }
             *ring_view = ring.view();
             rt.ring = Some(ring);
         }
@@ -2268,6 +2336,8 @@ fn run_battle(rt: &mut BattleRuntime, pad: &GamePad, ring_view: &mut RingView, k
             }
             // the animations of the action play out before the engine moves on (retail: the `BtlChrSequence` states finish before `TurnEnd`)
             if rt.battle.phase == Phase::Attack && rt.anim_hold {
+                // the hits of a ranged attack land while it is held (one per bullet, `Battle::ranged_hit`)
+                let _ = consume_events(rt, cx.text);
                 return;
             }
             if rt.anim_busy && matches!(rt.battle.phase, Phase::ActionDone | Phase::Death | Phase::TurnSelect | Phase::Win | Phase::Lose) {
@@ -2533,6 +2603,17 @@ fn arrow_pos(rt: &BattleRuntime, t: usize) -> Option<(f32, f32)> {
     Some((a.centre.x, top - 4.0 + bob - 24.0))
 }
 
+/// `TurnOrderDisp::MakePacket` colour rule of a card / the acting face: a party member with 0 SP is berserk (red), a fighter with 0 HP is yellow.
+fn turn_tint(f: &crate::flow::Fighter) -> crate::hud_turn::Tint {
+    if f.hp <= 0 {
+        crate::hud_turn::Tint::Down
+    } else if !f.is_enemy && f.sp <= 0 {
+        crate::hud_turn::Tint::Berserk
+    } else {
+        crate::hud_turn::Tint::Normal
+    }
+}
+
 /// Everything the HUD shows, from the battle state.
 fn build_hud_view(rt: &BattleRuntime, cx: &Cx, session: &GameSession) -> crate::hud::HudView {
     use crate::hud::*;
@@ -2566,7 +2647,7 @@ fn build_hud_view(rt: &BattleRuntime, cx: &Cx, session: &GameSession) -> crate::
         }
         for i in order.into_iter().take(9) {
             if let Some(f) = fighters.get(i).and_then(|f| f.as_ref()) {
-                v.turns.push(HudTurn { enemy: f.is_enemy, letter: letter(i), model: model_of(i), fighter: i, outline: None });
+                v.turns.push(HudTurn { enemy: f.is_enemy, letter: letter(i), model: model_of(i), fighter: i, outline: None, sel: 0, tint: turn_tint(f) });
             }
         }
     }
@@ -2624,22 +2705,28 @@ fn build_hud_view(rt: &BattleRuntime, cx: &Cx, session: &GameSession) -> crate::
                 None => (false, None, None),
             };
             let frame = !matches!(m.page(), crate::ui::Page::Target { then: crate::ui::Pending::Link, .. });
-            v.plate = Some(HudTargetPlate { name: ename(t), letter: letter(t), hp_known, ally, model: model_of(t), frame, blue: false, snapped, arrow: arrow_pos(rt, t).unwrap_or((p.x, p.y - 52.0)), icons: rt.hits.icons.get(t).filter(|s| s.kind >= 0).map(|s| vec![(s.kind as u8, s.frame)]).unwrap_or_default(), extra: crate::area::current_members(rt).into_iter().filter(|&i| i != t).filter_map(|i| arrow_pos(rt, i)).map(|(x, y)| (x, y + 5.0)).collect() });
+            v.plate = Some(HudTargetPlate { name: ename(t), letter: letter(t), hp_known, gauge: fighters.get(t).and_then(|f| f.as_ref()).map(|f| (rt.shown_hp(t, f.hp, f.max_hp), f.max_hp)).unwrap_or((1, 1)), ally, model: model_of(t), frame, blue: false, snapped, arrow: arrow_pos(rt, t).unwrap_or((p.x, p.y - 52.0)), icons: rt.hits.icons.get(t).filter(|s| s.kind >= 0).map(|s| vec![(s.kind as u8, s.frame)]).unwrap_or_default(), extra: crate::area::current_members(rt).into_iter().filter(|&i| i != t).filter_map(|i| arrow_pos(rt, i)).map(|(x, y)| (x, y + 5.0)).collect() });
             // the target's cards get a coloured outline; the party panel keeps the acting row and (for an ally target) the target's row
             for turn in v.turns.iter_mut().filter(|turn| turn.fighter == t) {
                 turn.outline = Some(if ally { OUTLINE_ALLY } else { OUTLINE_ENEMY });
+                turn.sel = if ally { 1 } else { 2 };
+            }
+            // `SetSelectChr` of the target page: the focused fighter and the other members of its area
+            for i in std::iter::once(t).chain(crate::area::current_members(rt)) {
+                v.select |= (if ally { 1u32 } else { 2 }) << ((i as u32 & 0xf) << 1);
             }
             v.party.retain(|p| p.acting || (ally && p.fighter == t));
         }
         v.menu = Some(hm);
     }
-    // an enemy's turn: its cards outlined red (live `06c`)
-    if let Some((_, true, _)) = v.actor_model {
-        for turn in v.turns.iter_mut().filter(|turn| Some(turn.fighter) == actor) {
-            turn.outline = Some(OUTLINE_ENEMY);
-        }
-    }
+    // `TurnOrderDisp` keeps no marker on an acting enemy (live `06c` / `13a`: its cards only look red because of the letter art); the actor's glow is orange
     v.time = rt.ticks as f32 / 60.0;
+    // `TurnOrderDisp` (`hud_turn`): the retail object state, the acting fighter's tint and the Combo members still to act
+    v.turn_disp = rt.turn_disp;
+    v.turn_disp_driven = true;
+    v.actor_fighter = actor;
+    v.actor_tint = actor.and_then(|a| fighters.get(a).and_then(|f| f.as_ref())).map(turn_tint).unwrap_or_default();
+    v.combo_pending = if running { rt.battle.combo_queue.iter().fold(0u32, |m, &c| m | 1 << (c as u32 & 31)) } else { 0 };
     v.tarot = tarot_hud(rt);
     if let Ok(demo) = std::env::var("SH2_BATTLE_HUD_DEMO") {
         apply_demo(&mut v, &demo);
@@ -2686,7 +2773,18 @@ fn draw_battle_ui(rt: &mut BattleRuntime, canvas: &mut UiCanvas, cx: &Cx, hud: O
         } else {
             rt.hud_since = None;
         }
+        // `TurnOrderOpen` / `TurnOrderClose` (`CBattle`), the scale of the target pages, and the frames of `TurnOrderDisp::Polling` since the last call
+        {
+            let target_page = rt.menu.as_ref().map(|m| matches!(m.page(), crate::ui::Page::Target { then, .. } if !matches!(then, crate::ui::Pending::Link))).unwrap_or(false);
+            // the frames since the last call run first, so a plate opened now starts at its slide offset
+            let frames = rt.ticks.saturating_sub(rt.turn_disp_tick).min(12) as u32;
+            rt.turn_disp_tick = rt.ticks;
+            rt.turn_disp.set_target_page(target_page);
+            rt.turn_disp.poll_frames(frames);
+            rt.turn_disp.want_open(rt.hud_since.is_some());
+        }
         let v = build_hud_view(rt, cx, session);
+        rt.turn_disp.select = v.select;
         let mut g = canvas.begin(HUD_LAYER);
         // the textured Judgement Ring (`JRing::MakePacket`, under the HUD) and its pointer trail (`hud_hits`)
         if let Some(a) = art.filter(|a| a.ring_ok()) {
@@ -3245,6 +3343,30 @@ impl Plugin for BattlePlugin {
                 .init_resource::<crate::effects_bridge::BtlEffArt>()
                 .init_resource::<crate::effects_bridge::WeaponTrails>() // FX round 5 hook: weapon trails (`SwordLocusEffect1` / `BlowLocusEffect1`)
                 .add_systems(Update, crate::effects_bridge::drive_weapon_trails.after(crate::models::follow_weapons).run_if(in_state(Scene::Battle)).run_if(resource_exists::<sh2_gfx::bevy::Sh2Disc>))
+                .init_resource::<crate::bullets::Bullets>() // projectiles of class 0x16 hit rows (`Bullet1`)
+                .init_resource::<crate::down_smoke::SmokeDraw>() // `DownSmoke` dust: launch / slide spawners
+                .add_systems(OnEnter(Scene::Battle), crate::down_smoke::reset_smoke)
+                .add_systems(Update, crate::down_smoke::drive_smoke.after(crate::models::follow_weapons).run_if(in_state(Scene::Battle)).run_if(resource_exists::<sh2_gfx::bevy::Sh2Disc>))
+                .init_resource::<crate::death_glow::DeathGlow>() // `NormalDeathEfct` glow over a dissolving monster
+                .add_systems(OnEnter(Scene::Battle), crate::death_glow::reset_death_glow)
+                .add_systems(Update, crate::death_glow::drive_death_glow.after(crate::models::follow_weapons).run_if(in_state(Scene::Battle)).run_if(resource_exists::<sh2_gfx::bevy::Sh2Disc>))
+                .init_resource::<crate::combo_form::ComboFormDraw>() // `ComboForm` link-area rings on the floor
+                .add_systems(OnEnter(Scene::Battle), crate::combo_form::reset_combo_form)
+                .add_systems(Update, crate::combo_form::drive_combo_form.after(crate::models::follow_weapons).run_if(in_state(Scene::Battle)).run_if(resource_exists::<sh2_gfx::bevy::Sh2Disc>))
+                .init_resource::<crate::attribute_glow::AttributeGlows>() // the elemental weapon glow of the status 0x23 (`*AddAttribute1`)
+                .add_systems(OnEnter(Scene::Battle), crate::attribute_glow::reset_attribute_glow)
+                .add_systems(Update, crate::attribute_glow::dev_inject_status.before(crate::attribute_glow::drive_attribute_glow).run_if(in_state(Scene::Battle)))
+                .add_systems(Update, crate::attribute_glow::drive_attribute_glow.after(crate::models::follow_weapons).run_if(in_state(Scene::Battle)).run_if(resource_exists::<sh2_gfx::bevy::Sh2Disc>))
+                .init_resource::<crate::break_effects::BreakFx>() // `CmbBreak` banner + `BreakBBox` stone chips (notes/integration/break_effects.md)
+                .add_systems(OnEnter(Scene::Battle), crate::break_effects::reset_break_fx)
+                .add_systems(Update, crate::break_effects::drive_break_fx.after(crate::models::follow_weapons).before(crate::death_glow::drive_death_glow).run_if(in_state(Scene::Battle)).run_if(resource_exists::<sh2_gfx::bevy::Sh2Disc>))
+                .add_plugins(crate::hit_impact::HitImpactPlugin) // `HitImpact` combo finisher shock wave (screen pass)
+                .init_resource::<crate::hit_impact::HitImpacts>()
+                .add_systems(OnEnter(Scene::Battle), crate::hit_impact::reset_hit_impacts)
+                .add_systems(Update, crate::hit_impact::drive_hit_impact.after(crate::models::follow_weapons).run_if(in_state(Scene::Battle)).run_if(resource_exists::<sh2_gfx::bevy::Sh2Disc>))
+                .add_systems(Update, crate::bullets::drive_bullets.after(crate::models::follow_weapons).run_if(in_state(Scene::Battle)).run_if(resource_exists::<sh2_gfx::bevy::Sh2Disc>))
+                // wall hits / bystander bumps of the knock-down slides (`WallHitDamageSet`, `InvolveHitCheck`): right after the models moved
+                .add_systems(Update, crate::wall_involve::drive_wall_involve.after(crate::models::drive_battle_models).before(crate::effects_bridge::effmdl_battle_hooks).run_if(in_state(Scene::Battle)).run_if(resource_exists::<sh2_gfx::bevy::Sh2Disc>))
                 .add_systems(Update, (crate::effects_bridge::effmdl_battle_hooks, crate::effects_bridge::drive_effmdls).chain().after(crate::effects_bridge::apply_fx_actor_events).before(sh2_gfx::bevy::model::animate_models).run_if(in_state(Scene::Battle)))
                 .add_systems(Update, crate::effects_bridge::btlin_battle_stop)
                 .add_systems(OnEnter(Scene::Battle), spawn_battle_scene.after(enter_battle))

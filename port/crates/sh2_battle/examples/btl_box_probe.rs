@@ -8,5 +8,12 @@ fn main() {
         let secs = sh2_battle::stage::sections(&b);
         let bx = secs.iter().find(|s| s.0 == "bbx").and_then(|s| sh2_battle::formation::ChrBox::parse(s.1));
         println!("{n}: {bx:?} radius {:?}", bx.map(|b| b.radius()));
+        if std::env::var_os("BBX_DUMP").is_some() {
+            if let Some(s) = secs.iter().find(|s| s.0 == "bbx") {
+                let d = s.1;
+                println!("  bbx {} bytes: {:02x?}", d.len(), &d[..d.len().min(0x100)]);
+                println!("  text: {:?}", String::from_utf8_lossy(&d[..d.len().min(0x100)]));
+            }
+        }
     }
 }

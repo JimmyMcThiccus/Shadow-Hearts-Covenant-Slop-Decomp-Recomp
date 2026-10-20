@@ -70,6 +70,6 @@ Dev aids: `SH2_BATTLE_PARTY_HP=<n>[,..]`, `SH2_BATTLE_KO=<chr>@<s>`, `SH2_BATTLE
 ## Open / next
 
 * Hit reaction by the real knock-back class (needs the US `HitSet` and its state numbering), `defb`, `koda`, blow-away chains for strong hits.
-* `DownHitSmokeCall` dust, `BreakBBox` (petrify), real `NormalDeathEfct` model; `HomingMoveEX` 8 degree stepping and speed profile; escape movement.
+* `DownHitSmokeCall` dust (done: down_smoke.md), `BreakBBox` (done for a petrified monster: break_effects.md), real `NormalDeathEfct` model; `HomingMoveEX` 8 degree stepping and speed profile; escape movement.
 * Weapon visibility rules (`WeaponShow` per motion; only the character's own `Visible` atomics are honoured).
 * The live idle pose of monsters (Revenant height question, requests.md).

@@ -94,7 +94,7 @@ cargo run -p sh2_battle --example fx_dump -- <JP disc> 83 60  # per tick camera 
   to the human form when the +50 % boost status is gone.
 * Link (連携): `MenuEvent::Link` -> `Phase::Link`: partner chooses and acts, then the leader (`Battle::combo`, `combo_queue`, `BattleEvent::ComboLink`); AI conditions 0x25 / 0x34 /
   0x35 see the pending state through `BtlHost::combo_pend / combo_cnt`; friendship bonuses need `PCParam` affinities (not wired: `Host` has no hook for them).  ComboForm / CmbBreak
-  visuals are not drawn.
+  visuals: see combo_form.md / break_effects.md (2026-10-19).
 * AI: 0x1b exact via `actions::effect_check`, 0x26 via `BtlHost::combo_target`, 0x17-0x19 = bits of the never-written flag word.
 * SE ids: menu = SYSREG (cursor 0, decide 2, cancel 3, buzzer 4), hits = SYSBTL 0x1000 (0x1005 for critical hits), effect sounds from the EFMG banks.
 
@@ -131,8 +131,7 @@ cargo run -p sh2_battle --example fx_dump -- <JP disc> 83 60  # per tick camera 
   (`mult += friendship * 0.2 / 10000`, only inside a Link slot); spells cast inside a combo get it too; `BtlHost::{aff, pc_ids}` hold the `PCParam+0x84` tables
   (record offset `0x48`, 12 x i16) loaded from the save at battle start, grown by 100 for both members when an item / spell / skill is used on another PC, written back
   at the end (`plugin::write_back_friendship`).  Test `flow::tests::friendship_boosts_only_combo_damage`.  Not done: the combo-magic phase sum `friendship / 200`.
-* **ComboForm**: `ui::draw_combo_form` (LINK panel: members in action order, acting one highlighted, friendship bar).  **CmbBreak / BreakBBox**: a defeated enemy breaks into 16
-  shards (`models::Shard`) -- a procedural stand-in, the real class splits the model by its `bbx` boxes.
+* **ComboForm**: `ui::draw_combo_form` (LINK panel: members in action order, acting one highlighted, friendship bar).  **CmbBreak / BreakBBox / HitImpact**: ported 2026-10-19 (break_effects.md): the "Combo Break!" banner for a missed non-final combo member, the finisher shock wave, and the stone-chip shatter of a petrified monster (the old "16 shards" stand-in is gone).
 * **RingCustom** (menu agent's `CmdRingCustom`): the 20 byte `JRCUSTOM` table lives in the `BTL0` party record `0x60..0x74` (hits `0x74`, type `0x75`, auto `0x76`);
   `plugin::{ring_custom, ring_settings}` read it, `RingRun::start_areas_custom` hands it to `JRing::custom_data` (`CustomConvert` widens / narrows zone and strike tail per
   hit).  Hit count, ring type (practice / technical / gamble) and auto ring are readable (`ring_settings`) but not applied.

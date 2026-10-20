@@ -352,6 +352,11 @@ impl WorldMap {
         }
     }
 
+    /// Retail `+0x190`: the world links (L1 / R1, back) work for this visit (`mask & extra != 0`), so the screen shows their button hint.
+    pub fn shoulder_hint(&self) -> bool {
+        self.retail && self.info.links.is_some() && (self.info.mask as u32 & self.extra) != 0
+    }
+
     pub fn visible_count(&self) -> usize {
         self.maps.iter().filter(|m| m.state != 3).count()
     }

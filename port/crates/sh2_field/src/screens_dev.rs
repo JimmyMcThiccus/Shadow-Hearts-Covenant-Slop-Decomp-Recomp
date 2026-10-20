@@ -265,13 +265,24 @@ fn dev_driver(
             b.copy_from_slice(&v.to_le_bytes());
         }
         if dev.kind == "worldmap" && sh2_core::boot::is_retail() {
-            // a retail new game has no open world-map points yet: open the first ones (state byte 1, `WM` chunk +0xc + id)
+            // a retail new game has no open world-map points yet: open the first ones (state byte 2 = open, `WM` chunk +0xc + id)
             if let Some(c) = session.save.field.find_mut(sh2_menu::save::FieldSave::TAG_WM) {
-                for i in 0..24 {
+                // `SH2_WM_OPEN=<n>`: how many (default 24; the retail new game has only point 1 = Apoina Tower, state byte 2)
+                let n = std::env::var("SH2_WM_OPEN").ok().and_then(|v| v.parse::<usize>().ok()).unwrap_or(24);
+                for i in 0..n {
                     if let Some(b) = c.payload.get_mut(0xc + i) {
-                        *b = 1;
+                        *b = 2;
                     }
                 }
+                // `SH2_WM_SEEN=1`: the first-visit tutorial window was shown already (`WM` payload byte 9 bit 0)
+                if std::env::var_os("SH2_WM_SEEN").is_some() {
+                    if let Some(b) = c.payload.get_mut(9) {
+                        *b |= 1;
+                    }
+                }
+            }
+            if let Some(ms) = std::env::var("SH2_WM_PLAY_MS").ok().and_then(|v| v.parse::<u64>().ok()) {
+                session.play_ms = ms;
             }
         }
         field_req.map = if dev.kind == "worldmap" { crate::worldmap::WORLDMAP_NAME.to_string() } else { dev.map.clone() };

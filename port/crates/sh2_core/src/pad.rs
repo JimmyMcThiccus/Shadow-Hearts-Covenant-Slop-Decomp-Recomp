@@ -48,7 +48,7 @@ pub struct CAnalogStick {
     pub right: u8,
     /// +4 gauge = sqrt(h^2 + v^2) / 80
     pub gauge: f32,
-    /// +8 angle 0..2pi measured with acos(x) (flipped when vertical < 0)
+    /// +8 angle 0..2pi from up, clockwise (acos of the vertical component, flipped when horizontal < 0)
     pub radian: f32,
     /// +0xc
     pub degree: f32,
@@ -116,14 +116,16 @@ impl CAnalogStick {
             if self.up != 0 { self.up } else if self.down != 0 { self.down } else { 0 } as f32,
         );
         self.gauge = (vm * vm + hm * hm).sqrt() / 80.0;
+        // 0 = up, clockwise (live PINE: core0+0x84 reads 0 / 90 / 180 / 270 for up / right / down / left, the same convention as the d-pad
+        // `dirTbl` of `MakeMoveControl`)
         let len = (h * h + v * v).sqrt();
         let (mut x, mut y) = (h, v);
         if len > 0.0 {
             x /= len;
             y /= len;
         }
-        let mut r = x.acos();
-        if y < 0.0 {
+        let mut r = y.clamp(-1.0, 1.0).acos();
+        if x < 0.0 {
             r = std::f32::consts::TAU - r;
         }
         self.radian = r;
@@ -363,10 +365,14 @@ mod tests {
         s.make_xy(0xff, 0x80); // full right
         assert_eq!(s.right, 0x50);
         assert!((s.gauge - 1.0).abs() < 1e-6);
-        assert!(s.degree.abs() < 1e-3);
+        assert!((s.degree - 90.0).abs() < 1e-3);
         s.make_xy(0x80, 0x00); // full up
         assert_eq!(s.up, 0x50);
-        assert!((s.degree - 90.0).abs() < 1e-3);
+        assert!(s.degree.abs() < 1e-3);
+        s.make_xy(0x80, 0xff); // full down
+        assert!((s.degree - 180.0).abs() < 1e-3);
+        s.make_xy(0x00, 0x80); // full left
+        assert!((s.degree - 270.0).abs() < 1e-3);
     }
 
     #[test]

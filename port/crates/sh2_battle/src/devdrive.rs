@@ -49,6 +49,7 @@ pub struct DevDrive {
     page_key: String,
     page_age: u32,
     ring_age: u32,
+    trial_n: u32,
     fus_age: u32,
     exit_wait: u32,
     /// ticks spent in the game-over scene / back on the title (`SH2_BATTLE_LOSE=1` drives)
@@ -375,6 +376,9 @@ fn drive(
                 let page = m.page().clone();
                 let key = format!("{:?}{:?}", std::mem::discriminant(&page), rt.battle.actor);
                 if key != dd.page_key {
+                    if std::env::var_os("SH2_BATTLE_PAGELOG").is_some() {
+                        log::info!("devdrive page {:?} at tick {}", page, rt.ticks);
+                    }
                     dd.page_key = key;
                     dd.page_age = 0;
                 }
@@ -589,8 +593,25 @@ fn drive(
                 if dd.ring_age == 75 {
                     dd.shot("judgement_ring_run");
                 }
+                if ring.trial {
+                    // `ring_trial_<n>`: the `ComboTrial` labels, every 6 ticks
+                    dd.trial_n += 1;
+                    if dd.trial_n % 6 == 1 {
+                        let n = format!("ring_trial_{:03}", dd.trial_n / 6);
+                        dd.shot(&n);
+                    }
+                }
+                if let Some(t) = ring.shatter {
+                    // `ring_shatter_<n>`: the closing animation every 0.05 s
+                    let n = format!("ring_shatter_{:02}", (t * 20.0) as u32);
+                    dd.shot(&n);
+                }
                 if ring.in_zone {
                     inj.raw = dd.tap_bits(padbit::CIRCLE);
+                }
+                // the combo trial: press the button the ring shows (`SH2_COMBO_MISS=1` leaves it, to look at `Combo Miss!!`)
+                if let (Some(b), None) = (ring.combo_press, std::env::var_os("SH2_COMBO_MISS")) {
+                    inj.raw = b;
                 }
             }
             // fusion sequence photographs (`fusion_<n>.png`, every 0.5 s while the transformation runs and 4 s after it)

@@ -563,6 +563,24 @@ pub fn scale_by_ring(amount: i32, ring: f32) -> i32 {
     (amount as f32 * ring).round() as i32
 }
 
+/// The last resolved physical swing (`PAtkHitSet` results of one `do_attack`), read by the presentation of the break effects
+/// ([`crate::break_effects`] `CmbBreak`, [`crate::hit_impact`] `HitImpact`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SwingLog {
+    /// counts the swings (a new value = a new swing)
+    pub id: u32,
+    pub attacker: usize,
+    pub target: usize,
+    /// hits of the swing (`a5`, the ring's hit areas)
+    pub hits: i32,
+    /// indices (0 based) of the hits that connected (`PAtkHitSet` `bVar11`: not evaded)
+    pub landed: Vec<i32>,
+    /// a Link combo is running (`CBattle+0x36 != 0`)
+    pub combo: bool,
+    /// more combo members still have to act (`wTurnPendMask != 0` while `nComboCnt != 0`: the retail `bFlags25` bit 2)
+    pub pending: bool,
+}
+
 /// A combatant with the data the rules need.
 #[derive(Clone, Debug)]
 pub struct Fighter {
@@ -623,6 +641,28 @@ pub enum BattleEvent {
     CannotAct { chr: usize },
     /// party-side results of the round 5 engine (statuses, MP / SP changes, berserk, guard ...), see [`PartyEvent`]
     Party(PartyEvent),
+    /// a fighter that was thrown by a knock-down hit took damage from the arena wall (`WallHitDamageSet`) or from a bystander it was thrown through
+    /// (`InvolveDamageSet`); the models must not replay a hit reaction (the choreography plays its own), the HUD shows the number, see [`crate::wall_involve`]
+    Bump { target: usize, amount: i32, kind: BumpKind, point: [f32; 3] },
+}
+
+/// What a [`BattleEvent::Bump`] hit.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BumpKind {
+    Wall,
+    /// the target was the bystander of fighter `by`'s slide
+    Bystander { by: usize },
+}
+
+/// How `InvolveDamageSet` left a bystander ([`Battle::involve_hit`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BumpReaction {
+    /// the HP taken (negative = recovered)
+    pub damage: i32,
+    /// `CheckGuard`'s class (0 = not guarding, 1 / 2 / 3 / 4: damage x 0.25 / 0.5 / 0.5 / 0)
+    pub guard: u8,
+    /// the guarded branch of the routine (the guard absorbed part of it and the bystander stays on its feet)
+    pub guarded: bool,
 }
 
 /// What the party-side engine reports besides HP damage ([`BattleEvent::Party`]).  The plugin shows them as floating texts / messages
@@ -707,6 +747,8 @@ pub struct Battle<H: Host> {
     pub combo: Vec<usize>,
     /// members still to act (`CBattle+0x32` pending mask)
     pub combo_queue: Vec<usize>,
+    /// the last physical swing (presentation of `CmbBreak` / `HitImpact`)
+    pub swing: SwingLog,
     /// per fighter slot: the fusion the party member is transformed into (`Fusion` / `Demon Morph`), see [`Fused`]
     pub fused: Vec<Option<Fused>>,
     /// `CBattle+0x407c / 0x407e / 0x4080`: the active Tarot card ([`crate::tarot`])
@@ -750,7 +792,31 @@ pub struct Battle<H: Host> {
     /// round 6 BT: the combo shortcut picked during the running action (`aMenuRes`, [`crate::shortcut`]): `(member, command)`; the member
     /// acts next with that command and no menu (`BtlMenuFunc` step 0x28)
     pub shortcut: Option<(usize, MenuEvent)>,
+    /// the running ranged attack (class 0x16 hit rows): its hits land one per bullet impact ([`Battle::ranged_hit`]), `do_attack` only closes it
+    pub ranged: Option<RangedHits>,
+    /// `PAtkHitSet`'s forced hit: the presentation sets it (every frame of an attack) when the current target cannot dodge -- it is still in a hit
+    /// reaction (`BtlChr+0xb8` state 0x16..0x26), it stands with its back to the attacker, or the dodge step (10 units along the hit direction) would
+    /// leave the arena -- and the evasion roll is skipped ([`Battle::phys_hit`])
+    pub dodge_forced: bool,
+    /// the push words (`BtlChr+0x320 / +0x322` = PATK2 hit row `+0x44 / +0x46`, `PAtkHitSet` arguments `a9` / `a10`, the target's `+0x45c / +0x45e`) of
+    /// the ranged hits, by the index of their [`BattleEvent::Damage`] in `events`; read (and pruned) by the model driver
+    pub push_words: Vec<(usize, (u16, u16))>,
     pending: Option<MenuEvent>,
+}
+
+/// The hits of a ranged attack so far (`Bullet1::Polling` -> `PAtkHitSet` once per bullet), see [`Battle::begin_ranged`].
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct RangedHits {
+    pub attacker: usize,
+    /// the target's guard class for this attack (rolled at the first impact, like the one `CheckGuard` roll of a weapon attack)
+    guard: Option<u8>,
+    /// `PAtkHitSet`: the float damage the target took in this action (`BtlChr+0x530`) and its whole points (`+0x528`)
+    acc_f: f32,
+    acc_i: i32,
+    /// landed hits: (damage, critical)
+    pub landed: Vec<(i32, bool)>,
+    /// bullets that reached the target (landed, evaded or guarded away)
+    pub impacts: u32,
 }
 
 /// An aroma in the air (`CBattle+0x4090` row, `+0x4094` power, `+0x4098` three words, `+0x40a6` turns, `+0x40a7` chance).  `AromaEffectFunc`
@@ -830,6 +896,7 @@ impl<H: Host> Battle<H> {
             ring_hits: vec![],
             combo: vec![],
             combo_queue: vec![],
+            swing: SwingLog::default(),
             fused: vec![None; rules::MAX_CHR],
             tarot: crate::tarot::TarotState::new([0; 3], false),
             tarot_run: None,
@@ -849,6 +916,9 @@ impl<H: Host> Battle<H> {
             unique_owned: vec![],
             battle_type: 0,
             shortcut: None,
+            ranged: None,
+            dodge_forced: false,
+            push_words: Vec::new(),
             pending: None,
         }
     }
@@ -1366,18 +1436,24 @@ impl<H: Host> Battle<H> {
         true
     }
 
-    /// Basic attack of the current actor against `cmd.p48`.
-    fn do_attack(&mut self) {
-        let a = self.actor.unwrap();
-        let t = self.cmd.p48.max(0) as usize;
-        let (att, def) = match (self.fighters[a].clone(), self.fighters.get(t).cloned().flatten()) {
-            (Some(a), Some(d)) => (a, d),
-            _ => {
-                self.finish_action(1.0);
-                return;
-            }
-        };
-        let hits = att.hits_per_attack.max(1);
+    /// `CheckGuard` of a physical attack on `t`: the guard records first, then the Defend stance (`bState` 0x11: 1 Block, 2 Resist).
+    fn roll_guard(&mut self, t: usize, def: &Fighter) -> u8 {
+        let guard_in = rules::GuardIn { free_to_guard: true, status: &def.status, passives: &def.passives, ..Default::default() };
+        let stance = self.ext.get(t).map(|e| e.guard.class()).unwrap_or(0);
+        let guard = rules::check_guard(&guard_in, self.rng.as_mut());
+        if guard == 0 {
+            stance
+        } else {
+            guard
+        }
+    }
+
+    /// One `PAtkHitSet` of attacker `a` on `t`: the damage (`GetPAtkDamage`: `hit` = hits total / hit index for the combo fall-off, the hits per
+    /// swing it divides by, the power, the ring grade), the guard factor, then the evasion roll.  `acc` is the action's float / whole damage on
+    /// the target, `dealt` the damage already dealt in this batch.  `None` = evaded.
+    #[allow(clippy::too_many_arguments)]
+    fn phys_hit(&mut self, a: usize, t: usize, att: &Fighter, def: &Fighter, guard: u8, hit: (i32, i32, i32, f32, f32), acc: &mut (f32, i32), dealt: i32) -> Option<(i32, bool)> {
+        let (hits_total, hit_index, hits_per_swing, power, ring) = hit;
         // Link combo: the friendship between the attacker and the leader boosts the damage (`friendship(A, leader) * 0.2 / 10000`)
         let combo_active = !self.combo.is_empty() && !att.is_enemy;
         let friendship = match self.combo.first() {
@@ -1399,13 +1475,6 @@ impl<H: Host> Battle<H> {
             passives: &att.passives,
             ..Default::default()
         };
-        let guard_in = rules::GuardIn { free_to_guard: true, status: &def.status, passives: &def.passives, ..Default::default() };
-        // `CheckGuard`: the guard records first, then the Defend stance (`bState` 0x11: 1 Block, 2 Resist)
-        let stance = self.ext.get(t).map(|e| e.guard.class()).unwrap_or(0);
-        let mut guard = rules::check_guard(&guard_in, self.rng.as_mut());
-        if guard == 0 {
-            guard = stance;
-        }
         let dview = rules::DefenderView {
             is_enemy: def.is_enemy,
             pdef: def.pdef,
@@ -1421,50 +1490,135 @@ impl<H: Host> Battle<H> {
             ..Default::default()
         };
         let crit = rules::critical_rate(self.no_evade, att.luc, def.luc, &att.status, &att.passives, !att.is_enemy);
-        let mut total = 0;
-        let mut landed: Vec<(i32, bool)> = Vec::new();
+        let h = rules::PhysHit {
+            power,
+            hits_total,
+            hit_index,
+            hits_per_swing,
+            ring,
+            attack_element: att.element,
+            turn_no: self.turn_no,
+            combo_active,
+            gm: self.gmod,
+            crit_chance: crit,
+        };
+        // Retail order (`PAtkHitSet` -> `GetPAtkDamage`): the damage chain with its critical roll comes first, then the guard
+        // factor, and only then the evasion roll.
+        let r = rules::physical_damage(&aview, &dview, &h, self.rng.as_mut());
+        let factor = rules::guard_damage_factor(guard);
         // `PAtkHitSet`: the target accumulates the float damage of the action (`BtlChr+0x530`) and takes the whole points (`+0x528`); a hit
         // that is not fully guarded away takes at least 1
-        let mut acc_f = 0.0f32;
-        let mut acc_i = 0i32;
-        for k in 0..hits {
-            let h = rules::PhysHit {
-                power: 1.0,
-                hits_total: hits,
-                hit_index: k,
-                hits_per_swing: 1,
-                ring: self.ring_hits.get(k as usize).copied().unwrap_or(self.ring),
-                attack_element: att.element,
-                turn_no: self.turn_no,
-                combo_active,
-                gm: self.gmod,
-                crit_chance: crit,
-            };
-            // Retail order (`PAtkHitSet` -> `GetPAtkDamage`): the damage chain with its critical roll comes first, then the guard
-            // factor, and only then the evasion roll.
-            let r = rules::physical_damage(&aview, &dview, &h, self.rng.as_mut());
-            let factor = rules::guard_damage_factor(guard);
-            let mut dmg = (acc_f + r.damage * factor) as i32 - acc_i;
-            if factor != 0.0 && dmg == 0 {
-                dmg = if r.damage > 0.0 { 1 } else if r.damage < 0.0 { -1 } else { 0 };
-            }
-            // The evasion roll happens only for an unguarded defender, or when the hit would kill a party member ("last chance" dodge, +10 %).
-            let lethal = !def.is_enemy && dmg >= def.hp - total && def.hp - total > 0;
-            if rules::evasion_roll_applies(guard, lethal) {
-                let yoah = self.ext.get(t).and_then(|e| e.yoah).map(|y| y[3]);
-                let mut ev = rules::evasion_rate(self.no_evade, def.agl, def.luc, att.agl, &def.status, &def.passives, !def.is_enemy, &self.gmod, yoah);
-                if lethal {
-                    ev += rules::LETHAL_EVADE_BONUS;
-                }
-                if rules::roll_percent(self.rng.as_mut(), ev) {
-                    continue; // evaded
-                }
-            }
-            acc_f += r.damage * factor;
-            acc_i += dmg;
-            landed.push((dmg, r.critical));
-            total += dmg;
+        let mut dmg = (acc.0 + r.damage * factor) as i32 - acc.1;
+        if factor != 0.0 && dmg == 0 {
+            dmg = if r.damage > 0.0 { 1 } else if r.damage < 0.0 { -1 } else { 0 };
         }
+        // The evasion roll happens only for an unguarded defender, or when the hit would kill a party member ("last chance" dodge, +10 %).
+        let lethal = !def.is_enemy && dmg >= def.hp - dealt && def.hp - dealt > 0;
+        if rules::evasion_roll_applies(guard, lethal) && !self.dodge_forced {
+            let yoah = self.ext.get(t).and_then(|e| e.yoah).map(|y| y[3]);
+            let mut ev = rules::evasion_rate(self.no_evade, def.agl, def.luc, att.agl, &def.status, &def.passives, !def.is_enemy, &self.gmod, yoah);
+            if lethal {
+                ev += rules::LETHAL_EVADE_BONUS;
+            }
+            // `SH2_BATTLE_EVADE=1` (development): monsters evade every unguarded hit (to reach the `CmbBreak` banner)
+            if rules::roll_percent(self.rng.as_mut(), ev) || (def.is_enemy && std::env::var_os("SH2_BATTLE_EVADE").is_some()) {
+                return None; // evaded
+            }
+        }
+        acc.0 += r.damage * factor;
+        acc.1 += dmg;
+        Some((dmg, r.critical))
+    }
+
+    /// A ranged attack (class 0x16 hit rows) of the current actor fired its first bullet: its damage lands per bullet impact
+    /// ([`Battle::ranged_hit`]) and `do_attack` resolves no hits of its own.
+    pub fn begin_ranged(&mut self) {
+        let Some(a) = self.actor.filter(|_| self.phase == Phase::Attack) else { return };
+        if self.ranged.as_ref().map(|r| r.attacker) != Some(a) {
+            self.ranged = Some(RangedHits { attacker: a, ..Default::default() });
+        }
+    }
+
+    /// One bullet of the running ranged attack hits `target` (`Bullet1::Polling` -> `PAtkHitSet`, only while the target has HP): `hit_no` is
+    /// the swing's event counter when the bullet was fired (`BtlChr+0x314`), `groups` the attack's hit groups (`PATK +1`), `per` the shots per
+    /// group (`PATK +0x16`, `GetPAtkDamage` divides by it), `power` the bullet's damage scale (`Bullet1 +0x64`: 1.0 single, 0.5 paired).  The
+    /// damage (or the miss) is applied at once.  `push` = the bullet's push words (the attacker's `BtlChr+0x320 / +0x322` at the shot: time, power),
+    /// recorded for the target's knock-back ([`Battle::push_words`]).  Returns whether the impact counted.
+    pub fn ranged_hit(&mut self, target: usize, hit_no: i32, groups: i32, per: i32, power: f32, push: (u16, u16)) -> bool {
+        let Some(a) = self.actor.filter(|_| self.phase == Phase::Attack) else { return false };
+        if self.ranged.as_ref().map(|r| r.attacker) != Some(a) || self.cmd.p48 != target as i32 {
+            return false;
+        }
+        let (Some(att), Some(def)) = (self.fighters[a].clone(), self.fighters.get(target).cloned().flatten()) else { return false };
+        if def.hp <= 0 || def.removed {
+            return false;
+        }
+        let mut st = self.ranged.take().unwrap();
+        let guard = match st.guard {
+            Some(g) => g,
+            None => {
+                let g = self.roll_guard(target, &def);
+                st.guard = Some(g);
+                g
+            }
+        };
+        // `GetPAtkDamage`: the hit group is `hitNo / PATK +0x16`; the fall-off row of a monster is its group count (`hitsTotal / PATK +0x16`),
+        // the one of a party member its ring hit count (`PCParam+0x9c`, group modulo it)
+        let per = per.max(1);
+        let group = hit_no.max(0) / per;
+        let (total, index) = if att.is_enemy { (groups.max(1), group) } else { (att.hits_per_attack.max(1), group % att.hits_per_attack.max(1)) };
+        let ring = self.ring_hits.get(group as usize).copied().unwrap_or(self.ring);
+        let mut acc = (st.acc_f, st.acc_i);
+        let r = self.phys_hit(a, target, &att, &def, guard, (total, index, per, power, ring), &mut acc, 0);
+        (st.acc_f, st.acc_i) = acc;
+        st.impacts += 1;
+        let (dmg, crit) = r.unwrap_or((0, false));
+        if r.is_some() {
+            st.landed.push((dmg, crit));
+        }
+        self.ranged = Some(st);
+        // the damage event this impact is about to push carries the bullet's push words
+        let at = self.events.len();
+        self.push_words.retain(|(i, _)| i + 256 > at);
+        self.push_words.push((at, push));
+        self.apply_damage(target, dmg, crit);
+        true
+    }
+
+    /// Basic attack of the current actor against `cmd.p48`.
+    fn do_attack(&mut self) {
+        let a = self.actor.unwrap();
+        let t = self.cmd.p48.max(0) as usize;
+        // a ranged attack's hits have landed per bullet already
+        let ranged = self.ranged.take().filter(|r| r.attacker == a);
+        let (att, def) = match (self.fighters[a].clone(), self.fighters.get(t).cloned().flatten()) {
+            (Some(a), Some(d)) => (a, d),
+            _ => {
+                self.finish_action(1.0);
+                return;
+            }
+        };
+        let hits = att.hits_per_attack.max(1);
+        let mut total = 0;
+        let mut landed: Vec<(i32, bool)> = Vec::new();
+        let mut landed_idx: Vec<i32> = Vec::new();
+        if let Some(r) = &ranged {
+            landed = r.landed.clone();
+            total = landed.iter().map(|l| l.0).sum();
+            landed_idx = (0..landed.len() as i32).collect();
+        } else {
+            let guard = self.roll_guard(t, &def);
+            let mut acc = (0.0f32, 0i32);
+            for k in 0..hits {
+                let ring = self.ring_hits.get(k as usize).copied().unwrap_or(self.ring);
+                if let Some((dmg, crit)) = self.phys_hit(a, t, &att, &def, guard, (hits, k, 1, 1.0, ring), &mut acc, total) {
+                    landed.push((dmg, crit));
+                    landed_idx.push(k);
+                    total += dmg;
+                }
+            }
+        }
+        self.swing = SwingLog { id: self.swing.id.wrapping_add(1), attacker: a, target: t, hits, landed: landed_idx, combo: !self.combo.is_empty(), pending: !self.combo.is_empty() && !self.combo_queue.is_empty() };
         // ring statistics of a party member's attack (score page: attack rings total / every area hit, perfect = every hit a strike)
         // (the tutorial fights, battle types 1 / 2, keep no ring statistics: US `EffectFunc` / phase 5 skip `BTL0+0x150c / 0x1510` there)
         if !att.is_enemy && !self.ring_hits.is_empty() && !matches!(self.battle_type, 1 | 2) {
@@ -1488,7 +1642,9 @@ impl<H: Host> Battle<H> {
         }
         // one result per landed hit (`EffectMesCall` per `PAtkHitSet`: the "N Hit" counter and the per-hit numbers); all hits evaded = a single miss
         let hit_any = !landed.is_empty();
-        if landed.is_empty() {
+        if ranged.is_some() {
+            // applied per impact already; a volley that flew past leaves no result (`Bullet1::Polling` calls `PAtkHitSet` only on a hit)
+        } else if landed.is_empty() {
             self.apply_damage(t, 0, false);
         } else {
             for (dmg, crit) in landed {
@@ -1521,6 +1677,60 @@ impl<H: Host> Battle<H> {
             }
         }
         self.finish_action(1.0);
+    }
+
+    /// `CBattle::WallHitDamageSet(t, this, chr, last damage, point)`: fighter `chr` slammed into an arena wall `t` seconds into its knock-down slide; it takes
+    /// [`crate::wall_involve::scaled_damage`] of the damage of the hit that threw it (a negative one heals).  `point` = the wall point (PS2 world).  Returns the
+    /// damage.  Not ported: the vulnerability counters (`BtlChr+0x510..`), the per-action rounding accumulators (`+0x470..0x480`).
+    pub fn wall_hit(&mut self, chr: usize, t: f32, last_damage: i32, point: [f32; 3]) -> Option<i32> {
+        let f = self.fighters.get_mut(chr)?.as_mut().filter(|f| f.alive())?;
+        let dmg = crate::wall_involve::scaled_damage(t, last_damage);
+        let was = f.hp;
+        f.hp = (f.hp - dmg).clamp(0, f.max_hp);
+        let fell = !f.is_enemy && was > 0 && f.hp <= 0;
+        let e = BattleEvent::Bump { target: chr, amount: dmg, kind: BumpKind::Wall, point };
+        self.host.event(&e);
+        self.events.push(e);
+        if fell {
+            self.note_fall(chr);
+        }
+        Some(dmg)
+    }
+
+    /// `CBattle::InvolveDamageSet(this, bystander, pusher, point)`: the pusher (`pusher`, `t` seconds into its slide, `last_damage` = the damage of the hit that
+    /// threw it) touched fighter `by`, which takes the same scaled damage ([`crate::wall_involve::scaled_damage`]).  A guarding bystander
+    /// (`CheckGuard`, class 1..4 = x 0.25 / 0.5 / 0.5 / 0) takes the reduced damage when that leaves it alive (the Resist stance, class 2, also costs a party member
+    /// 1 SP) and stays on its feet; otherwise the full damage lands and the bystander is thrown ([`BumpReaction::guarded`] = false).  Not ported: the
+    /// status 0x47 instant kill, the vulnerability counters and the per-action rounding accumulators of the original.
+    pub fn involve_hit(&mut self, pusher: usize, by: usize, t: f32, last_damage: i32, point: [f32; 3]) -> Option<BumpReaction> {
+        let def = self.fighters.get(by)?.clone().filter(|f| f.alive())?;
+        let full = crate::wall_involve::scaled_damage(t, last_damage);
+        let guard = self.roll_guard(by, &def);
+        let factor = crate::wall_involve::guard_factor(guard);
+        let mut reduced = (full as f32 * factor) as i32;
+        if factor != 0.0 {
+            if full > 0 && reduced == 0 {
+                reduced = 1;
+            } else if full < 0 && reduced == 0 {
+                reduced = -1;
+            }
+        }
+        let guarded = guard != 0 && reduced < def.hp;
+        let dmg = if guarded { reduced } else { full };
+        let f = self.fighters.get_mut(by)?.as_mut()?;
+        let was = f.hp;
+        f.hp = (f.hp - dmg).clamp(0, f.max_hp);
+        if guarded && guard == 2 && !f.is_enemy && !matches!(f.char_id, 8..=10) {
+            f.sp = (f.sp - 1).max(-99);
+        }
+        let fell = !f.is_enemy && was > 0 && f.hp <= 0;
+        let e = BattleEvent::Bump { target: by, amount: dmg, kind: BumpKind::Bystander { by: pusher }, point };
+        self.host.event(&e);
+        self.events.push(e);
+        if fell {
+            self.note_fall(by);
+        }
+        Some(BumpReaction { damage: dmg, guard, guarded })
     }
 
     fn apply_damage(&mut self, t: usize, amount: i32, critical: bool) {
@@ -2687,6 +2897,120 @@ mod tests {
         let (plain, boosted) = (run(0, true), run(10000, true));
         assert!(boosted > plain, "link combo: {plain} -> {boosted}");
         assert_eq!(run(0, false), run(10000, false), "no combo, no friendship bonus");
+    }
+
+    /// A ranged attack lands one hit per bullet (`Bullet1::Polling` -> `PAtkHitSet`): the gun soldier's 15 shots (5 groups x 3) each deal
+    /// `base * falloff(5, shot / 3) / 3`, together 1.4 x base; `do_attack` adds nothing and closes the action.
+    #[test]
+    fn ranged_attack_hits_once_per_bullet() {
+        let f = vec![fighter(false, 1000, 10, 10), fighter(true, 500, 10, 105)];
+        let mut b = Battle::new(Friends(0), f, Ambush::None, rules::EscapeMode::Never, 5);
+        b.no_evade = true;
+        b.phase = Phase::Attack;
+        b.actor = Some(1);
+        b.cmd.p48 = 0;
+        // no shot fired: impacts do not count
+        assert!(!b.ranged_hit(0, 0, 5, 3, 1.0, (0, 0)));
+        b.begin_ranged();
+        let ev0 = b.events.len();
+        for k in 0..15 {
+            assert!(b.ranged_hit(0, k, 5, 3, 1.0, (50, 0)));
+        }
+        let dmg: Vec<i32> = b.events[ev0..].iter().filter_map(|e| if let BattleEvent::Damage { target: 0, amount, .. } = e { Some(*amount) } else { None }).collect();
+        assert_eq!(dmg.len(), 15, "{dmg:?}");
+        // base 100: 13.3 x 3, 10 x 3, 8.3 x 6, 6.7 x 3 (the float damage accumulates, the whole points land)
+        assert_eq!(&dmg[..3], &[13, 13, 14]);
+        let sum: i32 = dmg.iter().sum();
+        assert!((139..=140).contains(&sum), "{dmg:?}");
+        let hp = b.fighters[0].as_ref().unwrap().hp;
+        assert_eq!(hp, 1000 - sum);
+        let r = b.ranged.as_ref().unwrap();
+        assert_eq!((r.impacts, r.landed.len()), (15, 15));
+        // the action closes without hits of its own
+        let ev1 = b.events.len();
+        b.poll();
+        assert!(!b.events[ev1..].iter().any(|e| matches!(e, BattleEvent::Damage { .. })));
+        assert!(b.ranged.is_none() && b.actor.is_none());
+        assert_eq!(b.fighters[0].as_ref().unwrap().hp, hp);
+        // a paired bullet (scale 0.5) deals half; the attack of another actor does not take it
+        b.phase = Phase::Attack;
+        b.actor = Some(1);
+        b.begin_ranged();
+        assert!(b.ranged_hit(0, 0, 5, 3, 0.5, (0, 0)));
+        assert_eq!(b.fighters[0].as_ref().unwrap().hp, hp - 6);
+        b.actor = Some(0);
+        assert!(!b.ranged_hit(0, 1, 5, 3, 0.5, (0, 0)));
+    }
+
+    /// `PAtkHitSet`: a target that cannot dodge (mid-reaction, back turned, at the arena edge) is hit without an evasion roll; the bullets' push
+    /// words ride on their damage events.
+    #[test]
+    fn a_forced_hit_skips_the_dodge_and_the_push_words_follow_the_event() {
+        let run = |forced: bool| -> (usize, usize) {
+            let f = vec![fighter(false, 100_000, 90, 10), fighter(true, 500, 10, 105)];
+            let mut b = Battle::new(Friends(0), f, Ambush::None, rules::EscapeMode::Never, 11);
+            b.no_evade = false;
+            b.phase = Phase::Attack;
+            b.actor = Some(1);
+            b.cmd.p48 = 0;
+            b.dodge_forced = forced;
+            b.begin_ranged();
+            let mut landed = 0;
+            for k in 0..60 {
+                b.ranged_hit(0, k % 15, 5, 3, 1.0, (50 + k as u16, 0));
+                landed = b.ranged.as_ref().map(|r| r.landed.len()).unwrap_or(0);
+            }
+            // every damage event has its push words, found by its index
+            let n = b.events.iter().enumerate().filter(|(_, e)| matches!(e, BattleEvent::Damage { .. })).count();
+            let tagged = b.events.iter().enumerate().filter(|(i, e)| matches!(e, BattleEvent::Damage { .. }) && b.push_words.iter().any(|(j, _)| j == i)).count();
+            assert_eq!(n, tagged);
+            (landed, n)
+        };
+        let (free, _) = run(false);
+        let (forced, n) = run(true);
+        assert!(free < 60, "a quick target dodges some bullets ({free} / 60)");
+        assert_eq!((forced, n), (60, 60));
+    }
+
+    /// `WallHitDamageSet`: the slammed fighter takes `min(3 t, 1)` of the damage of the hit that threw it; a party member that falls counts as unconscious,
+    /// a monster is found dead by the death phase.
+    #[test]
+    fn a_wall_hit_takes_a_share_of_the_last_hit() {
+        let f = vec![fighter(false, 100, 10, 10), fighter(true, 50, 10, 10)];
+        let mut b = Battle::new(Friends(0), f, Ambush::None, rules::EscapeMode::Never, 3);
+        // 0.1 s into the slide: 30 % of 40 = 12
+        assert_eq!(b.wall_hit(0, 0.1, 40, [1.0, -4.0, -95.0]), Some(12));
+        assert_eq!(b.fighters[0].as_ref().unwrap().hp, 88);
+        assert!(matches!(b.events.last(), Some(BattleEvent::Bump { target: 0, amount: 12, kind: BumpKind::Wall, point: [1.0, -4.0, -95.0] })));
+        // the full share, clamped at 0 HP; a party member that falls is counted
+        assert_eq!(b.wall_hit(0, 5.0, 500, [0.0; 3]), Some(500));
+        assert_eq!(b.fighters[0].as_ref().unwrap().hp, 0);
+        assert_eq!(b.stats.unconscious.iter().sum::<u32>(), 1);
+        // a fallen fighter takes no more; a monster loses HP and is left for the death phase
+        assert_eq!(b.wall_hit(0, 1.0, 5, [0.0; 3]), None);
+        assert_eq!(b.wall_hit(1, 1.0, 20, [0.0; 3]), Some(20));
+        assert_eq!(b.fighters[1].as_ref().unwrap().hp, 30);
+        assert_eq!(b.stats.unconscious.iter().sum::<u32>(), 1);
+        // a negative last hit heals, never above the maximum
+        assert_eq!(b.wall_hit(1, 1.0, -100, [0.0; 3]), Some(-99), "-99.5 truncates towards zero like the C cast");
+        assert_eq!(b.fighters[1].as_ref().unwrap().hp, 50);
+    }
+
+    /// `InvolveDamageSet`: a bystander takes the same scaled damage; a guard reduces it and spares the fighter the launch while it stays alive.
+    #[test]
+    fn a_bystander_takes_the_pushers_damage() {
+        let f = vec![fighter(false, 100, 10, 10), fighter(true, 50, 10, 10), fighter(false, 20, 10, 10)];
+        let mut b = Battle::new(Friends(0), f, Ambush::None, rules::EscapeMode::Never, 5);
+        // the pusher (1) was hit for 60 and has slid 0.2 s: 60 % of 60 = 36 on the bystander (0), no guard
+        let r = b.involve_hit(1, 0, 0.2, 60, [0.0; 3]).unwrap();
+        assert_eq!((r.damage, r.guard, r.guarded), (36, 0, false));
+        assert_eq!(b.fighters[0].as_ref().unwrap().hp, 64);
+        assert!(matches!(b.events.last(), Some(BattleEvent::Bump { target: 0, amount: 36, kind: BumpKind::Bystander { by: 1 }, .. })));
+        // a fatal bump on a party member is counted; a dead bystander is not bumped again
+        let r = b.involve_hit(1, 2, 1.0, 60, [0.0; 3]).unwrap();
+        assert!(!r.guarded && r.damage == 60 && b.fighters[2].as_ref().unwrap().hp == 0);
+        assert_eq!(b.stats.unconscious.iter().sum::<u32>(), 1);
+        assert!(b.involve_hit(1, 2, 1.0, 60, [0.0; 3]).is_none());
     }
 
     #[test]

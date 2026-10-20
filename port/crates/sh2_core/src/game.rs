@@ -15,6 +15,7 @@
 //! m_pAppFunc                                 Update : `app_func_hook`
 //! ```
 
+use bevy::input::gamepad::{Gamepad, GamepadButton};
 use bevy::prelude::*;
 
 use crate::pad::{CPadCore, CPadHandle, PadPriority};
@@ -48,6 +49,8 @@ pub enum GameSet {
 /// PS2 pad bits (libpad word after inversion; see `notes/F/menu_toolkit.md` section 6).
 pub mod padbit {
     pub const SELECT: u16 = 0x0001;
+    pub const L3: u16 = 0x0002;
+    pub const R3: u16 = 0x0004;
     pub const START: u16 = 0x0008;
     pub const UP: u16 = 0x0010;
     pub const RIGHT: u16 = 0x0020;
@@ -84,9 +87,13 @@ impl Default for GamePad {
 }
 
 impl GamePad {
-    /// `CPad::Polling` — feed the libpad button word of this frame.
+    /// `CPad::Polling` — feed the libpad button word of this frame (sticks centred).
     pub fn feed(&mut self, raw: u16) {
-        let buf = [0, 0, (raw & 0xff) as u8, (raw >> 8) as u8, 0x80, 0x80, 0x80, 0x80];
+        self.feed_analog(raw, PadSticks::default());
+    }
+    /// `CPad::Polling` with the analog stick bytes of a DualShock (`pad[4..8]` = right x/y, left x/y).
+    pub fn feed_analog(&mut self, raw: u16, sticks: PadSticks) {
+        let buf = [0, 0, (raw & 0xff) as u8, (raw >> 8) as u8, sticks.right[0], sticks.right[1], sticks.left[0], sticks.left[1]];
         self.core.update(&buf, &self.handle);
     }
     /// buttons currently held (`CPad::GetReal`)
@@ -108,7 +115,7 @@ impl GamePad {
     pub fn menu_keys(&self) -> u16 {
         (self.core.press & 0xff0f) | (self.core.repeat & 0xf0)
     }
-    /// left stick gauge/degree for `MakeMoveControl` (always the idle stick: keyboard input is digital)
+    /// left stick gauge/degree for `MakeMoveControl` (gauge 0 for the keyboard / a centred stick; degrees 0 = up, clockwise)
     pub fn stick_gauge_degree(&self) -> (f32, f32) {
         (self.core.stick_l.gauge, self.core.stick_l.degree)
     }
@@ -123,6 +130,55 @@ impl GamePad {
 #[derive(Resource, Default, Debug, Clone, Copy)]
 pub struct PadInjection {
     pub raw: u16,
+}
+
+/// libpad stick bytes (`0x00` = left / up, `0x80` = centre, `0xff` = right / down).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PadSticks {
+    pub left: [u8; 2],
+    pub right: [u8; 2],
+}
+
+impl Default for PadSticks {
+    fn default() -> Self {
+        PadSticks { left: [0x80; 2], right: [0x80; 2] }
+    }
+}
+
+/// A Bevy stick vector (x right, y up, -1..1) as libpad bytes.
+pub fn stick_bytes(v: Vec2) -> [u8; 2] {
+    let b = |f: f32| (127.5 + f.clamp(-1.0, 1.0) * 127.5).round().clamp(0.0, 255.0) as u8;
+    [b(v.x), b(-v.y)]
+}
+
+/// Gamepad -> *physical* PS2 pad (DualShock 2 layout: South = Cross, East = Circle, North = Triangle, West = Square), so it goes through
+/// the same build remap as the keyboard: on the retail disc the bottom face button confirms, the right one cancels / runs.
+pub fn gamepad_to_pad(pad: &Gamepad) -> (u16, PadSticks) {
+    let map: [(GamepadButton, u16); 16] = [
+        (GamepadButton::DPadUp, padbit::UP),
+        (GamepadButton::DPadRight, padbit::RIGHT),
+        (GamepadButton::DPadDown, padbit::DOWN),
+        (GamepadButton::DPadLeft, padbit::LEFT),
+        (GamepadButton::South, padbit::CROSS),
+        (GamepadButton::East, padbit::CIRCLE),
+        (GamepadButton::North, padbit::TRIANGLE),
+        (GamepadButton::West, padbit::SQUARE),
+        (GamepadButton::LeftTrigger, padbit::L1),
+        (GamepadButton::RightTrigger, padbit::R1),
+        (GamepadButton::LeftTrigger2, padbit::L2),
+        (GamepadButton::RightTrigger2, padbit::R2),
+        (GamepadButton::Select, padbit::SELECT),
+        (GamepadButton::Start, padbit::START),
+        (GamepadButton::LeftThumb, padbit::L3),
+        (GamepadButton::RightThumb, padbit::R3),
+    ];
+    let mut raw = 0u16;
+    for (b, bit) in map {
+        if pad.pressed(b) {
+            raw |= bit;
+        }
+    }
+    (raw, PadSticks { left: stick_bytes(pad.left_stick()), right: stick_bytes(pad.right_stick()) })
 }
 
 /// Keyboard -> PS2 pad mapping (documented in `notes/integration/gameplay.md`).
@@ -182,11 +238,31 @@ pub fn default_buttons() -> [u16; 4] {
 #[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ButtonAssign(pub Option<[u16; 4]>);
 
-/// First system of the 60 Hz tick: sample keyboard + injection into [`GamePad`].  The keyboard is a *physical* pad (X = Cross, Z = Circle ...) and
-/// goes through the build's button remap; the injection (autoplay / tests) is already logical.
-pub fn sample_pad(keys: Res<ButtonInput<KeyCode>>, inj: Res<PadInjection>, assign: Option<Res<ButtonAssign>>, mut pad: ResMut<GamePad>) {
+/// First system of the 60 Hz tick: sample keyboard + gamepads + injection into [`GamePad`].  The keyboard and the gamepads are *physical* pads
+/// (X = Cross, Z = Circle ...) and go through the build's button remap; the injection (autoplay / tests) is already logical.  All connected
+/// gamepads drive player one; the left stick is the first one pushed past the libpad dead zone.
+pub fn sample_pad(
+    keys: Res<ButtonInput<KeyCode>>,
+    gamepads: Query<&Gamepad>,
+    inj: Res<PadInjection>,
+    assign: Option<Res<ButtonAssign>>,
+    mut pad: ResMut<GamePad>,
+) {
     let entries = assign.and_then(|a| a.0).unwrap_or_else(default_buttons);
-    pad.feed(apply_button_assign(keyboard_to_pad(&keys), entries) | inj.raw);
+    let mut raw = keyboard_to_pad(&keys);
+    let mut sticks = PadSticks::default();
+    let off_centre = |b: [u8; 2]| b.iter().any(|&v| (v as i32 - 0x80).abs() > 0x30);
+    for gp in &gamepads {
+        let (b, s) = gamepad_to_pad(gp);
+        raw |= b;
+        if !off_centre(sticks.left) && off_centre(s.left) {
+            sticks.left = s.left;
+        }
+        if !off_centre(sticks.right) && off_centre(s.right) {
+            sticks.right = s.right;
+        }
+    }
+    pad.feed_analog(apply_button_assign(raw, entries) | inj.raw, sticks);
 }
 
 /// Which field map to load when `Scene::Field` is entered (the C++ passes it as `SSHSys+0x54`/`InitFieldSocketM(name)`).
@@ -305,6 +381,30 @@ impl Plugin for GameCorePlugin {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn stick_bytes_follow_libpad() {
+        use super::stick_bytes;
+        use bevy::math::Vec2;
+        assert_eq!(stick_bytes(Vec2::ZERO), [0x80, 0x80]);
+        assert_eq!(stick_bytes(Vec2::new(1.0, 1.0)), [0xff, 0x00], "right / up");
+        assert_eq!(stick_bytes(Vec2::new(-1.0, -1.0)), [0x00, 0xff], "left / down");
+    }
+
+    #[test]
+    fn analog_stick_reaches_move_control() {
+        use super::{stick_bytes, GamePad, PadSticks};
+        use bevy::math::Vec2;
+        let mut p = GamePad::default();
+        p.feed_analog(0, PadSticks { left: stick_bytes(Vec2::new(0.0, 1.0)), ..Default::default() });
+        let (g, d) = p.stick_gauge_degree();
+        assert!(g > 0.95 && d.abs() < 1e-3, "full up = run heading 0 ({g}, {d})");
+        p.feed_analog(0, PadSticks { left: stick_bytes(Vec2::new(0.5, 0.0)), ..Default::default() });
+        let (g, d) = p.stick_gauge_degree();
+        assert!(g > 0.1 && g < 0.95 && (d - 90.0).abs() < 1e-3, "half right = walk heading 90 ({g}, {d})");
+        p.feed(0);
+        assert_eq!(p.stick_gauge_degree().0, 0.0);
+    }
+
     #[test]
     fn retail_swaps_circle_and_cross() {
         use super::{apply_button_assign, padbit, JP_DEFAULT_BUTTONS, US_DEFAULT_BUTTONS};

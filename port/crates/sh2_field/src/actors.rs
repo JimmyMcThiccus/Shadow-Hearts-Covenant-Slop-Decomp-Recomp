@@ -194,6 +194,9 @@ pub struct CharacterModel {
     pub current: Option<String>,
     /// the playing non-looping motion has ended
     pub finished: bool,
+    /// the last motion that ended since the script last looked: `finished` drops again within a frame when the model returns to its idle
+    /// motion, so a short motion could end between two script checks
+    pub ended: Option<String>,
     /// display flag (`DispCharacter` / `ClrCharacter`); applied to the root's `Visibility`
     pub shown: bool,
     /// `ActorSpawn::generation`
@@ -218,6 +221,7 @@ impl CharacterModel {
             rate: 1.0,
             current: None,
             finished: false,
+            ended: None,
             shown: true,
             script_generation: 0,
             wanted: Some("fidl".into()),
@@ -235,6 +239,7 @@ impl CharacterModel {
         self.wanted = Some(name.to_owned());
         self.manual = true;
         self.finished = false;
+        self.ended = None;
         self.chain.clear();
         true
     }
@@ -661,7 +666,6 @@ pub fn drive_player_actor(
     rt: Option<Res<FieldRuntime>>,
     time: Res<Time>,
     mut q: Query<(&mut CharacterModel, &mut ActorPose)>,
-    mut last: Local<Option<[f32; 3]>>,
     subject: Option<ResMut<crate::bevy::FieldLightSubject>>,
 ) {
     let Some(rt) = rt else { return };
@@ -670,12 +674,6 @@ pub fn drive_player_actor(
     if let Some(mut s) = subject {
         s.0 = Some(Vec3::from(p.pos));
     }
-    let dt_ticks = (time.delta_secs() * 60.0).max(1e-3);
-    let speed = match *last {
-        Some(l) => ((p.pos[0] - l[0]).powi(2) + (p.pos[2] - l[2]).powi(2)).sqrt() / dt_ticks,
-        None => 0.0,
-    };
-    *last = Some(p.pos);
     if std::env::var_os("SH2_ACTOR_DEBUG").is_some() && (time.elapsed_secs() as u32) % 2 == 0 && time.delta_secs() > 0.0 && (time.elapsed_secs().fract() < time.delta_secs()) {
         log::info!("actor debug: player pos {:?} yaw {:.2} moving {} cam {:?}", p.pos, p.yaw, p.moving, rt.sim.pose.map(|c| (c.pos, c.target)));
     }
@@ -688,7 +686,9 @@ pub fn drive_player_actor(
         pose.pos = p.pos;
         pose.yaw = p.yaw;
         cm.shown = shown;
-        if cm.manual {
+        // a script `SetMotion` holds while the player stands; moving (pad or script move) goes back to the move motions
+        // (`CField::Polling` -> `PlayMoveMotion`, which leaves the manual motion)
+        if cm.manual && !p.moving {
             continue;
         }
         let gait = if p.moving {
@@ -701,7 +701,8 @@ pub fn drive_player_actor(
             MoveGait::Idle
         };
         cm.play_move_motion(gait);
-        cm.match_speed(speed);
+        // the sim moves in 60 Hz ticks: match the per-tick step, not the render frame's displacement (which is 0 on frames without a tick)
+        cm.match_speed(p.step);
     }
 }
 
@@ -711,6 +712,9 @@ pub fn drive_motions(mut q: Query<&mut CharacterModel>, mut models: Query<&mut A
         let Ok(mut am) = models.get_mut(cm.holder) else { continue };
         am.speed = cm.rate * if cm.manual { 1.0 } else { cm.gait_rate };
         if let Some(w) = cm.wanted.take() {
+            if std::env::var_os("SH2_FIELD_OPS").is_some() && cm.slot != 0 {
+                log::info!("field motion: slot {} wants `{w}` (playing {:?}, finished {})", cm.slot, am.current, cm.finished);
+            }
             if am.current.as_deref() != Some(w.as_str()) || cm.finished {
                 let blend = if am.current.is_some() { cm.blend } else { 0.0 };
                 if am.play_blend(&w, blend) {
@@ -724,7 +728,11 @@ pub fn drive_motions(mut q: Query<&mut CharacterModel>, mut models: Query<&mut A
         // the playing motion ran out: chained motion, else back to the move motions
         if am.inst.motion_finished() && cm.current.is_some() && !cm.finished {
             cm.finished = true;
+            cm.ended = cm.current.clone();
             if let Some(n) = cm.chain.pop_front() {
+                if std::env::var_os("SH2_FIELD_OPS").is_some() {
+                    log::info!("field motion: slot {} chains `{n}`", cm.slot);
+                }
                 if am.play_blend(&n, cm.blend) {
                     cm.current = Some(n);
                     cm.finished = false;

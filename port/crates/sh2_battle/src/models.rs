@@ -270,6 +270,8 @@ pub struct BattleModel {
     pub facing: Vec3,
     /// bounding radius (`BtlChr+0x3b0`)
     pub radius: f32,
+    /// the model's own hit box: the BBoxes of the package's `bbx` list (`BtlChr+0x498`, [`hurt_boxes`]); empty = use the radius / height box
+    pub hurt: Vec<usize>,
     /// the retail state machine of this fighter
     pub ch: Choreo,
 }
@@ -327,9 +329,27 @@ pub fn posed_bounds(am: &AnimatedModel) -> Option<(Vec3, Vec3)> {
     any.then_some((lo, hi))
 }
 
+/// `BtlChr.bFlagsA` bits 5 / 6 (`STOP` / pending stop) of one fighter: the combo hand-off freeze (`CBattle::PAtkHitSet`, per-chr update, `ComboStopOff`).
+#[derive(Clone, Copy, Default, PartialEq, Debug)]
+pub enum StopSt {
+    #[default]
+    Free,
+    /// bit 6 with the `field_0x100` timer (seconds left until it becomes a stop)
+    Pending(f32),
+    /// bit 5: the per-chr update (animation, move code) is skipped, except for the acting fighter
+    Stopped,
+}
+
+/// `PAtkHitSet` arms the timer with `0x3f088889` (0.5333 s).
+const STOP_DELAY: f32 = 0.533_333_34;
+
 /// Spawn bookkeeping and the event cursor.
 #[derive(Resource, Default)]
 pub struct BattleModels {
+    /// per fighter slot: the combo hand-off freeze (`bFlagsA` STOP / pending STOP)
+    pub stop: [StopSt; 16],
+    /// the fighter whose swing armed the stops; the next member's attack start releases them (`ComboStopOff(-1)`, `CBattle` AttackFunc step 6)
+    stop_owner: Option<usize>,
     spawned: bool,
     cursor: usize,
     /// the fighter whose turn it is (`b.actor` is already `None` while the damage of its action is processed)
@@ -339,10 +359,10 @@ pub struct BattleModels {
     /// fighters whose guard / cast / escape was started for the current action
     action_for: Option<usize>,
     win_pending: bool,
-    /// index of the next damage result of the action, and the reactions of later hits waiting for their frame: `(seconds, target, critical, lethal)`
+    /// index of the next damage result of the action, and the reactions of later hits waiting for their frame: `(seconds, target, critical, lethal, push words)`
     clock: f32,
     dmg_idx: usize,
-    delayed_hits: Vec<(f32, usize, bool, bool)>,
+    delayed_hits: Vec<(f32, usize, bool, bool, Option<(u16, u16)>, SlamPlan)>,
     pub entities: Vec<Option<Entity>>,
     /// parsed weapon packages by their `.WPN` path (`None` = the disc has none)
     weapons: std::collections::HashMap<String, Option<Arc<WeaponSet>>>,
@@ -503,6 +523,8 @@ pub fn spawn_battle_models(
         let radius = rt.boxes[i].map(|b| b.radius()).unwrap_or(4.0);
         // `DeathInit`: monsters die by `MONSTERParam+0x15 >> 3 & 3`
         let death_type = if f.is_enemy { db.as_deref().and_then(|d| d.0.dat.record(crate::data::SEC_MONSTER, f.char_id.max(0) as usize, 0x38)).map(|r| crate::choreo::death_type(r[0x15])).unwrap_or(0) } else { 0 };
+        let hurt = disc.read(&files[0]).ok().and_then(|b| crate::stage::sections(&b).iter().find(|s| s.0 == "bbx").map(|s| hurt_boxes(s.1, &asset.model))).unwrap_or_default();
+        let hurt_log = hurt.clone();
         commands.entity(root).insert(BattleModel {
             chr: i,
             enemy: f.is_enemy,
@@ -515,6 +537,7 @@ pub fn spawn_battle_models(
             yaw,
             facing,
             radius,
+            hurt,
             ch: Choreo::new(f.is_enemy, death_type, radius, home, facing),
         });
         st.entities[i] = Some(root);
@@ -524,7 +547,7 @@ pub fn spawn_battle_models(
                 commands.entity(e).remove::<(Mesh3d, MeshMaterial3d<StandardMaterial>)>();
             }
         }
-        log::info!("battle: fighter {i} model CHR {chr_no:03} ({})", if f.is_enemy { "monster" } else { "party" });
+        log::info!("battle: fighter {i} model CHR {chr_no:03} ({}), hit box BBoxes {:?}", if f.is_enemy { "monster" } else { "party" }, hurt_log);
     }
     spawn_last_boss_weapons(&mut commands, &disc, &mut gpu, &spawned);
 }
@@ -770,6 +793,34 @@ pub fn patk_stand(db: Option<&BattleDb>, pc: Option<u8>) -> f32 {
     db.0.dat.record(23, pc as usize, 0x18).map(|r| f32::from_le_bytes([r[4], r[5], r[6], r[7]])).filter(|v| v.is_finite() && (0.0..=40.0).contains(v)).unwrap_or(0.0)
 }
 
+/// `nAtkTbl` of a fighter (`CBattle` JP 12384 / 12650 / 12667 / 12921): the monster's attack table (`MONSTERParam +0x30`), the PC id, or while
+/// fused the fusion row's `FUSM +6` (fusions 4 / 5 -> `PATK` 20 / 21, 13 / 14 -> 29 / 30: the projectile fusions).
+pub fn patk_index(db: &BattleDb, f: &crate::flow::Fighter, pc: Option<u8>, fused: Option<i32>) -> Option<usize> {
+    if f.is_enemy {
+        return db.0.monster(f.char_id.max(0) as usize).map(|mp| mp.attack_table as usize);
+    }
+    if let Some(id) = fused.filter(|id| *id >= 0) {
+        let sec = db.0.dat.section(crate::data::SEC_FUSION[0]);
+        if let Some(r) = sec.get(id as usize * 0x20 + 6..id as usize * 0x20 + 8) {
+            return Some(u16::from_le_bytes([r[0], r[1]]) as usize);
+        }
+    }
+    pc.map(|p| p as usize)
+}
+
+/// `(PATK +2 & 7) != 0`: the fighter attacks from where it stands (`BtlChrSequence` JP CBattle.c 14978).  `PATK` = [`patk_index`].
+pub fn patk_in_place(db: Option<&BattleDb>, f: Option<&crate::flow::Fighter>, pc: Option<u8>, fused: Option<i32>) -> bool {
+    let (Some(db), Some(f)) = (db, f) else { return false };
+    patk_index(db, f, pc, fused).and_then(|i| db.0.dat.record(23, i, 0x18)).map(|r| r[2] & 7 != 0).unwrap_or(false)
+}
+
+/// `PATK +1`: the number of hit groups of the fighter's attack.
+pub fn patk_hits(db: Option<&BattleDb>, f: Option<&crate::flow::Fighter>, pc: Option<u8>, fused: Option<i32>) -> Option<usize> {
+    let (db, f) = (db?, f?);
+    let idx = patk_index(db, f, pc, fused)?;
+    db.0.dat.record(23, idx, 0x18).map(|r| r[1].clamp(1, 16) as usize)
+}
+
 /// `f45c` / `f45e` of the Standard attack (time / power words of the attack data given to the damage routine): the live US value for Nicolai's
 /// Standard attack on a Revenant; other attack shapes (Hard Hit / High Angle / Knock Down) use other rows of the attack table that are not decoded yet.
 pub const STANDARD_PUSH: (u16, u16) = (70, 70);
@@ -781,12 +832,138 @@ fn attacker_pos(st: &BattleModels, actor: Option<usize>, models: &Query<(&mut Ba
 }
 
 /// Start the state 0x19 knock-back (`MoveWorkInit` / `MoveFunc`, see [`crate::choreo::Push`]) of a struck fighter; launched (`flya`) and lethal hits use other states.
-fn knock_back(ch: &mut crate::choreo::Choreo, from: Option<Vec3>, heavy_or_lethal: bool) {
+/// `words` = the push words of the hit (`PAtkHitSet` `a9` / `a10`: time, power; a bullet's come from the PATK2 row of its attack,
+/// [`crate::flow::Battle::push_words`]); `None` = the melee approximation [`STANDARD_PUSH`].
+fn knock_back(ch: &mut crate::choreo::Choreo, from: Option<Vec3>, heavy_or_lethal: bool, words: Option<(u16, u16)>) {
+    let dir = from.map(|f| ch.pos - f).filter(|d| d.with_y(0.0).length() > 0.1).unwrap_or(-ch.facing);
+    let (time, power) = words.unwrap_or(STANDARD_PUSH);
     if heavy_or_lethal {
+        // a launched target flies the state 0x1b arc (a killed one dies where it stands; `start_launch` ignores fighters not in `flyi`)
+        ch.start_launch(dir, time, power);
         return;
     }
-    let dir = from.map(|f| ch.pos - f).filter(|d| d.with_y(0.0).length() > 0.1).unwrap_or(-ch.facing);
-    ch.start_push(dir, STANDARD_PUSH.0, STANDARD_PUSH.1);
+    ch.start_push(dir, time, power);
+}
+
+/// What a weapon hit tells the choreography about a knock-down slide ([`crate::choreo::Choreo::start_slam`]): the hit class of its PATK2 row (4 -> state 0x1c, 6 ->
+/// 0x1e), the damage it did (`BtlChr+0x462`), the target's size class and the attacker's slot.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SlamPlan {
+    pub class: u8,
+    pub amount: i32,
+    pub weight: u8,
+    pub attacker: Option<usize>,
+}
+
+/// The reaction of a struck fighter: the hit motion and the push of [`knock_back`]; a knock-down of class 4 / 6 slides along the floor instead of flying the
+/// launch arc ([`crate::wall_involve`]).
+fn react(m: &mut BattleModel, from: Option<Vec3>, heavy: bool, lethal: bool, words: Option<(u16, u16)>, plan: SlamPlan, arena: [f32; 2]) {
+    let asset = m.asset.clone();
+    m.ch.hit(heavy, lethal, &*asset);
+    knock_back(&mut m.ch, from, lethal || heavy, words);
+    if heavy && !lethal && matches!(plan.class, 4 | 6) {
+        let dir = from.map(|f| m.ch.pos - f).filter(|d| d.with_y(0.0).length() > 0.1).unwrap_or(-m.ch.facing);
+        let kind = if plan.class == 6 { crate::wall_involve::SlamKind::Blwi } else { crate::wall_involve::SlamKind::Blwd };
+        m.ch.start_slam(kind, dir, plan.weight, plan.amount, plan.attacker.unwrap_or(usize::MAX), arena, &*asset);
+    }
+}
+
+/// The reaction data of one PATK2 hit row (`BtlChr+0x450` row, 0x48 bytes) as `PAtkHitSet` receives it: `+3` hit class (`a8`), `+0x44 / +0x46` the push
+/// time / power words (`a9` / `a10`, the target's `BtlChr+0x45c / +0x45e`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HitRow {
+    pub class: u8,
+    pub time: u16,
+    pub power: u16,
+}
+
+impl HitRow {
+    pub fn parse(r: &[u8]) -> Option<HitRow> {
+        let w = |o: usize| r.get(o..o + 2).map(|b| u16::from_le_bytes([b[0], b[1]]));
+        Some(HitRow { class: *r.get(3)?, time: w(0x44)?, power: w(0x46)? })
+    }
+}
+
+/// The hit row of hit group `group` of attack record `patk` (`PATK +0xc` = first PATK2 row, `+1` = number of groups; a group past the end repeats the last).
+pub fn hit_row(db: &BattleDb, patk: usize, group: usize) -> Option<HitRow> {
+    let p = db.0.dat.record(23, patk, 0x18)?;
+    let base = u16::from_le_bytes([p[0xc], p[0xd]]) as usize;
+    let n = (p[1].max(1)) as usize;
+    HitRow::parse(db.0.dat.record(24, base + group.min(n - 1), 0x48)?)
+}
+
+/// What a hit does to a standing, living target (`PAtkHitSet`'s `switch(a8)`, JP CBattle.c 48308..48612): the plain flinch family (states 0x16 / 0x18 /
+/// 0x19 / 0x1a: the `hit` motion, a scripted push by the push words) or the knock-down family (0x1b launch, 0x1c / 0x1d / 0x1e: `flyi` / `blwd` / `blwi`
+/// through `MoveWorkInit` arcs).  `weight` = the defender's size class (`MONSTERParam +0x14 >> 3 & 7`, a party member's `BtlSaveDat +0x44 >> 5`): classes 3..5
+/// are too heavy to be knocked down -- they flinch instead.  (The ring-result condition `CBattle+0x4336` is taken as "not a total miss".)
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Reaction {
+    Flinch,
+    KnockDown,
+}
+
+pub fn hit_reaction(class: u8, weight: u8) -> Reaction {
+    let heavy_body = (3..=5).contains(&weight);
+    match class {
+        3..=6 if !heavy_body => Reaction::KnockDown,
+        _ => Reaction::Flinch,
+    }
+}
+
+/// The PATK2 row of hit group `k` of the acting fighter's attack (`nAtkTbl`: its monster attack table / PC id / the fusion's `FUSM +6`).
+fn attack_hit_row(db: Option<&BattleDb>, rt: &BattleRuntime, cur: Option<usize>, k: usize) -> Option<HitRow> {
+    let db = db?;
+    let a = rt.battle.actor.or(cur)?;
+    let f = rt.battle.fighters.get(a)?.as_ref()?;
+    let pc = rt.setup.pc_ids.get(a).copied().flatten();
+    let fused = rt.battle.fused.get(a).and_then(|s| s.as_ref()).map(|s| s.id);
+    hit_row(db, patk_index(db, f, pc, fused)?, k)
+}
+
+/// The defender's weight class of [`hit_reaction`] (monsters: `MONSTERParam +0x14` bits 3..5; party members: 0, their `BtlSaveDat` field is not read yet).
+pub(crate) fn target_weight(db: Option<&BattleDb>, rt: &BattleRuntime, t: usize) -> u8 {
+    let Some(f) = rt.battle.fighters.get(t).and_then(|f| f.as_ref()).filter(|f| f.is_enemy) else { return 0 };
+    db.and_then(|d| d.0.dat.record(crate::data::SEC_MONSTER, f.char_id.max(0) as usize, 0x38)).map(|r| (r[0x14] & 0x3f) >> 3).unwrap_or(0)
+}
+
+/// The BBoxes of a battle model's own hit box (`MakeFrameList`, JP CBattle.c 13061): the `bbx` section of its package lists `n` (`+0`) names of 12 bytes
+/// (`+0x30 + [+4] + i * 12`); each names a frame (the first BBox riding on a frame of that name) or is `__<n>` for BBox `n` (`BtlModel::searchBBoxIndex`).
+/// The union of their corners is the box bullets hit ([`sh2_gfx::effects::bullet::HitBox::of_model`]).  Names that match nothing are skipped.
+pub fn hurt_boxes(bbx: &[u8], model: &sh2_formats::model::Model) -> Vec<usize> {
+    let u32_at = |o: usize| bbx.get(o..o + 4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize);
+    let (Some(n), Some(off)) = (u32_at(0), u32_at(4)) else { return vec![] };
+    let mut out = vec![];
+    for i in 0..n.min(64) {
+        let at = 0x30 + off + i * 12;
+        let Some(raw) = bbx.get(at..at + 8) else { break };
+        let name = String::from_utf8_lossy(raw.split(|&c| c == 0).next().unwrap_or(&[])).to_string();
+        let idx = match name.strip_prefix("__") {
+            Some(num) => num.parse::<usize>().ok().filter(|&k| k < model.bounds.len()),
+            None => model.bounds.iter().position(|b| model.frames.get((b.tag & 0xff) as usize).is_some_and(|f| f.name == name)),
+        };
+        if let Some(k) = idx {
+            out.push(k);
+        }
+    }
+    out
+}
+
+/// `PAtkHitSet`'s arena test (JP CBattle.c 47753..47782): the target's dodge step is 10 units along the hit direction (attacker -> target); when that
+/// spot, grown by the target's radius, leaves the arena (`half = (CBattle+0x3f14 / +0x3f1c) / 2`) the dodge is impossible and the hit lands.  Bevy xz.
+pub fn dodge_leaves_arena(target: bevy::math::Vec2, attacker: bevy::math::Vec2, radius: f32, arena: [f32; 2]) -> bool {
+    if arena[0] < 20.0 || arena[1] < 20.0 {
+        return false;
+    }
+    let dir = (target - attacker).normalize_or_zero();
+    let p = target + dir * 10.0;
+    p.x < -arena[0] / 2.0 + radius || arena[0] / 2.0 - radius < p.x || p.y < -arena[1] / 2.0 + radius || arena[1] / 2.0 - radius < p.y
+}
+
+/// The other two forced hits of `PAtkHitSet`: the attacker stands behind the target (more than 90 degrees off its facing) and the target is still in a
+/// hit reaction (`BtlChr+0xb8` state 0x16..0x26).
+pub fn dodge_blocked_by_state(target_facing: bevy::math::Vec2, target: bevy::math::Vec2, attacker: bevy::math::Vec2, reacting: bool) -> bool {
+    let to_attacker = (attacker - target).normalize_or_zero();
+    reacting || target_facing.normalize_or_zero().dot(to_attacker) < 0.0
 }
 
 /// Drive the models from the battle state.
@@ -828,6 +1005,7 @@ pub fn drive_battle_models(
     let ent = |st: &BattleModels, i: usize| st.entities.get(i).copied().flatten();
 
     // ---- new battle events
+    let first_new = st.cursor;
     let new: Vec<BattleEvent> = rt.battle.events.get(st.cursor..).map(|s| s.to_vec()).unwrap_or_default();
     st.cursor = rt.battle.events.len();
     for (ei, e) in new.iter().enumerate() {
@@ -843,22 +1021,47 @@ pub fn drive_battle_models(
                 }
             }
             BattleEvent::Damage { target, amount, critical } if *amount > 0 => {
+                // `PAtkHitSet`: a surviving target of a combo member's hit while members are still pending (`wTurnPendMask != 0`) gets the pending stop
+                // (the damage of an action is processed after `finish_action` has moved on to the next member: the swing log keeps `wTurnPendMask != 0` of the swing)
+                if rt.battle.swing.pending && *target < st.stop.len() && rt.battle.fighters.get(*target).and_then(|f| f.as_ref()).is_some_and(|f| f.hp > 0) {
+                    st.stop[*target] = StopSt::Pending(STOP_DELAY);
+                    st.stop_owner = Some(rt.battle.swing.attacker);
+                }
                 // the killing blow is the last damage result of this target in the batch
                 let last = new.iter().rposition(|x| matches!(x, BattleEvent::Damage { target: t, amount: a, .. } if t == target && *a > 0)) == Some(ei);
                 let lethal = last && rt.battle.fighters.get(*target).and_then(|f| f.as_ref()).map(|f| f.hp <= 0).unwrap_or(false);
-                // blown away by criticals and by hits that take a big share of the target's HP (the retail choice depends on the attack's knock-back data)
-                let heavy = *critical || rt.battle.fighters.get(*target).and_then(|f| f.as_ref()).map(|f| *amount * 4 >= f.max_hp).unwrap_or(false);
+                // a bullet's hit carries the push words of its attack row (class 0 rows: the plain flinch `hit` state 0x16 with that push, a launch only
+                // for the killing blow); other hits: blown away by criticals and by hits that take a big share of the target's HP (the retail choice
+                // depends on the attack's knock-back data)
                 let k = st.dmg_idx;
                 st.dmg_idx += 1;
+                let words = rt.battle.push_words.iter().find(|(i, _)| *i == first_new + ei).map(|p| p.1);
+                // a weapon hit: the attacker's PATK2 row of this hit group gives the reaction class and the push words
+                let row = if words.is_some() { None } else { attack_hit_row(db.as_deref(), rt, st.cur_actor, k) };
+                // only a weapon attack (a swing was started, `attack_for`) throws its target by the hit class; skills / magic carry their own reactions
+                let plan = SlamPlan { class: row.filter(|_| st.attack_for.is_some()).map(|r| r.class).unwrap_or(0), amount: *amount, weight: target_weight(db.as_deref(), rt, *target), attacker: rt.battle.actor.or(st.cur_actor) };
+                let (words, heavy) = match (words, row) {
+                    (Some(w), _) => (Some(w), false),
+                    (None, Some(r)) => {
+                        let weight = target_weight(db.as_deref(), rt, *target);
+                        (Some((r.time, r.power)), hit_reaction(r.class, weight) == Reaction::KnockDown)
+                    }
+                    (None, None) => (None, *critical || rt.battle.fighters.get(*target).and_then(|f| f.as_ref()).map(|f| *amount * 4 >= f.max_hp).unwrap_or(false)),
+                };
+                // development aid: `SH2_BATTLE_HIT_CLASS=<n>` plays every weapon hit as that PATK2 hit class (4 / 6 = the wall slams of [`crate::wall_involve`];
+                // the port lets monsters swing once, so the finishing class 4 / 6 rows of their combos are never reached otherwise)
+                let (plan, heavy) = match std::env::var("SH2_BATTLE_HIT_CLASS").ok().and_then(|v| v.parse::<u8>().ok()) {
+                    Some(c) => (SlamPlan { class: c, ..plan }, hit_reaction(c, plan.weight) == Reaction::KnockDown),
+                    None => (plan, heavy),
+                };
+                log::debug!("battle: hit {k} on {target}: row {row:?} push words {words:?} knock down {heavy} lethal {lethal}");
                 let delay = if k > 0 { rt.hit_offsets.get(k).copied().unwrap_or(0.0) } else { 0.0 };
                 if delay > 0.0 {
-                    st.delayed_hits.push((delay, *target, heavy, lethal));
+                    st.delayed_hits.push((delay, *target, heavy, lethal, words, plan));
                 } else {
                     let from = attacker_pos(st, rt.battle.actor, &models);
                     if let Some(Ok((mut m, _, _))) = ent(st, *target).map(|en| models.get_mut(en)) {
-                        let asset = m.asset.clone();
-                        m.ch.hit(heavy, lethal, &*asset);
-                        knock_back(&mut m.ch, from, lethal || heavy);
+                        react(&mut m, from, heavy, lethal, words, plan, rt.battle.arena);
                     }
                 }
             }
@@ -927,14 +1130,12 @@ pub fn drive_battle_models(
         for h in st.delayed_hits.iter_mut() {
             h.0 -= dt;
         }
-        let due: Vec<(f32, usize, bool, bool)> = st.delayed_hits.iter().copied().filter(|h| h.0 <= 0.0).collect();
+        let due: Vec<(f32, usize, bool, bool, Option<(u16, u16)>, SlamPlan)> = st.delayed_hits.iter().copied().filter(|h| h.0 <= 0.0).collect();
         st.delayed_hits.retain(|h| h.0 > 0.0);
-        for (_, target, critical, lethal) in due {
+        for (_, target, critical, lethal, words, plan) in due {
             let from = attacker_pos(st, rt.battle.actor, &models);
             if let Some(Ok((mut m, _, _))) = ent(st, target).map(|en| models.get_mut(en)) {
-                let asset = m.asset.clone();
-                m.ch.hit(critical, lethal, &*asset);
-                knock_back(&mut m.ch, from, lethal || critical);
+                react(&mut m, from, critical, lethal, words, plan, rt.battle.arena);
             }
         }
     }
@@ -945,6 +1146,19 @@ pub fn drive_battle_models(
             if m.ch.displaced() {
                 let asset = m.asset.clone();
                 m.ch.go_home(&*asset);
+            }
+        }
+    }
+
+    // `PAtkHitSet`'s forced hits (no dodge roll): the target is still reacting to an earlier hit, the attacker stands behind it, or its dodge step would
+    // leave the arena
+    rt.battle.dodge_forced = false;
+    if rt.battle.phase == Phase::Attack {
+        if let (Some(a), t) = (rt.battle.actor, rt.battle.cmd.p48) {
+            let tm = (t >= 0).then(|| ent(st, t as usize)).flatten().and_then(|en| models.get(en).ok().map(|x| (x.0.pos, x.0.ch.facing, x.0.radius, matches!(x.0.ch.act, crate::choreo::Act::Hit { .. } | crate::choreo::Act::GuardHit | crate::choreo::Act::Down | crate::choreo::Act::EnemyDown | crate::choreo::Act::Dissolve))));
+            if let (Some((tp, tf, tr, reacting)), Some(ap)) = (tm, attacker_pos(st, Some(a), &models)) {
+                let xz = |v: Vec3| bevy::math::Vec2::new(v.x, v.z);
+                rt.battle.dodge_forced = dodge_blocked_by_state(xz(tf), xz(tp), xz(ap), reacting) || dodge_leaves_arena(xz(tp), xz(ap), tr, rt.battle.arena);
             }
         }
     }
@@ -976,7 +1190,14 @@ pub fn drive_battle_models(
                         m.ch.arena = arena;
                         // `PATK` row of the attacker (`nAtkTbl` = the PC id): the float at +4 is the extra stand-off of ranged weapons
                         m.ch.stand_extra = if actor_enemy { 0.0 } else { patk_stand(db.as_deref(), rt.setup.pc_ids.get(a).copied().flatten()) };
+                        let fused = rt.battle.fused.get(a).and_then(|s| s.as_ref()).map(|s| s.id);
+                        m.ch.in_place = patk_in_place(db.as_deref(), rt.battle.fighters.get(a).and_then(|f| f.as_ref()), rt.setup.pc_ids.get(a).copied().flatten(), fused);
                         m.ch.n_hits = rt.battle.fighters.get(a).and_then(|f| f.as_ref()).map(|f| f.hits_per_attack.clamp(1, 5) as usize).unwrap_or(1);
+                        if m.ch.in_place {
+                            // a ranged attack plays every hit group of its swing (live US, monster set 134: the gun soldier's `atck` fires all
+                            // 15 `MosEvent`s = 5 groups x 3 shots, one bullet-table row each): the group count is the `PATK` hit count, not the ring's
+                            m.ch.n_hits = patk_hits(db.as_deref(), rt.battle.fighters.get(a).and_then(|f| f.as_ref()), rt.setup.pc_ids.get(a).copied().flatten(), fused).unwrap_or(m.ch.n_hits);
+                        }
                         if m.ch.begin_attack(tp, tr, &*asset) {
                             // the damage numbers / grades / reactions of the later hits follow the swing's hit frames
                             rt.hit_offsets = m.ch.hit_offsets();
@@ -1040,6 +1261,13 @@ pub fn drive_battle_models(
     // ---- per model: advance the state machine, push the motion
     let mut shot_reason: Option<String> = None;
     let (mut hold, mut busy, mut winning) = (false, false, false);
+    // `ComboStopOff(-1)`: the combo is over, or the next member's swing begins (live: the flags drop when the ring is over, phase 5/5, not at the start of the attack phase)
+    if rt.battle.combo.is_empty() || (st.attack_for.is_some() && st.attack_for != st.stop_owner) {
+        st.stop = [StopSt::Free; 16];
+        st.stop_owner = None;
+    }
+    // `CBattle` phase step 8: with members still pending and a fighter stopped in its reaction, every active fighter is stopped until the next attack starts
+    let handoff = st.stop_owner.is_some() && rt.battle.actor != st.stop_owner && st.stop.iter().any(|s| *s == StopSt::Stopped);
     for (mut m, mut tf, mut vis) in &mut models {
         let m = &mut *m;
         let Ok(mut am) = anims.get_mut(m.holder) else { continue };
@@ -1050,7 +1278,24 @@ pub fn drive_battle_models(
         let dead = fighter.map(|f| f.hp <= 0).unwrap_or(false);
         let casting = casting_phase && actor == Some(m.chr);
         let anim = AnimState { current: am.current.clone(), time: am.inst.time(), finished: am.inst.motion_finished(), root_fwd: -am.inst.root_offset.z };
-        let fr = m.ch.update(&World { dt, hp_frac, dead, casting }, &*asset, &anim);
+        // the combo hand-off freeze (per-chr update: `bFlagsA` STOP skips the whole chr update unless it is `cActor`): push, launch, slide and animation stop where they are
+        let mut stop = st.stop.get(m.chr).copied().unwrap_or_default();
+        if let StopSt::Pending(t) = stop {
+            stop = if dead { StopSt::Free } else if t - dt <= 0.0 { StopSt::Stopped } else { StopSt::Pending(t - dt) };
+        }
+        // (retail reaches step 8 only after the actor's own animation is over: a fighter still playing its action motions stops once it settles)
+        let acting = matches!(m.ch.act, Act::Approach { .. } | Act::Strike { .. } | Act::Finish { .. } | Act::Return { .. } | Act::Walk { .. } | Act::Cast { .. } | Act::Antic { .. } | Act::Escape);
+        if handoff && !dead && !acting {
+            stop = StopSt::Stopped;
+        }
+        if let Some(slot) = st.stop.get_mut(m.chr) {
+            if std::mem::discriminant(slot) != std::mem::discriminant(&stop) && std::env::var_os("SH2_BATTLE_MOTION_LOG").is_some() {
+                log::info!("motion log: fighter {} stop {:?} -> {:?} (act {}, actor {:?}, queue {:?})", m.chr, *slot, stop, m.ch.act_name(), actor, rt.battle.combo_queue);
+            }
+            *slot = stop;
+        }
+        let frozen = stop == StopSt::Stopped && actor != Some(m.chr);
+        let fr = m.ch.update(&World { dt: if frozen { 0.0 } else { dt }, hp_frac, dead, casting }, &*asset, &anim);
         let banks = rt.battle.host.chr_se.get(m.chr).copied().unwrap_or((0, 0));
         play_chr_sounds(&mut m.ch, banks, m.chr, &mut st.se_rng);
         if let Some(req) = &fr.motion {
@@ -1066,8 +1311,11 @@ pub fn drive_battle_models(
             if !ok {
                 log::debug!("battle: fighter {} has no motion {}", m.chr, req.name);
             }
+            if std::env::var_os("SH2_BATTLE_MOTION_LOG").is_some() {
+                log::info!("motion log: fighter {} act {} -> {} (restart {}, ok {ok}, now {:?})", m.chr, m.ch.act_name(), req.name, req.restart, am.current);
+            }
         }
-        am.speed = fr.rate;
+        am.speed = if frozen { 0.0 } else { fr.rate };
         // `NormalDeathEfct` (the sparkle `EffMdl` of the dissolve, scaled by `(radius + 19) / 26`): a burst of light motes where the monster stood
         if m.ch.act == Act::Dissolve && prev != "dissolve" {
             let mesh = meshes.add(Cuboid::new(1.0, 1.0, 1.0));
@@ -1094,7 +1342,8 @@ pub fn drive_battle_models(
             shot_reason = Some(format!("{}{}_{}", shot_reason.map(|r| format!("{r}+")).unwrap_or_default(), m.chr, m.ch.act_name()));
         }
         hold |= m.ch.holding_attack();
-        busy |= m.ch.busy();
+        // a fighter held by the combo hand-off does not keep the turn order waiting (retail steps on while the flag is set; the hold ends at the next attack)
+        busy |= m.ch.busy() && !frozen;
         winning |= m.ch.act == Act::Win;
         // the dissolve of a dying monster (`NormalDeathEfct`: shrink + white flash) and the fade of death type 2
         if m.ch.act == Act::Dissolve || m.ch.flash > 0.0 {
@@ -1125,7 +1374,8 @@ pub fn drive_battle_models(
             *vis = want;
         }
     }
-    rt.anim_hold = hold;
+    // a ranged attack hits per bullet impact, not on the `MosEvent` that fired it (`Bullet1::Polling` -> `PAtkHitSet`): held until the volley is over
+    rt.anim_hold = hold || rt.bullet_hold;
     rt.anim_busy = busy;
     // the victory motion's lifetime for the win sequence (`BtlModel+0x510` 1 -> 2): started once a model is in `Act::Win`, done when none is any more
     if winning {
@@ -1135,7 +1385,7 @@ pub fn drive_battle_models(
     }
     // while somebody is acting: a picture every half second
     st.shot_clock += dt;
-    if (busy || winning) && st.shot_clock > 0.45 && shot_reason.is_none() {
+    if (busy || winning || st.stop.contains(&StopSt::Stopped)) && st.shot_clock > 0.45 && shot_reason.is_none() {
         shot_reason = Some("tick".into());
     }
     if shot_reason.is_some() {
@@ -1246,6 +1496,9 @@ pub fn motion_sounds(rt: Option<Res<BattleRuntime>>, models: Query<&BattleModel>
         for ev in mo.events.iter().filter(|e| e.base_name() == "SEtrigg") {
             for k in ev.keys() {
                 if k.time > from && k.time <= frame && k.value >= 0 {
+                    if std::env::var_os("SH2_BATTLE_MOTION_LOG").is_some() {
+                        log::info!("motion log: fighter {} `{name}` SEtrigg {} at frame {:.1} (bank {bank:#x})", m.chr, k.value, k.time);
+                    }
                     sh2_audio::post(sh2_audio::AudioRequest::PlayGlobalSe { id: (bank << 16) | (k.value as u32 & 0xffff) });
                 }
             }
@@ -1292,6 +1545,85 @@ impl Plugin for BattleModelsPlugin {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The `bbx` name list: frame names pick the first BBox on that frame, `__<n>` is BBox `n`, unknown names are skipped.
+    #[test]
+    fn the_bbx_name_list_resolves_to_bboxes() {
+        use sh2_formats::math::{FVector, Quaternion};
+        use sh2_formats::model::{BoundEntry, FrameDef, Model};
+        let frame = |n: &str| FrameDef { name: n.into(), parent: None, child: None, unknown: 0, sibling: None, translation: FVector::ZERO, rotation: Quaternion::IDENTITY };
+        let mut m = Model::empty();
+        m.frames = vec![frame("ROOT"), frame("BODY"), frame("ARM")];
+        m.bounds = [0u32, 1, 1, 2].iter().map(|&f| BoundEntry { tag: f, corners: [FVector::ZERO; 8] }).collect();
+        let mut bbx = vec![0u8; 0x30 + 5 * 12];
+        bbx[0] = 5;
+        for (i, name) in ["ARM", "BODY", "__0", "NOPE", "__9"].iter().enumerate() {
+            let at = 0x30 + i * 12;
+            bbx[at..at + name.len()].copy_from_slice(name.as_bytes());
+        }
+        // ARM -> BBox 3 (the first on frame 2), BODY -> 1 (first of frames 1 and 1), `__0` -> 0; `NOPE` / `__9` match nothing
+        assert_eq!(hurt_boxes(&bbx, &m), vec![3, 1, 0]);
+        assert!(hurt_boxes(&[], &m).is_empty());
+    }
+
+    /// `PAtkHitSet`'s forced hits: a dodge step (10 units along the hit direction) that leaves the arena, an attacker behind the target, a target
+    /// that is still reacting.
+    #[test]
+    fn forced_hits_at_the_arena_edge_from_behind_and_while_reacting() {
+        use bevy::math::Vec2;
+        let arena = [100.0, 80.0];
+        // the target stands 3 units inside the +x wall, hit from -x: the dodge (to x = 47 + 10 - r) leaves the arena
+        assert!(dodge_leaves_arena(Vec2::new(47.0, 0.0), Vec2::new(0.0, 0.0), 4.0, arena));
+        // 20 units inside it does not
+        assert!(!dodge_leaves_arena(Vec2::new(30.0, 0.0), Vec2::new(0.0, 0.0), 4.0, arena));
+        // the direction counts: the same spot hit from the wall's side dodges inward
+        assert!(!dodge_leaves_arena(Vec2::new(47.0, 0.0), Vec2::new(60.0, 0.0), 4.0, arena));
+        // z walls likewise (half depth 40)
+        assert!(dodge_leaves_arena(Vec2::new(0.0, -35.0), Vec2::new(0.0, 10.0), 4.0, arena));
+        // no known arena: no forced hit
+        assert!(!dodge_leaves_arena(Vec2::new(47.0, 0.0), Vec2::ZERO, 4.0, [0.0, 0.0]));
+        let facing = Vec2::new(0.0, 1.0);
+        let me = Vec2::ZERO;
+        assert!(!dodge_blocked_by_state(facing, me, Vec2::new(0.0, 20.0), false), "attacker in front");
+        assert!(dodge_blocked_by_state(facing, me, Vec2::new(0.0, -20.0), false), "attacker behind");
+        assert!(dodge_blocked_by_state(facing, me, Vec2::new(0.0, 20.0), true), "still reacting");
+    }
+
+    /// `PAtkHitSet`'s class switch: classes 3..6 knock a light target down, a heavy body (size class 3..5) only flinches, the plain classes always flinch.
+    #[test]
+    fn hit_classes_pick_the_reaction_family() {
+        for class in [0u8, 1, 2, 7, 8, 9, 10] {
+            assert_eq!(hit_reaction(class, 0), Reaction::Flinch, "class {class}");
+        }
+        for class in 3..=6u8 {
+            assert_eq!(hit_reaction(class, 0), Reaction::KnockDown);
+            assert_eq!(hit_reaction(class, 2), Reaction::KnockDown);
+            assert_eq!(hit_reaction(class, 6), Reaction::KnockDown);
+            for weight in 3..=5 {
+                assert_eq!(hit_reaction(class, weight), Reaction::Flinch, "class {class} weight {weight}");
+            }
+        }
+        let mut row = vec![0u8; 0x48];
+        row[3] = 4;
+        row[0x44..0x46].copy_from_slice(&110u16.to_le_bytes());
+        row[0x46..0x48].copy_from_slice(&90u16.to_le_bytes());
+        assert_eq!(HitRow::parse(&row), Some(HitRow { class: 4, time: 110, power: 90 }));
+        assert_eq!(HitRow::parse(&row[..0x40]), None);
+    }
+
+    /// A bullet's push words drive the same push as a melee hit's: power 0 (the soldier's plain rows) pushes nothing, 75 / 50 slides 5.45 units.
+    #[test]
+    fn bullet_push_words_set_the_knock_back() {
+        use crate::choreo::Push;
+        assert!(Push::new(Vec3::Z, 50, 0, false).is_none(), "class 0 rows with power 0: no push");
+        let p = Push::new(Vec3::Z, 75, 50, false).unwrap();
+        // n = int(75 * 30 / 100 + 0.5) = 23, T = 253, v0 = 5 * 23 / 253 = 0.4545 per tick, a = -5 / 253: 23 ticks slide 23 v0 - 253 |a| = 5.45 units
+        let (mut d, mut q) = (0.0, p);
+        while !q.finished() {
+            d += q.step(1.0 / 60.0).length();
+        }
+        assert!((d - 5.4545).abs() < 0.01, "{d}");
+    }
 
     #[test]
     fn file_names_follow_the_format_strings() {

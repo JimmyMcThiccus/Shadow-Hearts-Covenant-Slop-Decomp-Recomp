@@ -26,7 +26,6 @@ use crate::host::{tick_state, FieldAudio, FieldTables, MenuReq};
 pub use crate::host::{FieldHost, ScriptState};
 use crate::menu_overlay::{menu_blocks_field, InGameMenu, MenuOverlayPlugin};
 use crate::pkb_compat::PkbSet;
-use crate::script_ui::{WinPhase, CELL_H, CELL_W};
 use crate::sim::{read_enc_dist, FieldSim, SimEvent};
 
 // ----------------------------------------------------------------------------------------------------------------
@@ -570,6 +569,8 @@ pub fn field_logic_tick(
                 press &= !padbit::TRIANGLE;
             }
             // the sim's own player control is only active while the script gave control to the pad
+            // `MakeMoveControl` reads the left stick (`CPad+0x7c` gauge, `+0x84` degrees) before the d-pad
+            rt.sim.stick = pad.stick_gauge_degree();
             let events = rt.sim.tick(pad.real(), press, frozen);
             for e in events {
                 log::debug!("field event {e:?} at {:?}", rt.sim.player.pos);
@@ -776,7 +777,7 @@ pub fn bridge_actors(
     rt: Option<ResMut<FieldRuntime>>,
     cmds: Option<ResMut<crate::actors::ActorCommands>>,
     reg: Option<Res<crate::actors::ActorRegistry>>,
-    models: Query<&crate::actors::CharacterModel>,
+    mut models: Query<&mut crate::actors::CharacterModel>,
 ) {
     use crate::actors::{ActorCommand, ActorKind, ActorPose, ActorSpawn, MotionRef};
     use crate::script_actors::ActorOut;
@@ -838,12 +839,19 @@ pub fn bridge_actors(
     if let Some(reg) = reg {
         for slot in 0..crate::script_actors::MAX_SLOTS {
             let Some(e) = reg.get(slot as i32) else { continue };
-            let Ok(cm) = models.get(e) else { continue };
+            let Ok(mut cm) = models.get_mut(e) else { continue };
             if let Some(a) = rt.st.actors.slots[slot].as_mut() {
                 if a.motion_left > 0 && !a.motion_loop && a.motion_age < 1500 {
-                    if cm.motion_finished() && a.motion_age > 3 {
+                    // hold the script motion while the model plays *that* motion; a motion the model does not have (Nicolai's `lk_a` / `lk_b` at AP_02_U) or one
+                    // that already ran is counted down by the script's own clock -- waiting for a model that never plays it held `WaitModel` for 25 s
+                    let want = if a.motion_name.is_empty() { crate::actors::motion_name(a.motion) } else { Some(a.motion_name.clone()) };
+                    if a.motion_age == 1499 {
+                        log::warn!("field {}: script motion {} of slot {slot} still held after 25 s (the model never reported it ended): releasing it", rt.map, a.motion);
+                    }
+                    if want.is_some() && cm.ended == want && a.motion_age > 3 {
+                        cm.ended = None;
                         a.motion_left = 1;
-                    } else if a.motion_left < 4 {
+                    } else if want.is_some() && cm.current == want && !cm.motion_finished() && a.motion_left < 4 {
                         a.motion_left = 4;
                     }
                 }
@@ -871,69 +879,10 @@ fn draw_fader(f: &crate::socket::Fader, g: &mut dyn sh2_menu::gfx::MenuGfx) {
 fn draw_field_ui(rt: &FieldRuntime, canvas: &mut UiCanvas) {
     {
         let mut g = canvas.begin(layer::FIELD);
-        // back fader (op 0x29) sits behind the windows
-        draw_fader(&rt.faders[0], &mut g);
+        // back fader (op 0x29), the message windows, name plates and portraits (`FieldMessage`, `FaceImage`) are drawn by `textbox::TextboxPlugin`
+        // into sprite layers (the retail frames need mirrored UVs and gradient polygons; the back fader sits behind the windows there)
         // images (`FldSprite`) are not rendered yet; their state is tracked for the scripts
-        // message windows (`FieldMessage` / `MenuWindowMessage`)
         let ui = &rt.st.ui;
-        for (wi, w) in ui.windows.iter().enumerate() {
-            if w.phase == WinPhase::Closed || (w.msg.is_none() && !ui.select.active) {
-                continue;
-            }
-            let (pw, ph) = w.size_px();
-            let anim = match w.phase {
-                WinPhase::Opening(n) => 1.0 - n as f32 / 30.0,
-                WinPhase::Closing(n) => n as f32 / 30.0,
-                _ => 1.0,
-            };
-            let (x, y) = (w.x as f32, w.y as f32);
-            let h = ph * anim.clamp(0.15, 1.0);
-            bevy_ui::panel(&mut g, x, y + (ph - h) * 0.5, pw, h, 0x78);
-            if anim < 0.9 {
-                continue;
-            }
-            if let Some(m) = &w.msg {
-                m.draw(&mut g, x + 12.0, y + 9.0, Rgba::NEUTRAL);
-                if m.state == sh2_menu::message::MsgState::Done && w.key_pending {
-                    bevy_ui::text(&mut g, x + pw - 22.0, y + ph - 20.0, "v", bevy_ui::FIELD_FONT, Rgba::new(0x80, 0x80, 0x30, 0x80), false);
-                }
-            }
-            if ui.select.active && ui.select.window == wi {
-                let base = y + 9.0 + (w.raw.iter().filter(|&&b| b == b'\n').count() as f32 + if w.raw.is_empty() { 0.0 } else { 1.0 }) * CELL_H;
-                for (i, it) in ui.select.items.iter().enumerate() {
-                    let sel = i == ui.select.cursor;
-                    let ty = base + i as f32 * CELL_H * 0.9;
-                    if sel {
-                        bevy_ui::rect(&mut g, x + 8.0, ty - 2.0, pw - 16.0, CELL_H * 0.9, Rgba::new(0x60, 0x60, 0xc0, 0x50));
-                    }
-                    let mut m = sh2_menu::message::Message::new(64, sh2_menu::message::TextSpeed::Instant);
-                    crate::script_ui::field_text_style(&mut m);
-                    m.set_text(it, vec![]);
-                    m.finish();
-                    m.draw(&mut g, x + 30.0, ty, if sel { Rgba::new(0x80, 0x80, 0x40, 0x80) } else { Rgba::NEUTRAL });
-                    if sel {
-                        bevy_ui::text(&mut g, x + 12.0, ty, ">", bevy_ui::FIELD_FONT, Rgba::new(0x80, 0x80, 0x30, 0x80), false);
-                    }
-                }
-            }
-        }
-        // name plates
-        for w in ui.names.iter().filter(|w| w.phase != WinPhase::Closed && w.msg.is_some()) {
-            let (pw, _) = w.size_px();
-            let pw = pw.min(w.msg.as_ref().map(|m| m.glyphs.iter().map(|g| g.width as f32).sum::<f32>() + 28.0).unwrap_or(pw)).max(60.0);
-            bevy_ui::panel(&mut g, w.x as f32, w.y as f32, pw, CELL_H + 12.0, 0x78);
-            if let Some(m) = &w.msg {
-                // the colour is the plate's CLUT row, not a tint
-                let mut m = m.clone();
-                m.clut_set = crate::script_ui::NAME_CLUT;
-                m.draw(&mut g, w.x as f32 + 12.0, w.y as f32 + 6.0, Rgba::NEUTRAL);
-            }
-        }
-        // faces (portraits are drawn as labelled frames until the face textures are wired)
-        for f in ui.faces.iter().filter(|f| f.loaded && f.open) {
-            bevy_ui::panel(&mut g, f.x, f.y, f.w.max(16.0), f.h.max(16.0), 0x60);
-            bevy_ui::text(&mut g, f.x + 6.0, f.y + 6.0, &format!("face {}", f.face_id), 4, Rgba::NEUTRAL, true);
-        }
         // timer (`FldTimer`)
         let t = &ui.timer;
         if t.created && t.shown {
@@ -966,7 +915,6 @@ fn draw_field_ui(rt: &FieldRuntime, canvas: &mut UiCanvas) {
         let a = if fx.incoming { k } else { 1.0 - k };
         bevy_ui::rect(&mut f, 0.0, 0.0, bevy_ui::VIRT_W, bevy_ui::VIRT_H, Rgba::new(fx.color[0], fx.color[1], fx.color[2], (a * 128.0) as u8));
     }
-    let _ = CELL_W;
 }
 
 // ----------------------------------------------------------------------------------------------------------------
@@ -1164,7 +1112,7 @@ pub struct FieldPlugin;
 impl Plugin for FieldPlugin {
     fn build(&self, app: &mut App) {
         let rendering = app.is_plugin_added::<::bevy::pbr::PbrPlugin>();
-        app.add_plugins((MenuOverlayPlugin, crate::worldmap_plugin::WorldMapPlugin, crate::fscreen::FieldScreensPlugin, crate::points::PointsPlugin))
+        app.add_plugins((MenuOverlayPlugin, crate::worldmap_plugin::WorldMapPlugin, crate::fscreen::FieldScreensPlugin, crate::points::PointsPlugin, crate::textbox::TextboxPlugin))
             .init_resource::<FieldAudioQueue>()
             .init_resource::<FieldCarry>()
             .init_resource::<crate::worldmap::WorldMapRequest>()

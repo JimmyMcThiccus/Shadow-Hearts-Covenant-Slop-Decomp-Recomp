@@ -291,6 +291,18 @@ impl Area {
         }
     }
 
+    /// `StraightArea::__ct` half width (`BtlMenu` 0x40f00000 / 0x41480000 / 0x418c0000 = 7.5 / 12.5 / 17.5 by size 0 / 1 / 2); `StraightCircleArea` always 7.5.
+    pub fn line_width(self) -> f32 {
+        if self.shape == 4 {
+            return 7.5;
+        }
+        match self.size {
+            0 => 7.5,
+            1 => 12.5,
+            _ => 17.5,
+        }
+    }
+
     /// shapes that get the orange ground marker
     pub fn has_marker(self) -> bool {
         matches!(self.shape, 1 | 3 | 4)

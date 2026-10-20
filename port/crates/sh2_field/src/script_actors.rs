@@ -773,6 +773,8 @@ impl ActorTable {
                         if ctrl {
                             sim.walked += step;
                             sim.player.moving = true;
+                            sim.player.script_step += step;
+                            sim.player.gait = if run { crate::movement::Gait::Run } else { crate::movement::Gait::Walk };
                             sim.player.anim += step * 0.12;
                         }
                         if reached {

@@ -60,7 +60,7 @@ alpha fade x3; deleted at the motion end (`MotionEndCallBack`).  Port: `effects_
 * weapon hits -> `weapon_hit` (= `PAtkHitSet` burst + combo streaks; ring grade 3 = "perfect" not known yet, request X6),
 * `btlHitMarkEffectCall` (VEC 1115) -> `hit_mark_effect_call` kinds 0..5,
 * the cast circle (`MagicStartEffectCall`) when a fighter starts `mags`, removed with the action's effect.
-Not yet: the point lights of types 3 / 4, the `HitMark` flash ring (kind 3: a growing 10-vertex billboard with `BTL_000` texture 11), `HitImpact` (combo finisher),
+Not yet: the point lights of types 3 / 4, the `HitMark` flash ring (kind 3: a growing 10-vertex billboard with `BTL_000` texture 11), `HitImpact` (combo finisher; done 2026-10-19, break_effects.md),
 `MgcInvkParticle` (the particles of the cast), the `BtlChrSequence` / `InvolveDamageSet` / `FusionOffPolling` sites (need BE's state machine).
 Evidence: `screens/r5_fx/hit_sheet.png` (bursts 0.05 .. 0.6 s after each hit, `SH2_EFFMDL_SHOTS=<dir>`).
 

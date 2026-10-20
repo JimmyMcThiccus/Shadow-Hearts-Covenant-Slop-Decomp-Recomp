@@ -85,5 +85,7 @@ pub mod sim;
 pub mod story;
 pub mod socket;
 pub mod tailor;
+pub mod textbox;
 pub mod worldmap;
 pub mod worldmap_plugin;
+pub mod worldmap_ui;

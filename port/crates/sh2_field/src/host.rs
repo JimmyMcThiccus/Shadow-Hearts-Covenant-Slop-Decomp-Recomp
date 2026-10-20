@@ -13,7 +13,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
 use sh2_core::game::padbit;
-use sh2_menu::message::{MsgState, TextSpeed};
+use sh2_menu::message::MsgState;
 use sh2_menu::session::GameSession;
 use sh2_script::cscript::{ExCtx, ExResult, ScriptHost};
 
@@ -805,6 +805,12 @@ impl FieldHost<'_> {
     // ------------------------------------------------------------------ the dispatcher
     fn op(&mut self, ctx: &mut ExCtx<'_>, sub: u8) -> ExResult {
         let first = ctx.nargs >= 0;
+        // dev aid: `SH2_FIELD_OPS=1` logs every new field sub-function call of the script (name, tick) to find what a start job waits for
+        if first && std::env::var_os("SH2_FIELD_OPS").is_some() {
+            let name = sh2_script::opcodes::FIELD_SUBOPS.iter().find(|e| e.0 == sub).map(|e| e.1).unwrap_or("?");
+            let args: Vec<i32> = (0..ctx.nargs.clamp(0, 4)).map(|i| ctx.arg_i32(i as usize)).collect();
+            log::info!("field op {sub:#04x} {name} {args:?} at tick {}", self.st.ticks);
+        }
         match sub {
             // ---------------------------------------------------------------- characters
             // 0x00 GetCharacterInfo(slot, what) -> int
@@ -1265,13 +1271,7 @@ impl FieldHost<'_> {
             0x30 => {
                 // CreateWindow(id, kind, flags, max chars)
                 let id = (ctx.arg_i32(0).max(0) as usize).min(7);
-                let w = &mut self.st.ui.windows[id];
-                *w = Default::default();
-                w.created = true;
-                w.kind = ctx.arg_i32(1) as u8;
-                w.flags = ctx.arg_i32(2) as u8;
-                w.max_chars = (ctx.arg_i32(3).max(0x40)) as u16;
-                self.st.ui.cur_win = id;
+                self.st.ui.create_window(id, ctx.arg_i32(1) as u8, ctx.arg_i32(2) as u8, ctx.arg_i32(3).clamp(0, 0xffff) as u16);
                 ExResult::Void
             }
             0x31 => {
@@ -1290,14 +1290,15 @@ impl FieldHost<'_> {
                 w.rows = ctx.arg_i32(1).clamp(1, 20) as u8;
                 ExResult::Void
             }
+            // 0x34 OpenWindow(effect, ms) / 0x35 CloseWindow(effect, ms): `MenuWindow::Open` / `Close` (ms of `MenuObj::sm_iPassTime`)
             0x34 => {
                 let w = self.st.ui.win();
-                w.open(ctx.arg_i32(1));
+                w.open_fx(ctx.arg_i32(0) as u8, ctx.arg_i32(1));
                 ExResult::Void
             }
             0x35 => {
                 let w = self.st.ui.win();
-                w.close(ctx.arg_i32(1));
+                w.close_fx(ctx.arg_i32(0) as u8, ctx.arg_i32(1));
                 self.st.ui.select.active = false;
                 ExResult::Void
             }
@@ -1325,8 +1326,7 @@ impl FieldHost<'_> {
             0x39 => {
                 // CreateName(id, kind, flags, max)
                 let id = (ctx.arg_i32(0).max(0) as usize).min(7);
-                self.st.ui.names[id] = crate::script_ui::FieldWindow { created: true, kind: ctx.arg_i32(1) as u8, flags: ctx.arg_i32(2) as u8, cols: 16, rows: 1, ..Default::default() };
-                self.st.ui.cur_name = id;
+                self.st.ui.create_name(id, ctx.arg_i32(1) as u8, ctx.arg_i32(2) as u8);
                 ExResult::Void
             }
             0x3a => {
@@ -1334,25 +1334,27 @@ impl FieldHost<'_> {
                 ExResult::Void
             }
             0x3b => {
+                // `FieldMessage::SetPosition`: the live window moves at once
                 let w = self.st.ui.name();
                 w.x = ctx.arg_i32(0);
                 w.y = ctx.arg_i32(1);
+                w.win.pos = glam::Vec2::new(w.x as f32, w.y as f32);
                 ExResult::Void
             }
-            // 0x3c OpenName(text, frames kind, frames)
+            // 0x3c OpenName(text, effect, ms): `OpenWindow(effect, ms)` + `OpenMessage(text)` (the plate types out like any `MenuMessage`)
             0x3c => {
                 let raw = raw_cstr(ctx, ctx.arg(0));
-                let speed = TextSpeed::Instant;
+                let speed = self.st.ui.speed;
                 let w = self.st.ui.name();
-                w.open(ctx.arg_i32(2));
                 w.clear();
+                w.open_fx(ctx.arg_i32(1) as u8, ctx.arg_i32(2));
                 w.append(&raw, speed);
                 w.key_pending = false;
                 ExResult::Void
             }
             0x3d => {
                 let w = self.st.ui.name();
-                w.close(ctx.arg_i32(1));
+                w.close_fx(ctx.arg_i32(0) as u8, ctx.arg_i32(1));
                 ExResult::Void
             }
             // faces
@@ -1360,6 +1362,7 @@ impl FieldHost<'_> {
                 let id = (ctx.arg_i32(0).max(0) as usize).min(3);
                 self.st.ui.cur_face = id;
                 let f = &mut self.st.ui.faces[id];
+                // `FaceImage::Create(face)` + the retail default size 96 x 96 (`CField::LoadFace`)
                 f.loaded = true;
                 f.face_id = ctx.arg_i32(1);
                 f.w = 96.0;
@@ -1385,6 +1388,7 @@ impl FieldHost<'_> {
                 let f = self.st.ui.face();
                 f.x = ctx.arg_i32(0) as f32;
                 f.y = ctx.arg_i32(1) as f32;
+                f.win.pos = glam::Vec2::new(f.x, f.y);
                 ExResult::Void
             }
             0x44 => {
@@ -1393,12 +1397,15 @@ impl FieldHost<'_> {
                 f.h = ctx.arg_i32(1) as f32;
                 ExResult::Void
             }
+            // 0x45 OpenFace(effect, ms) / 0x46 CloseFace(effect, ms)
             0x45 => {
-                self.st.ui.face().open = true;
+                let f = self.st.ui.face();
+                f.win.pos = glam::Vec2::new(f.x, f.y);
+                f.open_fx(ctx.arg_i32(0) as u8, ctx.arg_i32(1));
                 ExResult::Void
             }
             0x46 => {
-                self.st.ui.face().open = false;
+                self.st.ui.face().close_fx(ctx.arg_i32(0) as u8, ctx.arg_i32(1));
                 ExResult::Void
             }
             // selection: 0x48 Select(mode, item..) -> index / -2 cancel; 0x49 SelectInit(mode); 0x4a SelectAddItem(text); 0x4b SelectWait -> index
@@ -2191,7 +2198,10 @@ impl FieldHost<'_> {
     }
 
     fn key_wait(&mut self, first: bool) -> ExResult {
-        let press = self.st.press & padbit::CIRCLE != 0;
+        // `FieldMessage::Polling` state 9: once `KeyWait` enabled the key wait, circle or cross (`0x6000`) finishes the typing at once; the
+        // `KeyWait` object then waits for the circle press (`0x2000`)
+        let circle = self.st.press & padbit::CIRCLE != 0;
+        let skip = self.st.press & (padbit::CIRCLE | padbit::CROSS) != 0;
         let i = self.st.ui.cur_win.min(7);
         let w = &mut self.st.ui.windows[i];
         if !w.created && w.msg.is_none() || w.msg.is_none() || !w.is_open() {
@@ -2200,20 +2210,22 @@ impl FieldHost<'_> {
         if !w.key_pending {
             return ExResult::Void;
         }
-        if press && !first {
+        if skip && !first {
             let m = w.msg.as_mut().unwrap();
             if m.state != MsgState::Done {
                 m.finish();
                 return ExResult::Yield(-1);
             }
-            w.key_pending = false;
-            let talker = w.talker;
-            if talker >= 0 {
-                if let Some(a) = self.st.actors.get_mut(talker) {
-                    a.talking = false;
+            if circle {
+                w.key_pending = false;
+                let talker = w.talker;
+                if talker >= 0 {
+                    if let Some(a) = self.st.actors.get_mut(talker) {
+                        a.talking = false;
+                    }
                 }
+                return ExResult::Void;
             }
-            return ExResult::Void;
         }
         ExResult::Yield(-1)
     }
@@ -2228,6 +2240,7 @@ impl FieldHost<'_> {
         s.cancel_ok = mode & 4 != 0;
         let w = &mut self.st.ui.windows[i];
         w.clear();
+        w.selecting = true;
         if !w.is_open() {
             w.open(4);
         }
@@ -2246,18 +2259,29 @@ impl FieldHost<'_> {
             s.active = false;
             return Some(-2);
         }
-        if press & padbit::UP != 0 {
-            s.cursor = (s.cursor + s.items.len() - 1) % s.items.len();
+        // `FieldMessage::Polling` state 0xf: a horizontal list (`SelectInit` mode bit 0) moves with left / right, a vertical one with up / down
+        // (wrapping); every move plays `MenuSound::PlaySE(0)`, confirm SE 2, cancel SE 3
+        let (prev, next) = if s.mode & 1 != 0 { (padbit::LEFT, padbit::RIGHT) } else { (padbit::UP, padbit::DOWN) };
+        let n = s.items.len();
+        let old = s.cursor;
+        if press & prev != 0 {
+            s.cursor = (s.cursor + n - 1) % n;
         }
-        if press & padbit::DOWN != 0 {
-            s.cursor = (s.cursor + 1) % s.items.len();
+        if press & next != 0 {
+            s.cursor = (s.cursor + 1) % n;
+        }
+        let (cursor, cancel_ok) = (s.cursor, s.cancel_ok);
+        if cursor != old {
+            self.st.ui.ses.push(sh2_menu::gfx::MenuSe::CursorMove);
         }
         if press & padbit::CIRCLE != 0 {
-            s.active = false;
-            return Some(s.cursor as i32);
+            self.st.ui.select.active = false;
+            self.st.ui.ses.push(sh2_menu::gfx::MenuSe::Decide);
+            return Some(cursor as i32);
         }
-        if press & padbit::CROSS != 0 && s.cancel_ok {
-            s.active = false;
+        if press & padbit::CROSS != 0 && cancel_ok {
+            self.st.ui.select.active = false;
+            self.st.ui.ses.push(sh2_menu::gfx::MenuSe::Cancel);
             return Some(-2);
         }
         None

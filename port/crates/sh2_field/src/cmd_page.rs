@@ -552,6 +552,11 @@ pub fn draw_report(g: &mut dyn MenuGfx, rf: &RetailFrame, cmn: &CommonScene, lin
     }
 }
 
+/// Icon cell of a *logical* button as the screens that are not `Cmd*` pages show it (the world map hints): `icon_button` then `icon_cell`.
+pub fn pad_icon_cell(b: Button) -> Option<(usize, usize)> {
+    icon_cell(icon_button(b))
+}
+
 /// Cell of a pad icon in the 16 x 20 icon sheet of the common scene (attach 6).
 fn icon_cell(b: Button) -> Option<(usize, usize)> {
     match b {

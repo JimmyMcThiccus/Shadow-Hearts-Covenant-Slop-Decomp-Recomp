@@ -901,7 +901,9 @@ pub fn fusion_chr(db: &crate::data::BattleData, id: i32) -> Option<u32> {
 }
 
 fn boost_active(rt: &BattleRuntime, chr: usize) -> bool {
-    rt.battle.fighters.get(chr).and_then(|f| f.as_ref()).map(|f| f.status.iter().any(|m| m.kind == modkind::DEAL_PHYS && m.value == 150 && m.turns > 0)).unwrap_or(false)
+    // the fused state (`Battle::fused`, set by phase 9) keeps the form; the timed boost is the demo disc's stand-in
+    rt.battle.fused.get(chr).is_some_and(|s| s.is_some())
+        || rt.battle.fighters.get(chr).and_then(|f| f.as_ref()).map(|f| f.status.iter().any(|m| m.kind == modkind::DEAL_PHYS && m.value == 150 && m.turns > 0)).unwrap_or(false)
 }
 
 /// The transformation (`CBattle` phase 9, JP decomp CBattle.c 2646..2800): `FusMonInit` + `SetFusionCamera1`, then the `FU_*` program with the fusion form as the
@@ -1550,15 +1552,15 @@ pub fn drive_effmdls(
 }
 
 // ----------------------------------------------------------------------------------------------------------------
-// weapon trails (`SwordLocusEffect1` / `BlowLocusEffect1`, see `sh2_gfx::effects::locus`)
+// weapon trails (`Sword/Fan/Whip/BlowLocusEffect*`, see `sh2_gfx::effects::locus` and notes/integration/locus_effects.md)
 // ----------------------------------------------------------------------------------------------------------------
 
-use sh2_gfx::effects::locus::{BlowLocus, SwordLocus};
 use sh2_gfx::bevy::Sh2Material;
+use sh2_gfx::effects::locus::{self, BlowLocus, Corners, SwordLocus, WhipLocus};
 
 /// `SwordDataTbl` (US BATTLE.BIN 0x6e3660, 13 tables; JP 0x651180, 12): per table the `0x1c` byte edges `{u16 kind, u16 frame, f32 a[3], f32 b[3]}` of each weapon
-/// model number (`PATK +0x14` = the table, `BtlChr+0x190` = the weapon model number = the row).  kind 0 body frame, 1 right weapon, 2 left weapon, 3..5 a box of
-/// the body / right / left model (the port takes `frame` as a frame index there too).
+/// model number (`PATK +0x14` = the table, `BtlChr+0x190` = the weapon model number = the row).  kind 0 body frame, 1 right weapon, 2 left weapon, 3..5 the frame of
+/// a box (`BBHD` index `frame`) of the body / right / left model.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SwordEdge {
     pub kind: u16,
@@ -1595,8 +1597,222 @@ struct TrailTex {
     h: f32,
 }
 
-struct SwordRun {
-    locus: SwordLocus,
+/// Which model of the fighter a box / frame lives on: `BtlChr +0x144` (body), `BtlModel +0x52c` (right weapon), `+0x530` (left weapon).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TrailSrc {
+    Body,
+    Right,
+    Left,
+}
+
+/// What a ribbon trail follows (the class decides how the two edge points / the twelve whip points come out of the models each frame).
+#[derive(Clone, Debug, PartialEq)]
+pub enum Follow {
+    /// `SwordLocusEffect1`: row `row` of `SwordDataTbl[tbl]`
+    Table { tbl: usize, row: usize },
+    /// `SwordLocusEffect2`: the box called `name` of the body model, edge digit `code` (`PATK2` name field: digit + name)
+    Sword2 { name: String, code: i32 },
+    /// `SwordLocusEffect3`: the box `name` of `src`, edge code 0 / 1 / 2
+    Sword3 { src: TrailSrc, name: String, code: i32 },
+    /// `FanLocusEffect1`: box "C0" of the right weapon
+    Fan,
+    /// `WhipLocusEffect`: `body` = the `WHIP0..5` boxes of the body model, else `whip4..9` of the right weapon
+    Whip { body: bool },
+}
+
+/// `BtlModel::searchBBoxIndex` (and the weapon-model variants): the first `BBHD` box of `am` whose frame is called `name`; a `__N` name is the index N itself.
+pub fn search_bbox(am: &AnimatedModel, name: &str) -> Option<usize> {
+    if let Some(n) = name.strip_prefix("__") {
+        let digits: String = n.chars().take_while(|c| c.is_ascii_digit()).collect();
+        return digits.parse().ok();
+    }
+    let bones = &am.inst.skeleton.bones;
+    am.inst.model.bounds.iter().position(|b| bones.get((b.tag & 0xff) as usize).map(|bn| bn.name == name).unwrap_or(false))
+}
+
+/// The 8 corners of box `idx` in PS2 world (`RotTransVector(box + 0x10, frame matrix, 8)`).
+fn box_corners(am: &AnimatedModel, gt: &GlobalTransform, idx: usize) -> Option<Corners> {
+    let b = am.inst.model.bounds.get(idx)?;
+    let fw = frame_world(am, gt, (b.tag & 0xff) as usize)?;
+    let mut c = [Vec3::ZERO; 8];
+    for (o, k) in c.iter_mut().zip(&b.corners) {
+        *o = fw.transform_point3(Vec3::new(k.x, k.y, k.z));
+    }
+    Some(c)
+}
+
+/// The models of a fighter a trail may read.
+struct TrailCtx<'a> {
+    body: (&'a AnimatedModel, &'a GlobalTransform),
+    right: Option<(&'a AnimatedModel, &'a GlobalTransform)>,
+    left: Option<(&'a AnimatedModel, &'a GlobalTransform)>,
+}
+
+impl<'a> TrailCtx<'a> {
+    fn src(&self, s: TrailSrc) -> Option<(&'a AnimatedModel, &'a GlobalTransform)> {
+        match s {
+            TrailSrc::Body => Some(self.body),
+            TrailSrc::Right => self.right,
+            TrailSrc::Left => self.left,
+        }
+    }
+}
+
+/// The points a trail samples this frame.
+#[derive(Clone, Copy, Debug)]
+enum Pts {
+    Blade(Vec3, Vec3),
+    Whip([Vec3; 12]),
+}
+
+/// `Polling` of each class: the edge points of `f` out of the fighter's models (`None` = the box / frame is missing: nothing is sampled).
+fn follow_points(f: &Follow, ctx: &TrailCtx, table: &[Vec<SwordEdge>]) -> Option<Pts> {
+    match f {
+        Follow::Table { tbl, row } => {
+            let e = table.get(*tbl).and_then(|t| t.get(*row).or_else(|| t.first())).copied()?;
+            let (src, boxed) = match e.kind {
+                0 => (TrailSrc::Body, false),
+                1 => (TrailSrc::Right, false),
+                2 => (TrailSrc::Left, false),
+                3 => (TrailSrc::Body, true),
+                4 => (TrailSrc::Right, true),
+                5 => (TrailSrc::Left, true),
+                _ => return None,
+            };
+            let (am, gt) = ctx.src(src)?;
+            let frame = if boxed { (am.inst.model.bounds.get(e.frame as usize)?.tag & 0xff) as usize } else { e.frame as usize };
+            let fw = frame_world(am, gt, frame)?;
+            Some(Pts::Blade(fw.transform_point3(e.a), fw.transform_point3(e.b)))
+        }
+        Follow::Sword2 { name, code } => {
+            let (am, gt) = ctx.body;
+            let c = box_corners(am, gt, search_bbox(am, name)?)?;
+            let (a, b) = locus::sword2_edge(&c, *code)?;
+            Some(Pts::Blade(a, b))
+        }
+        Follow::Sword3 { src, name, code } => {
+            let (am, gt) = ctx.src(*src)?;
+            let c = box_corners(am, gt, search_bbox(am, name)?)?;
+            let (a, b) = locus::sword3_edge(&c, *code)?;
+            Some(Pts::Blade(a, b))
+        }
+        Follow::Fan => {
+            let (am, gt) = ctx.right?;
+            let c = box_corners(am, gt, search_bbox(am, "C0")?)?;
+            let (a, b) = locus::fan_edge(&c);
+            Some(Pts::Blade(a, b))
+        }
+        Follow::Whip { body } => {
+            let (am, gt, names): (_, _, [&str; 6]) = if *body {
+                let (am, gt) = ctx.body;
+                (am, gt, ["WHIP5", "WHIP4", "WHIP3", "WHIP2", "WHIP1", "WHIP0"])
+            } else {
+                let (am, gt) = ctx.right?;
+                (am, gt, ["whip9", "whip8", "whip7", "whip6", "whip5", "whip4"])
+            };
+            let mut p = [Vec3::ZERO; 12];
+            for (k, n) in names.iter().enumerate() {
+                let c = box_corners(am, gt, search_bbox(am, n)?)?;
+                let (a, b) = locus::whip_points(&c);
+                p[2 * k] = a;
+                p[2 * k + 1] = b;
+            }
+            Some(Pts::Whip(p))
+        }
+    }
+}
+
+/// The whole-swing trail of a `PATK` row (`+3`, `BtlChrSequence` JP CBattle.c 15660..15745) for the attacker's weapon model number `weapon_no`.
+pub fn swing_follow(patk: &[u8], weapon_no: usize) -> Option<Follow> {
+    Some(match patk.get(3).copied()? {
+        1 => Follow::Fan,
+        3 => Follow::Table { tbl: i16::from_le_bytes([patk[0x14], patk[0x15]]).try_into().ok()?, row: weapon_no },
+        4 => Follow::Sword3 { src: TrailSrc::Right, name: "konbou0".into(), code: 1 },
+        6 => Follow::Sword3 { src: TrailSrc::Right, name: "kinobou0".into(), code: 1 },
+        7 => Follow::Sword3 { src: TrailSrc::Body, name: "BBODY2".into(), code: 2 },
+        5 => Follow::Whip { body: false },
+        8 => Follow::Whip { body: true },
+        _ => return None,
+    })
+}
+
+fn cstr(b: &[u8]) -> String {
+    String::from_utf8_lossy(b).split('\0').next().unwrap_or("").to_string()
+}
+
+/// The per-hit sword trails of a `PATK2` row (`AttackParam` JP CBattle.c 25920..25995; class 2): kind 5 / 0x24 `SwordLocusEffect1` (row `weapon + digit` of
+/// `SwordDataTbl[tbl]`), 6 / 7 / 0x1b `SwordLocusEffect2` x 1 / 2 / 4 (per box: digit `rec[4 + 16 k]` = edge code, name from `+5 + 16 k`), 0xc / 0x11
+/// `SwordLocusEffect3` on the right weapon (name at `+4`, edge 0 / 1).
+pub fn hit_follows(rec: &[u8], tbl: i16, weapon_no: usize) -> Vec<Follow> {
+    if rec.len() < 0x48 || rec[2] != 2 {
+        return vec![];
+    }
+    let digit = |o: usize| rec[o] as i32 - 0x30;
+    let boxes = |n: usize| -> Vec<Follow> { (0..n).map(|k| Follow::Sword2 { name: cstr(&rec[5 + 16 * k..16 + 16 * k]), code: digit(4 + 16 * k) }).collect() };
+    match rec[1] {
+        5 | 0x24 => match usize::try_from(tbl) {
+            Ok(t) => vec![Follow::Table { tbl: t, row: (weapon_no as i32 + digit(4)).max(0) as usize }],
+            Err(_) => vec![],
+        },
+        6 => boxes(1),
+        7 => boxes(2),
+        0x1b => boxes(4),
+        0xc => vec![Follow::Sword3 { src: TrailSrc::Right, name: cstr(&rec[4..20]), code: 0 }],
+        0x11 => vec![Follow::Sword3 { src: TrailSrc::Right, name: cstr(&rec[4..20]), code: 1 }],
+        _ => vec![],
+    }
+}
+
+enum Shape {
+    Blade(SwordLocus),
+    Whip(WhipLocus),
+}
+
+impl Shape {
+    fn new(f: &Follow, per_hit: bool) -> Shape {
+        match f {
+            Follow::Whip { .. } => Shape::Whip(WhipLocus::default()),
+            _ => {
+                // `EndSet` of the whole-swing objects does nothing (Sword1 `+0x990 == 0`, Sword3 `+0x998 == 1`, Fan, Whip): only `ForceEndSet` ends them
+                Shape::Blade(SwordLocus::new(per_hit))
+            }
+        }
+    }
+    fn ending(&self) -> bool {
+        match self {
+            Shape::Blade(s) => s.ending(),
+            Shape::Whip(w) => w.ending(),
+        }
+    }
+    fn sample(&mut self, p: Pts) {
+        match (self, p) {
+            (Shape::Blade(s), Pts::Blade(a, b)) => s.sample(a, b),
+            (Shape::Whip(w), Pts::Whip(p)) => w.sample(&p),
+            _ => {}
+        }
+    }
+    /// `EndSet` (the window of a hit closes) / `ForceEndSet` (the swing motion is over).
+    fn end(&mut self, force: bool) {
+        match self {
+            Shape::Blade(s) if force => s.force_end(),
+            Shape::Blade(s) => s.end(),
+            Shape::Whip(w) => w.force_end(),
+        }
+    }
+    fn step(&mut self, dt: f32) -> bool {
+        match self {
+            Shape::Blade(s) => s.step(dt),
+            Shape::Whip(w) => w.step(dt),
+        }
+    }
+}
+
+/// A live ribbon trail.  `key` = (0 whole swing | 1 per hit, hit group, sub-trail of the row).
+struct RibbonRun {
+    chr: usize,
+    key: (u8, usize, usize),
+    follow: Follow,
+    shape: Shape,
     entity: Option<(Entity, Handle<Mesh>)>,
 }
 
@@ -1617,28 +1833,123 @@ pub struct WeaponTrails {
     tex_blow: Option<TrailTex>,
     mat_sword: Option<Handle<Sh2Material>>,
     mat_blow: Option<Handle<Sh2Material>>,
-    swords: HashMap<usize, SwordRun>,
+    runs: Vec<RibbonRun>,
     blows: Vec<BlowRun>,
     root: Option<Entity>,
     rng: u32,
     acc: f32,
+    /// `SH2_TRAIL_LOG=1`: how many trails of each class were started (the dev drive prints them)
+    started: std::collections::BTreeMap<&'static str, u32>,
+    /// `SH2_TRAIL_SHOTS` bookkeeping: frames seen with a live trail, shots written
+    shot_frames: u32,
+    shot_n: u32,
 }
 
-fn is_attack_motion(n: &str) -> bool {
+impl WeaponTrails {
+    /// Number of live ribbon trails (tests / the dev drive).
+    pub fn live(&self) -> usize {
+        self.runs.len() + self.blows.len()
+    }
+    /// Trails started so far per class name.
+    pub fn started(&self) -> &std::collections::BTreeMap<&'static str, u32> {
+        &self.started
+    }
+}
+
+/// Count a started trail per class; the first of each class is logged.
+fn note_start(started: &mut std::collections::BTreeMap<&'static str, u32>, f: &Follow, chr: usize, what: &str) {
+    let n = started.entry(class_name(f)).or_default();
+    *n += 1;
+    if *n == 1 {
+        log::info!("battle: first {} weapon trail ({what}) of chr {chr}: {f:?}", class_name(f));
+    }
+}
+
+fn class_name(f: &Follow) -> &'static str {
+    match f {
+        Follow::Table { .. } => "Sword1",
+        Follow::Sword2 { .. } => "Sword2",
+        Follow::Sword3 { .. } => "Sword3",
+        Follow::Fan => "Fan",
+        Follow::Whip { .. } => "Whip",
+    }
+}
+
+pub(crate) fn is_attack_motion(n: &str) -> bool {
     n.starts_with("atck") || n.starts_with("atk") || n.starts_with("can")
 }
 
 /// PS2 world matrix of frame `b` of an animated model whose holder sits under a PS2 -> Bevy flip (`flip * gt * pose[b] * bind[b]`).
-fn frame_world(am: &AnimatedModel, gt: &GlobalTransform, b: usize) -> Option<Mat4> {
+pub(crate) fn frame_world(am: &AnimatedModel, gt: &GlobalTransform, b: usize) -> Option<Mat4> {
     let flip = Mat4::from_diagonal(Vec4::new(1.0, -1.0, -1.0, 1.0));
     let bone = am.inst.skeleton.bones.get(b)?;
     let pose = am.inst.pose.get(b).copied().unwrap_or(sh2_formats::math::Matrix::IDENTITY);
     Some(flip * gt.to_matrix() * (pose * bone.bind).to_glam())
 }
 
-/// Start / sample / end / draw the weapon trails.  Sword trails (`PATK +3 == 3`, `BtlChrSequence` JP CBattle.c 15688: `SwordLocusEffect1(.., 0)` for the whole
-/// swing) follow the `SwordDataTbl` edge of the attacker's weapon while an attack motion plays; blow trails (`PATK2` row class 1, `AttackParam` 25997..: one per
-/// hit) follow the named frame of the row between the two `MosEvent` keys of each hit group.
+/// An invisible degenerate mesh instead of an empty one: an empty vertex / index buffer makes Bevy's mesh slab allocator log "Use-after-free" every frame.
+fn finish_mesh(topology: bevy::mesh::PrimitiveTopology, mut pos: Vec<[f32; 3]>, mut uv: Vec<[f32; 2]>, mut col: Vec<[f32; 4]>, mut idx: Vec<u32>) -> Mesh {
+    let tri = topology == bevy::mesh::PrimitiveTopology::TriangleList;
+    if pos.is_empty() || (tri && idx.is_empty()) {
+        let n = if tri { 3 } else { 2 };
+        pos = vec![[0.0; 3]; n];
+        uv = vec![[0.0; 2]; n];
+        col = vec![[0.0; 4]; n];
+        idx = if tri { vec![0, 1, 2] } else { vec![] };
+    }
+    let mut mesh = Mesh::new(topology, bevy::asset::RenderAssetUsages::default());
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, col);
+    if tri {
+        mesh.insert_indices(bevy::mesh::Indices::U32(idx));
+    }
+    mesh
+}
+
+/// The triangle strip of a sword / fan trail (`MakePacket`: A at V = 0, B at V = 1, each edge with its own U).
+pub fn blade_mesh_data(secs: &[locus::LocusSection], sw: f32) -> (Vec<[f32; 3]>, Vec<[f32; 2]>, Vec<[f32; 4]>, Vec<u32>) {
+    let (mut pos, mut uv, mut col, mut idx) = (vec![], vec![], vec![], vec![]);
+    for s in secs {
+        for (p, u, v) in [(s.a, s.u, 0.0), (s.b, s.ub, 1.0)] {
+            pos.push(p.to_array());
+            uv.push([u / sw.max(1.0), v]);
+            col.push([1.0, 1.0, 1.0, s.alpha / 128.0]);
+        }
+    }
+    for i in 0..secs.len().saturating_sub(1) as u32 {
+        let k = i * 2;
+        idx.extend_from_slice(&[k, k + 1, k + 2, k + 1, k + 3, k + 2]);
+    }
+    (pos, uv, col, idx)
+}
+
+/// The 11 strips of a whip trail, one quad strip each (`MakePacket`: strip j joins the tracks j and j + 1, V = track / 11).
+pub fn whip_mesh_data(strips: &[locus::WhipStrip], sw: f32) -> (Vec<[f32; 3]>, Vec<[f32; 2]>, Vec<[f32; 4]>, Vec<u32>) {
+    let (mut pos, mut uv, mut col, mut idx) = (vec![], vec![], vec![], vec![]);
+    for st in strips {
+        let base = pos.len() as u32;
+        for i in 0..st.a.len() {
+            for (p, u, v) in [(st.a[i].0, st.a[i].1, st.va), (st.b[i].0, st.b[i].1, st.vb)] {
+                pos.push(p.to_array());
+                uv.push([u / sw.max(1.0), v]);
+                col.push([1.0, 1.0, 1.0, st.alpha[i] / 128.0]);
+            }
+        }
+        for i in 0..st.a.len().saturating_sub(1) as u32 {
+            let k = base + i * 2;
+            idx.extend_from_slice(&[k, k + 1, k + 2, k + 1, k + 3, k + 2]);
+        }
+    }
+    (pos, uv, col, idx)
+}
+
+/// Start / sample / end / draw the weapon trails.
+///
+/// * Whole-swing trails (`PATK +3`, `BtlChrSequence` JP CBattle.c 15660): Sword1 (3), Fan (1), Sword3 (4 / 6 / 7), Whip (5 / 8) follow the attacker's weapon while
+///   the attack motion plays; the retail `BtlChrSequence` force-ends them at 80 % of the motion.
+/// * Per-hit trails (`AttackParam` 25890..): one set per hit group, alive between the two `MosEvent` keys of the group: class 1 `BlowLocusEffect1`
+///   (fists / feet / claws), class 2 `SwordLocusEffect1` / `2` / `3` by the row's kind ([`hit_follows`]).
 #[allow(clippy::too_many_arguments)]
 pub fn drive_weapon_trails(
     mut commands: Commands,
@@ -1696,7 +2007,7 @@ pub fn drive_weapon_trails(
         _ => {
             let r = commands.spawn((Name::new("weapon_trails"), Transform::from_rotation(Quat::from_rotation_x(std::f32::consts::PI)), Visibility::default(), DespawnOnExit(sh2_core::game::Scene::Battle))).id();
             wt.root = Some(r);
-            wt.swords.clear();
+            wt.runs.clear();
             wt.blows.clear();
             r
         }
@@ -1715,43 +2026,38 @@ pub fn drive_weapon_trails(
             let Some(id) = pc else { continue };
             let w = session.as_ref().and_then(|s| s.save.btl.pc(id as usize)).map(|r| r.weapon as i32).unwrap_or(-1);
             let model = if w >= 0 { db.0.dat.record(crate::data::SEC_WEAPON, w as usize, 0x34).map(|r| i16::from_le_bytes([r[4], r[5]])).unwrap_or(0) } else { 0 };
-            (id as usize, model.max(0) as usize)
+            // `nAtkTbl`: the PC id, or the fusion's `FUSM +6` while fused
+            let fused = rt.battle.fused.get(chr).and_then(|s| s.as_ref()).map(|s| s.id);
+            (crate::models::patk_index(&db, f, pc, fused).unwrap_or(id as usize), model.max(0) as usize)
         };
         let Some(patk) = db.0.dat.record(23, patk_idx, 0x18) else { continue };
+        let tbl = i16::from_le_bytes([patk[0x14], patk[0x15]]);
         let attacking = am.current.as_deref().map(is_attack_motion).unwrap_or(false);
+        let motion = am.current.as_deref().and_then(|n| am.motions.iter().find(|mm| mm.name == n));
         log::trace!("trail chr {chr}: patk {patk_idx} class {} weapon {weapon_no} motion {:?}", patk[3], am.current);
-        // ---- sword (whole swing)
-        if patk[3] == 3 {
-            let tbl = i16::from_le_bytes([patk[0x14], patk[0x15]]);
-            let edge = (tbl >= 0).then(|| wt.table.get(tbl as usize).and_then(|t| t.get(weapon_no).or_else(|| t.first())).copied()).flatten();
-            if attacking {
-                if let Some(e) = edge {
-                    let src = match e.kind {
-                        0 | 3 => Some((am, gt)),
-                        k => {
-                            let slot = if k == 1 || k == 4 { crate::models::WeaponSlot::Right } else { crate::models::WeaponSlot::Left };
-                            m.weapons.iter().find(|w| mounts.get(**w).map(|mm| mm.slot == slot).unwrap_or(false)).and_then(|w| Some((anims.get(*w).ok()?, gts.get(*w).ok()?)))
-                        }
-                    };
-                    if let Some(fw) = src.and_then(|(a, g)| frame_world(a, g, e.frame as usize)) {
-                        let run = wt.swords.entry(chr).or_insert_with(|| SwordRun { locus: SwordLocus::default(), entity: None });
-                        if run.locus.ending {
-                            run.locus = SwordLocus::default();
-                        }
-                        if sample {
-                            log::trace!("sword trail chr {chr}: {:?} {:?} (feet {:?})", fw.transform_point3(e.a), fw.transform_point3(e.b), bevy_to_ps2(m.pos));
-                            run.locus.sample(fw.transform_point3(e.a), fw.transform_point3(e.b));
-                        }
-                    }
+        let weapon = |slot: crate::models::WeaponSlot| m.weapons.iter().find(|w| mounts.get(**w).map(|mm| mm.slot == slot).unwrap_or(false)).and_then(|w| Some((anims.get(*w).ok()?, gts.get(*w).ok()?)));
+        let ctx = TrailCtx { body: (am, gt), right: weapon(crate::models::WeaponSlot::Right), left: weapon(crate::models::WeaponSlot::Left) };
+        // ---- whole swing: alive while the attack motion plays, force-ended at 80 % of it
+        if let Some(fl) = swing_follow(patk, weapon_no) {
+            let progress = motion.map(|mo| am.inst.time() / mo.duration().max(1e-3)).unwrap_or(1.0);
+            if attacking && progress < 0.8 {
+                if std::env::var_os("SH2_TRAIL_DBG").is_some() && follow_points(&fl, &ctx, &wt.table).is_none() {
+                    let names: Vec<String> = am.inst.model.bounds.iter().map(|b| am.inst.skeleton.bones.get((b.tag & 0xff) as usize).map(|x| x.name.clone()).unwrap_or_default()).collect();
+                    eprintln!("TRAILDBG chr {chr} {fl:?}: no points; body boxes {names:?}; right weapon {}", ctx.right.is_some());
                 }
-            } else if let Some(run) = wt.swords.get_mut(&chr) {
-                run.locus.end();
+                if !wt.runs.iter().any(|r| r.chr == chr && r.key.0 == 0 && !r.shape.ending()) && follow_points(&fl, &ctx, &wt.table).is_some() {
+                    note_start(&mut wt.started, &fl, chr, "swing");
+                    wt.runs.push(RibbonRun { chr, key: (0, 0, 0), shape: Shape::new(&fl, false), follow: fl, entity: None });
+                }
+            } else {
+                for r in wt.runs.iter_mut().filter(|r| r.chr == chr && r.key.0 == 0) {
+                    r.shape.end(true);
+                }
             }
         }
-        // ---- blow (per hit group, `MosEvent` pairs)
+        // ---- per hit (`MosEvent` pairs): one set per hit group
         let base = u16::from_le_bytes([patk[0xc], patk[0xd]]) as usize;
-        if attacking {
-            let Some(motion) = am.current.as_deref().and_then(|n| am.motions.iter().find(|mm| mm.name == n)) else { continue };
+        if let (true, Some(motion)) = (attacking, motion) {
             let keys: Vec<f32> = motion.events.iter().filter(|e| e.base_name() == "MosEvent").flat_map(|e| e.keys()).map(|k| k.time as f32).collect();
             let frame = am.inst.time() * motion.fps.max(1) as f32;
             for (g, pair) in keys.chunks(2).enumerate() {
@@ -1759,38 +2065,74 @@ pub fn drive_weapon_trails(
                     continue;
                 }
                 let Some(rec) = db.0.dat.record(24, base + g, 0x48) else { continue };
-                if rec[2] != 1 {
-                    continue;
-                }
-                let name = String::from_utf8_lossy(&rec[4..20]).split('\0').next().unwrap_or("").to_string();
-                let Some(bi) = am.inst.skeleton.bones.iter().position(|b| b.name == name) else { continue };
-                let Some(fw) = frame_world(am, gt, bi) else { continue };
-                let c = fw.w_axis.truncate();
-                let radius = 3.0;
                 let inside = frame >= pair[0] && frame <= pair[1] + 1.0;
-                let idx = wt.blows.iter().position(|b| b.chr == chr && b.group == g && !b.locus.ending);
-                match (inside, idx) {
-                    (true, None) => {
-                        let mut s = wt.rng;
-                        let locus = BlowLocus::new(c, radius, || {
-                            s = s.wrapping_mul(1103515245).wrapping_add(12345);
-                            ((s >> 1) & 0x7fff_ffff) as f32 / 2_147_483_648.0
-                        });
-                        wt.rng = s;
-                        wt.blows.push(BlowRun { chr, group: g, locus, entity: None });
-                    }
-                    (true, Some(i)) => {
-                        if sample {
-                            wt.blows[i].locus.sample(c, radius);
+                match rec[2] {
+                    1 => {
+                        let name = cstr(&rec[4..20]);
+                        let Some(bi) = am.inst.skeleton.bones.iter().position(|b| b.name == name) else { continue };
+                        let Some(fw) = frame_world(am, gt, bi) else { continue };
+                        let c = fw.w_axis.truncate();
+                        let radius = 3.0;
+                        let idx = wt.blows.iter().position(|b| b.chr == chr && b.group == g && !b.locus.ending);
+                        match (inside, idx) {
+                            (true, None) => {
+                                let mut s = wt.rng;
+                                let locus = BlowLocus::new(c, radius, || {
+                                    s = s.wrapping_mul(1103515245).wrapping_add(12345);
+                                    ((s >> 1) & 0x7fff_ffff) as f32 / 2_147_483_648.0
+                                });
+                                wt.rng = s;
+                                *wt.started.entry("Blow").or_default() += 1;
+                                wt.blows.push(BlowRun { chr, group: g, locus, entity: None });
+                            }
+                            (true, Some(i)) => {
+                                if sample {
+                                    wt.blows[i].locus.sample(c, radius);
+                                }
+                            }
+                            (false, Some(i)) if frame > pair[1] => wt.blows[i].locus.end(),
+                            _ => {}
                         }
                     }
-                    (false, Some(i)) if frame > pair[1] => wt.blows[i].locus.end(),
+                    2 => {
+                        for (sub, fl) in hit_follows(rec, tbl, weapon_no).into_iter().enumerate() {
+                            let key = (1u8, g, sub);
+                            let idx = wt.runs.iter().position(|r| r.chr == chr && r.key == key && !r.shape.ending());
+                            match (inside, idx) {
+                                (true, None) => {
+                                    if follow_points(&fl, &ctx, &wt.table).is_some() {
+                                        note_start(&mut wt.started, &fl, chr, "hit");
+                                        wt.runs.push(RibbonRun { chr, key, shape: Shape::new(&fl, true), follow: fl, entity: None });
+                                    }
+                                }
+                                (false, Some(i)) if frame > pair[1] => wt.runs[i].shape.end(false),
+                                _ => {}
+                            }
+                        }
+                    }
                     _ => {}
                 }
             }
         } else {
             for b in wt.blows.iter_mut().filter(|b| b.chr == chr) {
                 b.locus.end();
+            }
+            for r in wt.runs.iter_mut().filter(|r| r.chr == chr && r.key.0 == 1) {
+                r.shape.end(false);
+            }
+        }
+        // ---- sample: every frame the battle clock runs, also while a trail is ending (`Polling` has no guard)
+        if sample {
+            for r in wt.runs.iter_mut().filter(|r| r.chr == chr) {
+                if let Some(p) = follow_points(&r.follow, &ctx, &wt.table) {
+                    if std::env::var_os("SH2_TRAIL_DBG").is_some() {
+                        match p {
+                            Pts::Whip(w) => eprintln!("TRAILDBG chr {chr} {:?} t {:.3} p0 {:?} p11 {:?}", am.current, am.inst.time(), w[0], w[11]),
+                            Pts::Blade(a, b) => eprintln!("TRAILDBG chr {chr} {:?} t {:.3} a {:?} b {:?}", am.current, am.inst.time(), a, b),
+                        }
+                    }
+                    r.shape.sample(p);
+                }
             }
         }
     }
@@ -1804,41 +2146,20 @@ pub fn drive_weapon_trails(
         wt.mat_blow = Some(mats.add(Sh2Material::textured(tex).with_blend(sh2_gfx::bevy::Sh2Blend::Normal, None).with_fog(false)));
     }
     let (mat_s, mat_b) = (wt.mat_sword.clone().unwrap(), wt.mat_blow.clone().unwrap());
-    let mut gone = vec![];
-    for (chr, run) in wt.swords.iter_mut() {
-        if run.locus.step(dt) {
-            gone.push(*chr);
+    let mut keep_runs = vec![];
+    for mut r in std::mem::take(&mut wt.runs) {
+        if r.shape.step(dt) {
+            if let Some((e, _)) = r.entity {
+                commands.entity(e).despawn();
+            }
             continue;
         }
-        let secs = run.locus.sections(sw);
-        let mut pos: Vec<[f32; 3]> = vec![];
-        let mut uv: Vec<[f32; 2]> = vec![];
-        let mut col: Vec<[f32; 4]> = vec![];
-        for s in &secs {
-            for (p, v) in [(s.a, 0.0), (s.b, 1.0)] {
-                pos.push(p.to_array());
-                uv.push([s.u / sw.max(1.0), v]);
-                col.push([1.0, 1.0, 1.0, s.alpha / 128.0]);
-            }
-        }
-        let mut idx: Vec<u32> = vec![];
-        for i in 0..secs.len().saturating_sub(1) as u32 {
-            let k = i * 2;
-            idx.extend_from_slice(&[k, k + 1, k + 2, k + 1, k + 3, k + 2]);
-        }
-        if idx.is_empty() {
-            // an empty vertex / index buffer makes Bevy's mesh slab allocator log "Use-after-free" every frame: one invisible triangle instead
-            pos = vec![[0.0; 3]; 3];
-            uv = vec![[0.0; 2]; 3];
-            col = vec![[0.0; 4]; 3];
-            idx = vec![0, 1, 2];
-        }
-        let mut mesh = Mesh::new(bevy::mesh::PrimitiveTopology::TriangleList, bevy::asset::RenderAssetUsages::default());
-        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
-        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv);
-        mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, col);
-        mesh.insert_indices(bevy::mesh::Indices::U32(idx));
-        match &run.entity {
+        let (pos, uv, col, idx) = match &r.shape {
+            Shape::Blade(s) => blade_mesh_data(&s.sections(sw), sw),
+            Shape::Whip(w) => whip_mesh_data(&w.strips(sw), sw),
+        };
+        let mesh = finish_mesh(bevy::mesh::PrimitiveTopology::TriangleList, pos, uv, col, idx);
+        match &r.entity {
             Some((_, h)) => {
                 if let Some(mut m) = meshes.get_mut(h) {
                     *m = mesh;
@@ -1846,19 +2167,14 @@ pub fn drive_weapon_trails(
             }
             None => {
                 let h = meshes.add(mesh);
-                let e = commands.spawn((Name::new(format!("sword_trail_{chr}")), Mesh3d(h.clone()), MeshMaterial3d(mat_s.clone()), Transform::default(), Visibility::default(), bevy::camera::visibility::NoFrustumCulling)).id();
+                let e = commands.spawn((Name::new(format!("{}_trail_{}", class_name(&r.follow), r.chr)), Mesh3d(h.clone()), MeshMaterial3d(mat_s.clone()), Transform::default(), Visibility::default(), bevy::camera::visibility::NoFrustumCulling)).id();
                 commands.entity(root).add_child(e);
-                run.entity = Some((e, h));
+                r.entity = Some((e, h));
             }
         }
+        keep_runs.push(r);
     }
-    for chr in gone {
-        if let Some(r) = wt.swords.remove(&chr) {
-            if let Some((e, _)) = r.entity {
-                commands.entity(e).despawn();
-            }
-        }
-    }
+    wt.runs = keep_runs;
     let mut keep = vec![];
     for mut b in std::mem::take(&mut wt.blows) {
         if b.locus.step(dt) {
@@ -1880,16 +2196,7 @@ pub fn drive_weapon_trails(
                 }
             }
         }
-        if pos.is_empty() {
-            // see the sword trails: no empty vertex buffers
-            pos = vec![[0.0; 3]; 2];
-            uv = vec![[0.0; 2]; 2];
-            col = vec![[0.0; 4]; 2];
-        }
-        let mut mesh = Mesh::new(bevy::mesh::PrimitiveTopology::LineList, bevy::asset::RenderAssetUsages::default());
-        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
-        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv);
-        mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, col);
+        let mesh = finish_mesh(bevy::mesh::PrimitiveTopology::LineList, pos, uv, col, vec![]);
         match &b.entity {
             Some((_, h)) => {
                 if let Some(mut m) = meshes.get_mut(h) {
@@ -1906,6 +2213,28 @@ pub fn drive_weapon_trails(
         keep.push(b);
     }
     wt.blows = keep;
+    // dev aid `SH2_TRAIL_SHOTS=<dir>`: a photograph every 4th frame while a trail with a visible ribbon is alive (`trail_<n>_<classes>.png`, at most 90)
+    if let Some(dir) = std::env::var_os("SH2_TRAIL_SHOTS").map(std::path::PathBuf::from) {
+        let visible = wt.runs.iter().any(|r| match &r.shape {
+            Shape::Blade(s) => s.samples() >= 3,
+            Shape::Whip(w) => w.samples() >= 3,
+        }) || wt.blows.iter().any(|b| !b.locus.ending);
+        if visible && wt.shot_n < 90 {
+            wt.shot_frames += 1;
+            if wt.shot_frames % 4 == 1 {
+                let _ = std::fs::create_dir_all(&dir);
+                let mut classes: Vec<&str> = wt.runs.iter().map(|r| class_name(&r.follow)).collect();
+                if !wt.blows.is_empty() {
+                    classes.push("Blow");
+                }
+                classes.sort();
+                classes.dedup();
+                wt.shot_n += 1;
+                let path = dir.join(format!("trail_{:02}_{}.png", wt.shot_n, classes.join("-")));
+                commands.spawn(bevy::render::view::screenshot::Screenshot::primary_window()).observe(bevy::render::view::screenshot::save_to_disk(path));
+            }
+        }
+    }
 }
 
 /// `CBattle` -> `StopBtlIn`: once the battle runs and every fighter model is in, the encounter shatter fades its backdrop and shards
@@ -1928,5 +2257,122 @@ pub fn btlin_battle_stop(
     let loaded = models.iter().count() > 0 && models.iter().all(|m| anims.get(m.holder).is_ok());
     if (*frames >= 10 && loaded) || *frames >= 120 {
         fx.stop();
+    }
+}
+
+#[cfg(test)]
+mod trail_tests {
+    use super::*;
+
+    fn row(kind: u8, class: u8, names: [&str; 4]) -> Vec<u8> {
+        let mut r = vec![0u8; 0x48];
+        r[1] = kind;
+        r[2] = class;
+        for (k, n) in names.iter().enumerate() {
+            r[4 + 16 * k..4 + 16 * k + n.len()].copy_from_slice(n.as_bytes());
+        }
+        r
+    }
+
+    #[test]
+    fn swing_classes_follow_patk_plus_3() {
+        let mut patk = vec![0u8; 0x18];
+        patk[0x14] = 5;
+        for (v, want) in [
+            (1u8, Some(Follow::Fan)),
+            (3, Some(Follow::Table { tbl: 5, row: 7 })),
+            (4, Some(Follow::Sword3 { src: TrailSrc::Right, name: "konbou0".into(), code: 1 })),
+            (6, Some(Follow::Sword3 { src: TrailSrc::Right, name: "kinobou0".into(), code: 1 })),
+            (7, Some(Follow::Sword3 { src: TrailSrc::Body, name: "BBODY2".into(), code: 2 })),
+            (5, Some(Follow::Whip { body: false })),
+            (8, Some(Follow::Whip { body: true })),
+            (0, None),
+            (2, None),
+        ] {
+            patk[3] = v;
+            assert_eq!(swing_follow(&patk, 7), want, "+3 = {v}");
+        }
+        // a sword whole swing needs a table
+        patk[3] = 3;
+        patk[0x14] = 0xff;
+        patk[0x15] = 0xff;
+        assert_eq!(swing_follow(&patk, 0), None);
+    }
+
+    #[test]
+    fn hit_rows_pick_the_sword_class() {
+        // kind 6: one box, digit + name; kind 7: two; 0x1b: four; names stop at the NUL
+        let r = row(6, 2, ["3REDGE0", "", "", ""]);
+        assert_eq!(hit_follows(&r, -1, 0), vec![Follow::Sword2 { name: "REDGE0".into(), code: 3 }]);
+        let r = row(7, 2, ["2RHAND0", "3LHAND0", "", ""]);
+        assert_eq!(hit_follows(&r, -1, 0), vec![Follow::Sword2 { name: "RHAND0".into(), code: 2 }, Follow::Sword2 { name: "LHAND0".into(), code: 3 }]);
+        assert_eq!(hit_follows(&row(0x1b, 2, ["0A", "1B", "2C", "3D"]), -1, 0).len(), 4);
+        // `a` = 0x61 - 0x30 = 0x31
+        assert_eq!(hit_follows(&row(7, 2, ["aRWING1", "aLWING1", "", ""]), -1, 0)[1], Follow::Sword2 { name: "LWING1".into(), code: 0x31 });
+        // Sword3 on the right weapon, the whole name field, edge 0 (0xc) / 1 (0x11)
+        assert_eq!(hit_follows(&row(0xc, 2, ["__2", "", "", ""]), -1, 0), vec![Follow::Sword3 { src: TrailSrc::Right, name: "__2".into(), code: 0 }]);
+        assert_eq!(hit_follows(&row(0x11, 2, ["__2", "", "", ""]), -1, 0)[0], Follow::Sword3 { src: TrailSrc::Right, name: "__2".into(), code: 1 });
+        // Sword1 per hit: row = weapon number + digit of the name
+        assert_eq!(hit_follows(&row(5, 2, ["1", "", "", ""]), 4, 6), vec![Follow::Table { tbl: 4, row: 7 }]);
+        assert!(hit_follows(&row(5, 2, ["0", "", "", ""]), -1, 6).is_empty());
+        // blow rows (class 1) are not ribbons
+        assert!(hit_follows(&row(1, 1, ["RHAND1", "", "", ""]), -1, 0).is_empty());
+    }
+
+    #[test]
+    fn blade_mesh_is_a_strip_with_two_us() {
+        let secs: Vec<locus::LocusSection> = (0..4)
+            .map(|i| locus::LocusSection { a: Vec3::new(i as f32, 0.0, 0.0), b: Vec3::new(i as f32, 1.0, 0.0), u: i as f32 * 16.0, ub: i as f32 * 8.0, alpha: if i == 3 { 0.0 } else { 48.0 } })
+            .collect();
+        let (pos, uv, col, idx) = blade_mesh_data(&secs, 64.0);
+        assert_eq!((pos.len(), idx.len()), (8, 18));
+        assert_eq!(uv[2], [0.25, 0.0]);
+        assert_eq!(uv[3], [0.125, 1.0]);
+        assert_eq!(col[0][3], 48.0 / 128.0);
+        assert_eq!(col[7][3], 0.0);
+    }
+
+    #[test]
+    fn whip_mesh_has_eleven_strips() {
+        let mut w = locus::WhipLocus::default();
+        for i in 0..4 {
+            let mut p = [Vec3::ZERO; 12];
+            for (k, v) in p.iter_mut().enumerate() {
+                *v = Vec3::new(i as f32, k as f32, 0.0);
+            }
+            w.sample(&p);
+        }
+        let strips = w.strips(64.0);
+        let (pos, uv, _col, idx) = whip_mesh_data(&strips, 64.0);
+        let sections = 3 * 8 + 1;
+        assert_eq!(pos.len(), 11 * sections * 2);
+        assert_eq!(idx.len(), 11 * (sections - 1) * 6);
+        assert!(uv.iter().all(|t| (0.0..=1.0001).contains(&t[1])));
+    }
+
+    #[test]
+    fn empty_ribbons_still_make_a_valid_mesh() {
+        let (p, u, c, i) = blade_mesh_data(&[], 64.0);
+        let m = finish_mesh(bevy::mesh::PrimitiveTopology::TriangleList, p, u, c, i);
+        assert!(m.count_vertices() >= 3 && m.indices().map(|x| x.len()).unwrap_or(0) >= 3, "no empty buffers (Bevy slab 'Use-after-free')");
+        let m = finish_mesh(bevy::mesh::PrimitiveTopology::LineList, vec![], vec![], vec![], vec![]);
+        assert!(m.count_vertices() >= 2);
+    }
+
+    /// The retail data: the rows `fx_r5_patk` lists (monsters 32 / 33: `3REDGE0` / `2LEDGE0` Sword2, whip PC, fan PC).  Skipped without the US disc.
+    #[test]
+    fn retail_rows_resolve() {
+        let Some(dir) = std::env::var_os("SH2_US_DISC_DIR") else { return };
+        let Ok(d) = crate::pkb_compat::PkbDisc::open(&dir) else { return };
+        let Ok(data) = crate::data::BattleData::load_us(&d) else { return };
+        // PATK 3 = Lucia (Fan), 13 = Veronica (Whip), 5 = Karin (Sword1, table 0)
+        assert_eq!(swing_follow(data.dat.record(23, 3, 0x18).unwrap(), 0), Some(Follow::Fan));
+        assert_eq!(swing_follow(data.dat.record(23, 13, 0x18).unwrap(), 0), Some(Follow::Whip { body: false }));
+        assert_eq!(swing_follow(data.dat.record(23, 5, 0x18).unwrap(), 2), Some(Follow::Table { tbl: 0, row: 2 }));
+        // PATK 32: the first hit rows are Sword2 on the REDGE0 / LEDGE0 boxes
+        let p = data.dat.record(23, 32, 0x18).unwrap();
+        let base = u16::from_le_bytes([p[0xc], p[0xd]]) as usize;
+        let f = hit_follows(data.dat.record(24, base, 0x48).unwrap(), -1, 0);
+        assert_eq!(f, vec![Follow::Sword2 { name: "REDGE0".into(), code: 3 }]);
     }
 }

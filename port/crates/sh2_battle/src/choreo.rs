@@ -9,7 +9,8 @@
 //! * **attack** (`AttackFunc` steps / states 0xb..0xf): the attacker runs to the target with `dsh` (the ROOT track of the motion carries the speed), swings
 //!   `atck` (the ROOT track carries the lunge); `CBattle::MotionEventCallBack` applies the damage on the first `MosEvent` key of the swing; the attacker
 //!   returns with `dsh` and goes back to idle (state 7).
-//! * **hit reaction** (states 0x16..0x1e): the target plays `blwa` (knock back) / `flya` (launched); a guarding target plays `defa` and returns to `def`.
+//! * **hit reaction** (`PAtkHitSet` -> states 0x16..0x1d): the target flinches (`crvd`) or is launched (`flyi` -> `lad`); a guarding target plays `defa` and
+//!   returns to `def`.  `blwa` / `flya` / `koda` are attack motions (JP `SetBtlMotion` ids 0x10..0x12), never reactions.
 //! * **death** (`CBattle::DeathInit`, states 0x26 / 0x2a / 0x2d..0x30): a party member plays `dwn`, then lies in `dwni` until revived (`wup`, state 0x2b);
 //!   a monster dies by its record's death type (`MONSTERParam+0x15 >> 3 & 3`): type 0 = `crvd` while the model shrinks to nothing in 0.27 s with a bright
 //!   flash (`NormalDeathEfct`, state 0x2d: `f2c -= dt * 3.75`), types 1 / 2 = `dwn`, `dwni` for one second then removed (2 fades out), type 3 (bosses) stays down.
@@ -19,6 +20,8 @@
 //! * **victory** (Phase 0x15): the living party members play `win` once.
 
 use bevy::math::Vec3;
+
+use crate::wall_involve::{Slam, SlamEvent, SlamKind, SlamPhase};
 
 /// What the state machine needs to know about the motion set of a character.
 pub trait MotionSet {
@@ -56,6 +59,9 @@ pub mod names {
     pub const DASH: &str = "dsh";
     /// swing motions in order of preference: some monsters (CHR 418 ..) ship no `atck` and lunge with their dash (`can1..4` are the cancel motions that close a cut swing, they carry no hit keys)
     pub const ATTACK: [&str; 2] = ["atck", "dsh"];
+    /// a monster without `atck` swings with the motion that carries its hit keys (`MosEvent`): the US Revenant (CHR 418) has them on `flya`
+    /// (frames 23 / 27) and no other motion with hits
+    pub const KEYED_SWING: [&str; 5] = ["flya", "blwa", "koda", "defa", "mage"];
     pub const GUARD: &str = "def";
     pub const GUARD_HIT: &str = "defa";
     pub const ITEM: &str = "uitm";
@@ -68,9 +74,17 @@ pub mod names {
     pub const WAKE: &str = "wup";
     pub const ESCAPE: &str = "esc";
     pub const CROUCH_DIE: &str = "crvd";
-    /// damage reactions: `blwa` (knock back), `flya` (launched), `koda` (knock down)
-    pub const HIT: [&str; 4] = ["blwa", "flya", "defa", "koda"];
-    pub const HIT_HEAVY: [&str; 4] = ["flya", "blwa", "defa", "koda"];
+    /// damage reactions (`CBattle::PAtkHitSet` -> `bState`, `BtlModel::SetBtlMotion` JP ids): 0x16 / 0x18 flinch `crvd` (0x1d), 0x17 knock back
+    /// `blwd` (0x1e), 0x1b launched `flyi` (0x1f) landing through `blwd` / `blwi` (0x20 / 0x21) into `lad` (0x22).  `blwa` / `flya` / `koda`
+    /// (ids 0x10..0x12, or `rdy` -> them at 0x0a..0x0c) are *attack* motions, not reactions.
+    pub const HIT: [&str; 3] = ["crvd", "blwd", "defa"];
+    pub const HIT_HEAVY: [&str; 4] = ["flyi", "blwi", "crvd", "defa"];
+    /// `lad` (state 0x1d -> `SetNextBtlMotion(0x22)`): getting up after a launch
+    pub const LAND: &str = "lad";
+    /// the knock-down slide of states 0x1c / 0x1e (`SetBtlMotion(0x20)`), the rebound `flyi` (0x1f) and the landing slide `blwi` (0x21)
+    pub const SLIDE: &str = "blwd";
+    pub const REBOUND: &str = "flyi";
+    pub const SLIDE_LAND: &str = "blwi";
     pub const DIE_NORMAL: [&str; 3] = ["crvd", "dwn", "koda"];
 }
 
@@ -239,6 +253,95 @@ impl Push {
         }
         self.total += d;
         self.dir * d
+    }
+}
+
+/// The launch of a struck fighter (`BtlChrSequence` state 0x1b, JP CBattle.c ~16853): `MoveWorkInit(f45e / 10 / n, 0, -f45c * 0.015, 0.06)`, i.e. a
+/// vertical speed of `f45c * 0.015` units per 1/60 s tick against a gravity of 0.06 per tick (rising moves at 0.75 of the speed), the horizontal push
+/// spread over the `n` ticks of the arc; the fighter lands when it falls back to the floor.  `flyi` is not played at its own speed: its phase
+/// (`BtlChr+0x64`) runs 0 -> 1 over the rise and 1 -> 2 over the fall (`GetRiseTime` / `GetFlightTime`), so the whole clip spans the flight.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Launch {
+    pub dir: Vec3,
+    /// horizontal units per tick
+    pub vh: f32,
+    /// vertical units per tick (up positive)
+    pub vy: f32,
+    /// height above the floor
+    pub height: f32,
+    /// ticks of the rise / of the whole flight (for the `flyi` phase)
+    pub rise_ticks: u32,
+    pub flight_ticks: u32,
+    pub ticks: u32,
+    acc: f32,
+}
+
+impl Launch {
+    pub const GRAVITY: f32 = 0.06;
+
+    pub fn new(dir: Vec3, f45c: u16, f45e: u16) -> Option<Launch> {
+        let vy = f45c as f32 * 0.015;
+        if vy <= 0.0 {
+            return None;
+        }
+        // the retail tick count of the unscaled arc (the two loops before `MoveWorkInit`)
+        let (mut v, mut y, mut n) = (-vy, 0.0f32, 0u32);
+        while v < 0.0 {
+            y += v;
+            n += 1;
+            v += Self::GRAVITY;
+        }
+        while y < 0.0 {
+            n += 1;
+            y += v;
+            v += Self::GRAVITY;
+        }
+        let mut l = Launch { dir: dir.with_y(0.0).normalize_or_zero(), vh: f45e as f32 / 10.0 / n.max(1) as f32, vy, height: 0.0, rise_ticks: 0, flight_ticks: 0, ticks: 0, acc: 0.0 };
+        // the flown arc (rising at 0.75 speed) gives the phase split
+        let mut sim = l;
+        while !sim.tick() {}
+        l.rise_ticks = sim.rise_ticks;
+        l.flight_ticks = sim.ticks;
+        Some(l)
+    }
+
+    /// One 1/60 s tick; true once landed.
+    fn tick(&mut self) -> bool {
+        self.height += if self.vy > 0.0 { self.vy * 0.75 } else { self.vy };
+        if self.vy > 0.0 {
+            self.rise_ticks += 1;
+        }
+        self.vy -= Self::GRAVITY;
+        self.ticks += 1;
+        if self.vy < 0.0 && self.height <= 0.0 {
+            self.height = 0.0;
+            return true;
+        }
+        false
+    }
+
+    pub fn landed(&self) -> bool {
+        self.ticks > 0 && self.height <= 0.0 && self.vy < 0.0
+    }
+
+    /// Advance `dt` seconds; returns the horizontal displacement of this call.
+    pub fn step(&mut self, dt: f32) -> Vec3 {
+        self.acc += dt;
+        let mut d = 0.0;
+        while self.acc >= 1.0 / 60.0 - 1e-6 && !self.landed() {
+            self.acc -= 1.0 / 60.0;
+            d += self.vh;
+            self.tick();
+        }
+        self.dir * d
+    }
+
+    /// `flyi` playback rate for a clip of `clip` seconds: half the clip over the rise, half over the fall.
+    pub fn clip_rate(&self, clip: f32) -> f32 {
+        let rise = self.rise_ticks.max(1) as f32 / 60.0;
+        let fall = self.flight_ticks.saturating_sub(self.rise_ticks).max(1) as f32 / 60.0;
+        let half = clip * 0.5;
+        if self.vy > 0.0 { half / rise } else { half / fall }
     }
 }
 
@@ -450,8 +553,19 @@ pub struct Choreo {
     pub arena: Option<(f32, f32)>,
     /// extra distance the attacker stops short of the target (`PATK` row +4: 15 for Gepetto, 10 for Nicolai, 0 for melee weapons)
     pub stand_extra: f32,
+    /// attack from the spot (`BtlChrSequence` JP CBattle.c 14978: only `(PATK +2 & 7) == 0` computes a run-up destination; the gun soldiers'
+    /// `PATK +2 = 1` turn to the target and fire where they stand): no run-up, no procedural lunge
+    pub in_place: bool,
     /// knock-back in progress (`MoveFunc`), see [`Push`]
     pub push: Option<Push>,
+    /// launch in progress (state 0x1b), see [`Launch`]
+    pub launch: Option<Launch>,
+    /// knock-down slide in progress (states 0x1c / 0x1e / 0x20 and the rebound after a wall hit), see [`crate::wall_involve::Slam`]
+    pub slam: Option<Slam>,
+    /// what the slide reported since the owner last drained it (wall contacts, [`crate::wall_involve::drive_wall_involve`])
+    pub slam_events: Vec<SlamEvent>,
+    /// the launch has come down (state 0x1b -> 0x1f): the airborne clip hands over to `lad`
+    landed: bool,
     /// character package sounds requested since the owner last drained them, see [`ChrSe`]
     pub sounds: Vec<ChrSe>,
     /// round 6 BT: lying down alive after a berserk faint (US phase 0x12 sets `BtlChr+0xb6` bit 0x10, which keeps state 0x2a from waking);
@@ -481,7 +595,12 @@ impl Choreo {
             obstacles: vec![],
             arena: None,
             stand_extra: 0.0,
+            in_place: false,
             push: None,
+            launch: None,
+            slam: None,
+            slam_events: vec![],
+            landed: false,
             sounds: vec![],
             fainted: false,
         }
@@ -492,6 +611,44 @@ impl Choreo {
         if !self.is_dead_act() {
             self.push = Push::new(dir, f45c, f45e, false);
         }
+    }
+
+    /// Launch a struck fighter that is playing its launched reaction (`flyi`); `f45c` / `f45e` as in [`Choreo::start_push`].
+    pub fn start_launch(&mut self, dir: Vec3, f45c: u16, f45e: u16) {
+        if matches!(self.act, Act::Hit { name: "flyi" | "blwi" }) {
+            self.launch = Launch::new(dir, f45c, f45e);
+            self.landed = false;
+            self.push = None;
+        }
+    }
+
+    /// Throw a struck fighter along the floor (`PAtkHitSet` hit class 4 / 6: BtlChrSequence states 0x1c / 0x1e): `blwd` while it slides, `flyi` on the rebound off
+    /// a wall, `blwi` on a landing slide, then `lad`.  `weight` = the size class of the target, `last_damage` the damage of the hit, `attacker` its fighter slot,
+    /// `arena` the arena extents; call after [`Choreo::hit`] (it starts the reaction this replaces the motion of).  Without a `blwd` clip the launch arc stays.
+    pub fn start_slam(&mut self, kind: SlamKind, dir: Vec3, weight: u8, last_damage: i32, attacker: usize, arena: [f32; 2], ms: &dyn MotionSet) {
+        if self.is_dead_act() || !matches!(self.act, Act::Hit { .. }) || !ms.has(names::SLIDE) {
+            return;
+        }
+        let height = self.launch.map(|l| l.height).unwrap_or(0.0);
+        self.launch = None;
+        self.push = None;
+        self.landed = false;
+        self.slam_events.clear();
+        self.slam = Some(Slam::new(kind, dir, weight, height, last_damage, attacker, arena, self.radius));
+        self.set(Act::Hit { name: names::SLIDE });
+    }
+
+    /// Drop a slide in progress: the fighter stays where it is, on the floor.
+    fn end_slam(&mut self) {
+        if self.slam.take().is_some() {
+            self.pos.y = self.home.y;
+            self.home = self.pos;
+        }
+    }
+
+    /// In the air: launched, or in the rebound of a slide.
+    pub fn airborne(&self) -> bool {
+        self.launch.is_some() || self.slam.as_ref().is_some_and(|s| s.airborne())
     }
 
     pub fn act_name(&self) -> &'static str {
@@ -550,14 +707,13 @@ impl Choreo {
             _ => {}
         }
         match &act {
-            // the hit reactions (US state 0x18 -> `SetNextBtlMotion(0x19 blwa / 0x1a flya / 0x1b koda)`, then `PlaySE(0x6000_1005 / 1006 / 1007)`
-            // by the motion; the `0x6000_300x` variants need `CBattle+0x45d6` mode 3, not ported)
-            Act::Hit { name } => match *name {
-                "blwa" => self.sounds.push(ChrSe::Ase(0x1005)),
-                "flya" => self.sounds.push(ChrSe::Ase(0x1006)),
-                "koda" => self.sounds.push(ChrSe::Ase(0x1007)),
-                _ => {}
-            },
+            // an attack motion's own sound (`SetNextBtlMotion(blwa / flya / koda)` -> `PlaySE(0x6000_1005 / 1006 / 1007)` in `MotionEventCallBack`;
+            // the `0x6000_300x` variants need `CBattle+0x45d6` mode 3, not ported); the reactions (`crvd`, `flyi` ...) have none
+            Act::Hit { name } => {
+                if let Some(l) = motion_se(name) {
+                    self.sounds.push(ChrSe::Ase(l));
+                }
+            }
             // `SetNextBtlMotion(0x2c)` (`dwn`): `PlaySE(0x7000_0005)` (US ~4807)
             Act::Down | Act::EnemyDown if !matches!(self.act, Act::Down | Act::EnemyDown) => self.sounds.push(ChrSe::Dse(5)),
             // `DeathInit` of a death type 0 monster: `PlaySE(0x7000_0003)` (US ~1674)
@@ -576,6 +732,13 @@ impl Choreo {
         let d = (target_home - self.pos).with_y(0.0);
         let dir = d.normalize_or_zero();
         let dir = if dir == Vec3::ZERO { self.facing } else { dir };
+        if self.in_place {
+            // a zero-length "run" whose last leg points at the target: the next update arrives at once and swings facing it
+            let m = attack_motion(ms);
+            self.plan = swing_plan(&ms.events(m, "MosEvent"), &ms.events(m, "MosCncel"), self.n_hits, ms.duration(m));
+            self.set(Act::Approach { path: vec![self.pos, self.pos + dir * 0.5], dur: 0.0 });
+            return true;
+        }
         let to = target_home - dir * (self.radius + target_radius + STAND_GAP + self.stand_extra);
         // the target itself is not an obstacle of its own run-up
         let obs: Vec<(Vec3, f32)> = self.obstacles.iter().copied().filter(|(p, _)| (p.with_y(0.0) - target_home.with_y(0.0)).length() > 1.0 && (p.with_y(0.0) - self.pos.with_y(0.0)).length() > 1.0).collect();
@@ -606,11 +769,15 @@ impl Choreo {
         }
         // US `BtlChrSequence` ~1690: a hit that leaves HP sends the target to state 0x18 with `PlaySE(0x7000_0000 + rand() % 3)`
         self.sounds.push(ChrSe::Pain);
+        // every hit resets the state: a slide in progress ends (the new hit may start its own)
+        self.end_slam();
         match self.act {
             Act::Guard | Act::GuardHit if ms.has(names::GUARD_HIT) => self.set(Act::GuardHit),
             Act::Idle | Act::Intro | Act::Hit { .. } | Act::Cast { .. } | Act::Guard | Act::Win | Act::Wake => {
-                let list = if heavy { &names::HIT_HEAVY } else { &names::HIT };
-                if let Some(n) = first_available(ms, list) {
+                let list: &[&str] = if heavy { &names::HIT_HEAVY } else { &names::HIT };
+                // never react with the fighter's own swing (CHR 418's `flya` is its attack)
+                let swing = attack_motion(ms);
+                if let Some(n) = list.iter().copied().find(|n| *n != swing && ms.has(n)) {
                     self.set(Act::Hit { name: n });
                 }
             }
@@ -633,6 +800,7 @@ impl Choreo {
             Act::Down
         };
         let _ = ms;
+        self.end_slam();
         // a hit that kills plays the death sound only (the reaction of the same hit, queued this frame, is dropped)
         self.sounds.retain(|s| !matches!(s, ChrSe::Pain | ChrSe::Ase(0x1005..=0x1007)));
         self.set(a);
@@ -770,11 +938,58 @@ impl Choreo {
                 }
             }
         }
+        if let Some(l) = self.launch.as_mut() {
+            self.pos += l.step(dt);
+            self.pos.y = self.home.y + l.height;
+            if l.landed() {
+                self.launch = None;
+                self.landed = true;
+                self.pos.y = self.home.y;
+                self.home = self.pos;
+            }
+        }
+        // the knock-down slide (states 0x1c / 0x1e / 0x20): the wall contacts go to the owner, the phase changes pick the motion; it ends with the reaction
+        if !matches!(self.act, Act::Hit { .. }) {
+            self.end_slam();
+        }
+        if let Some(mut s) = self.slam.take() {
+            let mut p = self.pos;
+            for e in s.step(dt, &mut p) {
+                match e {
+                    SlamEvent::Wall { .. } => {
+                        self.slam_events.push(e);
+                        if ms.has(names::REBOUND) {
+                            self.set(Act::Hit { name: names::REBOUND });
+                            // (the clock restarts at this frame: a request one frame later would not count as a repeat)
+                            self.t = dt;
+                        }
+                    }
+                    SlamEvent::Landed => {
+                        if ms.has(names::SLIDE_LAND) {
+                            self.set(Act::Hit { name: names::SLIDE_LAND });
+                            self.t = dt;
+                        }
+                    }
+                    // the rebound came down: `lad` follows at once, like a launch
+                    SlamEvent::Settled => self.landed = true,
+                }
+            }
+            self.pos.x = p.x;
+            self.pos.z = p.z;
+            self.pos.y = self.home.y + s.height;
+            if s.finished() {
+                self.pos.y = self.home.y;
+                self.home = self.pos;
+            } else {
+                self.slam = Some(s);
+            }
+        }
         let idle = idle_name(ms, w.hp_frac);
         let playing = |n: &str| anim.current.as_deref() == Some(n);
-        // party members that were knocked out by something else than a hit (poison, an effect) and revived ones
+        // party members that were knocked out by something else than a hit (poison, an effect) and revived ones; a member that dies of the wall hit
+        // finishes its rebound first (the death state follows the landing)
         if !self.enemy {
-            if w.dead && !matches!(self.act, Act::Down | Act::Gone) {
+            if w.dead && self.slam.is_none() && !matches!(self.act, Act::Down | Act::Gone) {
                 self.set(Act::Down);
             } else if !w.dead && matches!(self.act, Act::Down) && !self.fainted {
                 self.set(Act::Wake);
@@ -809,7 +1024,14 @@ impl Choreo {
                     let (_, dir) = path_at(&path, len);
                     let dir = if dir.length() > 0.1 { dir } else { self.facing };
                     self.set(Act::Strike { start: to, dir, hits_done: 0 });
-                    want = Some((attack_motion(ms).into(), 0.08));
+                    let swing = attack_motion(ms);
+                    // a keyed swing (CHR 418's `flya`) brings the motion's own sound: the bank of such a monster holds no `0x6000_1001..` hit voices
+                    if swing != names::ATTACK[0] {
+                        if let Some(l) = motion_se(swing) {
+                            self.sounds.push(ChrSe::Ase(l));
+                        }
+                    }
+                    want = Some((swing.into(), 0.08));
                 } else {
                     // the run cycle is played at the speed the ROOT track would carry the model at
                     let rs = ms.root_speed(names::DASH).max(0.1);
@@ -823,7 +1045,13 @@ impl Choreo {
                 // fewer ring hits than hit groups: the swing is cut at the `MosCncel` that closes the last hit
                 let dur = self.plan.1.map(|c| c.min(full)).unwrap_or(full);
                 // the swing carries the actor with its ROOT track; motions without root travel get a procedural lunge
-                let off = if ms.root_travel(n) >= 6.0 { anim.root_fwd } else { 14.0 * (std::f32::consts::PI * (self.t / full).clamp(0.0, 1.0)).sin() };
+                let off = if ms.root_travel(n) >= 6.0 {
+                    anim.root_fwd
+                } else if self.in_place {
+                    0.0
+                } else {
+                    14.0 * (std::f32::consts::PI * (self.t / full).clamp(0.0, 1.0)).sin()
+                };
                 self.pos = start + dir * off;
                 self.yaw = yaw_towards(dir);
                 let mut done = hits_done;
@@ -964,10 +1192,31 @@ impl Choreo {
                     want = Some((n.into(), 0.1));
                 }
             }
+            Act::Hit { name } if self.launch.is_some() => {
+                // in the air: the clip follows the flight
+                out.rate = self.launch.map(|l| l.clip_rate(ms.duration(name))).unwrap_or(1.0).clamp(0.5, 8.0);
+                want = Some((name.into(), 0.05));
+            }
+            Act::Hit { name } if self.slam.as_ref().is_some_and(|s| s.phase == SlamPhase::Rebound) => {
+                // the rebound: `flyi` stretched over the arc
+                out.rate = self.slam.as_ref().map(|s| s.clip_rate(ms.duration(name))).unwrap_or(1.0).clamp(0.5, 8.0);
+                want = Some((name.into(), 0.05));
+            }
             Act::Hit { name } => {
-                if (anim.finished && playing(name) && self.t > 0.05) || self.t > STEP_TIMEOUT {
-                    self.set(Act::Idle);
-                    want = Some((idle.into(), 0.12));
+                let launched = matches!(name, "flyi" | "blwi");
+                // a launch that has landed goes straight on to `lad`, whatever is left of the clip
+                let landed = launched && std::mem::take(&mut self.landed);
+                // a slide holds the last pose of its clip until it has stopped
+                let sliding = self.slam.is_some();
+                if landed || (!sliding && anim.finished && playing(name) && self.t > 0.05) || self.t > STEP_TIMEOUT {
+                    if name != names::LAND && matches!(name, "flyi" | "blwi") && ms.has(names::LAND) {
+                        // a launched fighter lands and gets up before standing idle again
+                        self.set(Act::Hit { name: names::LAND });
+                        want = Some((names::LAND.into(), 0.08));
+                    } else {
+                        self.set(Act::Idle);
+                        want = Some((idle.into(), 0.12));
+                    }
                 } else {
                     want = Some((name.into(), 0.05));
                 }
@@ -1064,7 +1313,7 @@ impl Choreo {
         if let Some((name, blend)) = want {
             if ms.has(&name) {
                 // a repeated request for the same motion (a second hit) restarts it
-                let restart = self.asked.as_deref() == Some(name.as_str()) && self.t < dt * 1.5 && matches!(self.act, Act::Hit { .. } | Act::GuardHit);
+                let restart = self.asked.as_deref() == Some(name.as_str()) && self.t < dt * 1.5 && name != names::LAND && matches!(self.act, Act::Hit { .. } | Act::GuardHit);
                 if self.asked.as_deref() != Some(name.as_str()) || restart || anim.current.as_deref() != Some(name.as_str()) {
                     out.motion = Some(MotionReq { name: name.clone(), blend, rate: out.rate, restart });
                 }
@@ -1075,9 +1324,27 @@ impl Choreo {
     }
 }
 
-/// The swing motion of a character: `atck`, else the first fallback it has.
+/// `PlaySE(0x6000_1005 / 1006 / 1007)` that comes with `SetNextBtlMotion(0x19 blwa / 0x1a flya / 0x1b koda)`.
+fn motion_se(name: &str) -> Option<u16> {
+    match name {
+        "blwa" => Some(0x1005),
+        "flya" => Some(0x1006),
+        "koda" => Some(0x1007),
+        _ => None,
+    }
+}
+
+/// The swing motion of a character: `atck`, else the motion carrying its hit keys, else the first fallback it has.
 pub fn attack_motion(ms: &dyn MotionSet) -> &'static str {
-    names::ATTACK.iter().copied().find(|n| ms.has(n)).unwrap_or(names::IDLE_A)
+    if ms.has(names::ATTACK[0]) {
+        return names::ATTACK[0];
+    }
+    names::KEYED_SWING
+        .iter()
+        .copied()
+        .find(|n| ms.has(n) && !ms.events(n, "MosEvent").is_empty())
+        .or_else(|| names::ATTACK.iter().copied().find(|n| ms.has(n)))
+        .unwrap_or(names::IDLE_A)
 }
 
 #[cfg(test)]
@@ -1114,6 +1381,10 @@ pub mod tests {
                 ("can2", simple(0.8, false, 0.0)),
                 ("blwa", simple(1.0, false, 0.0)),
                 ("flya", simple(1.2, false, 0.0)),
+                ("blwd", simple(0.17, false, 0.0)),
+                ("blwi", simple(2.0, false, 0.0)),
+                ("flyi", simple(2.0, false, 0.0)),
+                ("lad", simple(1.0, false, 0.0)),
                 ("def", simple(1.3, true, 0.0)),
                 ("defa", simple(1.0, false, 0.0)),
                 ("uitm", simple(1.0, false, 0.0)),
@@ -1131,12 +1402,19 @@ pub mod tests {
             }
             Fake(m)
         }
-        /// A monster without `atck` / `blwa` (CHR 418).
+        /// A monster without `atck` / `blwa` (CHR 418): its swing is `flya` (hit keys at frames 23 / 27).
         pub fn revenant() -> Fake {
             let mut f = Fake::party();
             for n in ["atck", "blwa", "app", "uitm", "mags", "magi", "mage", "win", "can1", "can2"] {
                 f.0.remove(n);
             }
+            f.0.insert("flya", Def { dur: 40.0 / 30.0, lp: false, hits: vec![23.0 / 30.0, 27.0 / 30.0], ..Default::default() });
+            f
+        }
+        /// A monster with neither `atck` nor a keyed motion: it lunges with its dash.
+        pub fn dasher() -> Fake {
+            let mut f = Fake::revenant();
+            f.0.remove("flya");
             f
         }
     }
@@ -1266,14 +1544,15 @@ pub mod tests {
         run(&mut c, &f, &mut p, 5.0, 1.0, false, false);
         // the run loop starts with `dsh` and ends at the target; each hit of the swing plays `0x6000_1000 + k`
         assert_eq!(c.sounds, vec![ChrSe::AseHold(0x2000), ChrSe::AseEnd(0x2000), ChrSe::Ase(0x1001), ChrSe::Ase(0x1002), ChrSe::Ase(0x1003)]);
-        // the struck side: a pain voice (`dse` 0..2) and the reaction's own sound (`blwa` -> 0x1005, `flya` -> 0x1006)
+        // the struck side: only a pain voice (`dse` 0..2); `0x6000_1005..1007` belong to the attack motions `blwa` / `flya` / `koda`
+        // (`MotionEventCallBack` plays them on the attacker), not to the reactions
         let mut t = enemy(0);
         t.hit(false, false, &f);
-        assert_eq!(t.sounds, vec![ChrSe::Pain, ChrSe::Ase(0x1005)]);
+        assert_eq!(t.sounds, vec![ChrSe::Pain]);
         t.sounds.clear();
         t.set(Act::Idle);
         t.hit(true, false, &f);
-        assert_eq!(t.sounds, vec![ChrSe::Pain, ChrSe::Ase(0x1006)]);
+        assert_eq!(t.sounds, vec![ChrSe::Pain]);
         // death: type 0 monsters dissolve with `dse` 3, everyone falling down (`dwn`) plays `dse` 5, once
         t.sounds.clear();
         t.hit(false, true, &f);
@@ -1308,6 +1587,23 @@ pub mod tests {
         // too short for a trapezoid: smoothstep fallback still ends exactly on the target
         let short = run_ease(0.1, 0.1, 5.0);
         assert!((short - 5.0).abs() < 1e-3, "{short}");
+    }
+
+    #[test]
+    fn launch_flies_the_state_0x1b_arc() {
+        // Standard attack (f45c = f45e = 70): up 1.05 / tick against 0.06 gravity, 36 ticks in the retail count
+        let l = Launch::new(Vec3::Z, 70, 70).unwrap();
+        assert!((l.vh - 7.0 / 36.0).abs() < 1e-5, "{l:?}");
+        assert!(l.rise_ticks == 18 && l.flight_ticks > 30 && l.flight_ticks < 36, "{l:?}");
+        let mut m = l;
+        let (mut top, mut dist) = (0.0f32, 0.0f32);
+        while !m.landed() {
+            dist += m.step(1.0 / 60.0).length();
+            top = top.max(m.height);
+        }
+        assert!(top > 6.0 && top < 8.0 && (dist - m.ticks as f32 * l.vh).abs() < 1e-3, "top {top} dist {dist}");
+        // `flyi` (2 s) is stretched over the rise and the fall
+        assert!(l.clip_rate(2.0) > 2.5, "{}", l.clip_rate(2.0));
     }
 
     #[test]
@@ -1445,14 +1741,17 @@ pub mod tests {
     }
 
     #[test]
-    fn monsters_without_atck_lunge_with_their_dash() {
+    fn monsters_without_atck_swing_with_their_keyed_motion() {
         let f = Fake::revenant();
-        assert_eq!(attack_motion(&f), "dsh");
+        assert_eq!(attack_motion(&f), "flya");
+        assert_eq!(attack_motion(&Fake::dasher()), "dsh");
         let mut p = Player::new(&f);
         let mut c = enemy(0);
         c.begin_attack(Vec3::new(-10.0, 0.0, -40.0), 9.0, &f);
         let (evs, _) = run(&mut c, &f, &mut p, 4.0, 1.0, false, false);
         assert!(evs.iter().any(|e| e.1 == Ev::HitFrame(0)) && evs.iter().any(|e| e.1 == Ev::ActionOver), "{evs:?}");
+        // the swing carries `flya`'s own sound (the Revenant's bank has no `0x1001..` hit voices)
+        assert!(c.sounds.contains(&ChrSe::Ase(0x1006)), "{:?}", c.sounds);
     }
 
     #[test]
@@ -1460,18 +1759,138 @@ pub mod tests {
         let f = Fake::party();
         let mut p = Player::new(&f);
         let mut c = enemy(0);
+        // `PAtkHitSet` state 0x16: the flinch, never one of the attack motions `blwa` / `flya` / `koda`
         c.hit(false, false, &f);
-        assert_eq!(c.act, Act::Hit { name: "blwa" });
+        assert_eq!(c.act, Act::Hit { name: "crvd" });
         let (_, names) = run(&mut c, &f, &mut p, 2.0, 1.0, false, false);
-        assert_eq!(names, vec!["blwa", "idla"]);
-        // criticals launch the target
+        assert_eq!(names, vec!["crvd", "idla"]);
+        // state 0x1b: launched (`flyi`) on the flight arc, then `lad` back to the feet
         c.hit(true, false, &f);
-        assert_eq!(c.act, Act::Hit { name: "flya" });
-        // a monster without `blwa` falls back to `flya`
+        assert_eq!(c.act, Act::Hit { name: "flyi" });
+        c.start_launch(Vec3::Z, 70, 70);
+        assert!(c.launch.is_some());
+        let (_, names) = run(&mut c, &f, &mut p, 0.7, 1.0, false, false);
+        assert_eq!(c.act, Act::Hit { name: "lad" }, "the 2 s `flyi` clip spans the ~0.6 s flight, not its own length");
+        assert!(c.launch.is_none() && (c.pos.y - c.home.y).abs() < 1e-4);
+        let (_, more) = run(&mut c, &f, &mut p, 3.0, 1.0, false, false);
+        assert_eq!([names, more].concat(), vec!["flyi", "lad", "idla"]);
+        // CHR 418, whose `flya` is its swing, reacts the same way
         let r = Fake::revenant();
         let mut c2 = enemy(0);
         c2.hit(false, false, &r);
-        assert_eq!(c2.act, Act::Hit { name: "flya" });
+        assert_eq!(c2.act, Act::Hit { name: "crvd" });
+    }
+
+    /// The knock-down slides of hit classes 4 / 6 (BtlChrSequence states 0x1c / 0x1e / 0x20, [`crate::wall_involve::Slam`]).
+    #[test]
+    fn a_class_four_slide_lands_slides_on_and_gets_up() {
+        let f = Fake::party();
+        let mut p = Player::new(&f);
+        let mut c = party();
+        c.pos = Vec3::ZERO;
+        c.home = Vec3::ZERO;
+        c.act = Act::Idle;
+        c.hit(true, false, &f);
+        c.start_slam(SlamKind::Blwd, Vec3::X, 0, 30, 2, [190.0, 190.0], &f);
+        assert_eq!(c.act, Act::Hit { name: "blwd" });
+        assert!(c.slam.is_some() && c.launch.is_none() && c.push.is_none());
+        let (_, names) = run(&mut c, &f, &mut p, 4.0, 1.0, false, false);
+        // `blwd` while it slides (the 0.17 s clip holds its last pose), `blwi` for the landing slide, `lad`, idle
+        assert_eq!(names, vec!["blwd", "blwi", "lad", "idla"]);
+        // 7 ticks of 2.5, then the landing slide (~43 units)
+        assert!(c.pos.x > 55.0 && c.pos.x < 65.0 && c.pos.y == 0.0 && c.pos.z == 0.0, "{:?}", c.pos);
+        assert!(c.slam.is_none() && c.slam_events.is_empty() && c.home == c.pos);
+    }
+
+    #[test]
+    fn a_slide_that_reaches_a_wall_rebounds_off_it() {
+        let f = Fake::party();
+        let mut p = Player::new(&f);
+        let mut c = party();
+        c.pos = Vec3::new(84.5, 0.0, 0.0);
+        c.home = c.pos;
+        c.act = Act::Idle;
+        c.hit(true, false, &f);
+        c.start_slam(SlamKind::Blwd, Vec3::X, 0, 40, 2, [190.0, 190.0], &f);
+        let mut walls = vec![];
+        let (mut names, mut top) = (vec![], 0.0f32);
+        for _ in 0..240 {
+            let fr = c.update(&World { dt: 1.0 / 60.0, hp_frac: 1.0, dead: false, casting: false }, &f, &p.anim);
+            walls.append(&mut c.slam_events);
+            if let Some(m) = &fr.motion {
+                names.push(m.name.clone());
+            }
+            p.apply(&fr.motion);
+            p.tick(1.0 / 60.0, fr.rate);
+            top = top.max(c.pos.y);
+        }
+        // the party member's radius is 9: past x = 86 the contact comes on the first tick
+        assert_eq!(walls.len(), 1, "{walls:?}");
+        let SlamEvent::Wall { wall, t } = walls[0] else { panic!() };
+        assert_eq!(wall, crate::wall_involve::Wall::PosX);
+        assert!((t - 1.0 / 60.0).abs() < 1e-4, "{t}");
+        assert_eq!(names, vec!["flyi", "lad", "idla"], "the contact comes on the first tick: no `blwd` frame");
+        // the rebound arc rises ~19.5 and comes back; the fighter stays at the wall
+        assert!(top > 15.0 && top < 22.0 && c.pos.y == 0.0, "{top}");
+        assert!(c.pos.x > 86.0 && c.pos.x < 88.0 && c.home == c.pos);
+    }
+
+    #[test]
+    fn a_party_member_killed_by_the_wall_finishes_its_rebound_first() {
+        let f = Fake::party();
+        let mut p = Player::new(&f);
+        let mut c = party();
+        c.pos = Vec3::new(84.5, 0.0, 0.0);
+        c.home = c.pos;
+        c.act = Act::Idle;
+        c.hit(true, false, &f);
+        c.start_slam(SlamKind::Blwi, Vec3::X, 0, 40, 2, [190.0, 190.0], &f);
+        let mut dead = false;
+        let mut seen_air = false;
+        for _ in 0..300 {
+            let fr = c.update(&World { dt: 1.0 / 60.0, hp_frac: if dead { 0.0 } else { 1.0 }, dead, casting: false }, &f, &p.anim);
+            if !c.slam_events.is_empty() {
+                // `WallHitDamageSet` took the last HP
+                dead = true;
+                c.slam_events.clear();
+            }
+            if dead && c.slam.is_some() {
+                assert_eq!(c.act, Act::Hit { name: "flyi" });
+                seen_air |= c.pos.y > 5.0;
+            }
+            p.apply(&fr.motion);
+            p.tick(1.0 / 60.0, fr.rate);
+        }
+        assert!(seen_air && c.act == Act::Down && c.pos.y == 0.0, "{:?}", c.act);
+    }
+
+    #[test]
+    fn a_new_hit_or_a_death_ends_the_slide() {
+        let f = Fake::party();
+        let mut p = Player::new(&f);
+        let mut c = enemy(1);
+        c.hit(true, false, &f);
+        c.start_slam(SlamKind::Blwi, -Vec3::X, 0, 10, 0, [190.0, 190.0], &f);
+        assert!(c.slam.as_ref().unwrap().involving());
+        run(&mut c, &f, &mut p, 0.1, 1.0, false, false);
+        let x = c.pos.x;
+        assert!(x < 0.0 && x > -6.0, "{x}");
+        // another hit: the slide stops where it is
+        c.hit(false, false, &f);
+        assert!(c.slam.is_none() && c.home == c.pos);
+        // a killing blow during a slide
+        let mut d = enemy(1);
+        d.hit(true, false, &f);
+        d.start_slam(SlamKind::Blwd, Vec3::X, 0, 10, 0, [190.0, 190.0], &f);
+        d.hit(false, true, &f);
+        assert!(d.slam.is_none() && d.act == Act::EnemyDown);
+        // no `blwd` clip: nothing starts
+        let mut r = Fake::party();
+        r.0.remove("blwd");
+        let mut e = enemy(1);
+        e.hit(true, false, &r);
+        e.start_slam(SlamKind::Blwd, Vec3::X, 0, 10, 0, [190.0, 190.0], &r);
+        assert!(e.slam.is_none());
     }
 
     #[test]

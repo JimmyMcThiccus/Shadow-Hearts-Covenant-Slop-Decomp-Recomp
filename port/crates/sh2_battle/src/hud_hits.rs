@@ -25,7 +25,7 @@
 //! positions and timings follow the code, the art is real.
 
 use bevy::prelude::*;
-use sh2_gfx::effects::jring::{AreaKind, JRing, JrArea};
+use sh2_gfx::effects::jring::{AreaKind, ComboTrialObj, JRing, JrArea};
 use sh2_menu::bevy_ui::UiTextures;
 use sh2_menu::gfx::{Blend, DrawCmd, MenuGfx, Rgba, TextureId, Vertex};
 
@@ -127,6 +127,8 @@ pub struct HitArt {
     pub ring: Vec<Option<(TextureId, (u32, u32))>>,
     /// `JRING.BIN` texture 0 (`Good!! Strike!! Perfect!! Miss!! 0..9 %`) in its CLUT blocks 0, 2 and 4 (`HitMes` colours)
     pub ring_words: Vec<Option<(TextureId, (u32, u32))>>,
+    /// `JRING.BIN` texture 6 (`Combo Trial` / `Combo !!` / `Combo Miss !!`) through the CLUT sub-palettes of `ComboTrial` kind 0 / 1 / 2 (CSA 3 green, 0 gold, 2 red)
+    pub combo_words: Vec<Option<(TextureId, (u32, u32))>>,
     pub retail: bool,
     pub loaded: bool,
 }
@@ -241,6 +243,9 @@ pub fn load_hit_art(mut art: ResMut<HitArt>, disc: Option<Res<sh2_gfx::bevy::Sh2
         art.ring = tex.iter().map(|s| sh2_gfx::texture::decode_jrc(s, 0, 0).ok().and_then(&mut add)).collect();
         if let Some(words) = tex.first() {
             art.ring_words = (0..5).map(|k| decode_jrc_csa(words, k).and_then(&mut add)).collect();
+        }
+        if let Some(words) = tex.get(6) {
+            art.combo_words = (0..3).map(|kind| sh2_gfx::texture::decode_jrc_csa(words, 0, ComboTrialObj::rect(kind).1).ok().and_then(&mut add)).collect();
         }
     }
     log::info!("battle hit art: font {} blocks, icons {}, capsule {}, letters {}, ring {} textures", art.font.len(), art.icons.is_some(), art.capsule.is_some(), art.letters.is_some(), art.ring.iter().filter(|t| t.is_some()).count());
@@ -491,7 +496,16 @@ impl HitText {
 // TotalHitInfo panel + HitCntEff
 // ------------------------------------------------------------------------------------------------------------------
 
-/// One `TotalHitInfo` panel (per target of the current action).
+/// Object lifetime: `TotalHitInfo::__dt` 0x5174a0 [JP 0x4f6120], `Destruct` 0x517600 [0x4f6280] and `EndSet` 0x57dfc0 [0x54b320] are `HitFx::panels.retain_mut` releasing a
+/// collapsed panel.
+///
+/// `TotalHitInfo::Polling` target scales: steady 0.75, 0.9 while the fighter is a marked target of the command menu.
+pub const TOTAL_SCALE: f32 = 0.75;
+pub const TOTAL_SCALE_SELECTED: f32 = 0.9;
+
+/// One `TotalHitInfo` panel (per target of the current action; object `TotalHitInfo::__ct` 0x517200 [JP 0x4f5ec0], `MakePacket` 0x518780 [0x4f69c0]: the frame
+/// is entry 19 texels (70,0)-(108,25) at `38 sx x 25 sy`, the card (x + sx, y) 36 x 23 from entry 25, the rows from `x + 46 sx` in the entry 0 font at
+/// `24 / (glyph height - 5)`, the status icons 19 x 23 at a `20 sx` pitch -- drawn by [`HitFx::draw`]).
 #[derive(Clone, Debug)]
 pub struct TotalPanel {
     pub target: usize,
@@ -518,21 +532,30 @@ impl TotalPanel {
         TotalPanel { target, hits: 0, damage: 0, heal: 0, combo: None, icons: vec![], t: 0.0, sx: 0.75, sy: 0.75, closing: false, anchor: Vec2::new(60.0, 140.0) }
     }
 
-    /// `TotalHitInfo::Polling`; false when released.
-    pub fn tick(&mut self, dt: f32) -> bool {
+    /// `TotalHitInfo::Polling` (retail 0x517670 [JP 0x4f62f0]); false when released.  `select` is the `TurnOrderDisp` select mask (`+0x5c`): a
+    /// panel whose fighter is marked as a target (`SetSelectChr`) is drawn at scale 0.9 instead of 0.75.  The collapsing state tests the bit
+    /// `1 << chr` (retail does not shift by two there), the steady state the two bits `3 << (chr * 2)`.
+    pub fn tick_sel(&mut self, dt: f32, select: u32) -> bool {
         if self.closing {
-            self.sx += (0.75 - self.sx) * dt * 10.0;
+            let want = if select & (1u32 << (self.target as u32 & 31)) != 0 { TOTAL_SCALE_SELECTED } else { TOTAL_SCALE };
+            self.sx += (want - self.sx) * dt * 10.0;
             self.sy += (0.0 - self.sy) * dt * 10.0;
             self.sy > 0.01
         } else {
-            self.sx += (0.75 - self.sx) * dt * 10.0;
-            self.sy += (0.75 - self.sy) * dt * 10.0;
+            let want = if select & (3u32 << ((self.target as u32 & 0xf) << 1)) != 0 { TOTAL_SCALE_SELECTED } else { TOTAL_SCALE };
+            self.sx += (want - self.sx) * dt * 10.0;
+            self.sy += (want - self.sy) * dt * 10.0;
             self.t += dt;
             if self.t >= 4.0 {
                 self.closing = true;
             }
             true
         }
+    }
+
+    /// [`Self::tick_sel`] with no fighter marked.
+    pub fn tick(&mut self, dt: f32) -> bool {
+        self.tick_sel(dt, 0)
     }
 
     /// Panel height for the stacking of the next panel (`EntryDDisp`: `y += sy * 24 + 1`).
@@ -803,6 +826,8 @@ impl Default for Anchor {
 pub struct HitFx {
     pub texts: Vec<HitText>,
     pub panels: Vec<TotalPanel>,
+    /// `TurnOrderDisp +0x5c` (the command menu's target markers), set by the runtime before [`Self::tick`]
+    pub select_mask: u32,
     pub counters: Vec<HitCounter>,
     pub icons: Vec<IconState>,
     pub anchors: Vec<Anchor>,
@@ -1055,7 +1080,9 @@ impl HitFx {
     fn panel_mut(&mut self, target: usize) -> &mut TotalPanel {
         if let Some(i) = self.panels.iter().position(|p| p.target == target) {
             let p = &mut self.panels[i];
-            // `Reset`
+            // `TotalHitInfo::Reset` (retail 0x51cfa0 [JP 0x4faca0]): clears the rows and the clock; `SetDispData` (0x51d3c0 [0x4fad60]) refills them
+            // (`TotalPanel::hits / damage / heal / combo / icons`); `ShowAll` (0x51da80, retail-new) sets `+0x360 = 1`, which is what lets the 4 s clock close
+            // the panel in `Polling` (the port always lets it run)
             p.t = 0.0;
             p.closing = false;
             p
@@ -1127,7 +1154,8 @@ impl HitFx {
     /// One 60 Hz tick of everything.
     pub fn tick(&mut self, dt: f32) {
         self.texts.retain_mut(|t| t.tick(dt));
-        self.panels.retain_mut(|p| p.tick(dt));
+        let sel = self.select_mask;
+        self.panels.retain_mut(|p| p.tick_sel(dt, sel));
         for c in self.counters.iter_mut() {
             c.t -= dt;
         }
@@ -1289,8 +1317,58 @@ pub mod ring_geom {
 /// ring's rotation (`sceVu0RotMatrixZ`, then `X`, then `Y`) and the ring camera: virtual pixel offset from the ring centre.
 pub fn ring_project(p: Vec3, rot: [f32; 4]) -> Vec2 {
     let q = Quat::from_rotation_y(rot[1]) * Quat::from_rotation_x(rot[0]) * Quat::from_rotation_z(rot[2]) * p;
+    cam_project(q)
+}
+
+/// The ring camera's perspective divide (`sceVu0RotTransPersN` with `SetViewMatrix(512, 0.8, 0.9333)`) of a point that already went
+/// through the ring rotation.
+pub fn cam_project(q: Vec3) -> Vec2 {
     let d = (q.z + ring_geom::EYE_Z).max(1.0);
     Vec2::new(q.x * ring_geom::SCRZ * ring_geom::ASPX / d, q.y * ring_geom::SCRZ * ring_geom::ASPY / d)
+}
+
+/// `CutJRing::MakePacket` / `CrackJRing::MakePacket`: the pieces of the shattering ring face (ring texture `e8`, 1 normally, alpha = life * 128),
+/// the slash streak of a combo-ok cut and the crack lines of a combo-ok crack.
+pub fn draw_shard(g: &mut dyn MenuGfx, art: &HitArt, r: &JRing) {
+    let Some(shard) = &r.shard else { return };
+    let d = shard.draw_list(r.rot, r.scale_y);
+    let centre = Vec2::new(r.center.0 + d.shake[0], r.center.1 + d.shake[1]);
+    if d.alpha > 0.0 {
+        // the pieces carry the texture the ring shows (`JRTex[ring.e8]`): the button face after a combo trial press
+        if let Some(Some(face)) = art.ring.get(if (2..=5).contains(&r.e8) { r.e8 as usize } else { 1 }) {
+            let c = grey(d.alpha as u8);
+            let (tw, th) = (face.1 .0 as f32, face.1 .1 as f32);
+            let vt = |p: &(Vec3, [f32; 2])| vtx(centre + cam_project(p.0), Vec2::new(p.1[0] / tw, p.1[1] / th), c);
+            for poly in &d.polys {
+                let v: Vec<Vertex> = poly.v.iter().map(vt).collect();
+                if poly.fan {
+                    for k in 1..v.len().saturating_sub(1) {
+                        g.draw(DrawCmd::Quad { tex: Some(face.0), v: [v[0], v[k], v[k + 1], v[k + 1]], blend: Blend::Alpha });
+                    }
+                } else if v.len() == 3 {
+                    g.draw(DrawCmd::Quad { tex: Some(face.0), v: [v[0], v[1], v[2], v[2]], blend: Blend::Alpha });
+                } else if v.len() == 4 {
+                    g.draw(DrawCmd::Quad { tex: Some(face.0), v: [v[0], v[1], v[2], v[3]], blend: Blend::Alpha });
+                }
+            }
+        }
+    }
+    // untextured parts: the canvas takes 0x80 as full brightness
+    if let Some(p) = d.slash {
+        let a = (d.alpha as u8).max(1);
+        let c = Rgba::new(0x80, 0x80, 0x80, a);
+        let q: Vec<Vec2> = p.iter().map(|&q| centre + cam_project(q)).collect();
+        for k in 0..4 {
+            tri(g, [q[k], q[k + 1], q[k + 2]], [c, c, c]);
+        }
+    }
+    if !d.cracks.is_empty() {
+        let c = Rgba::new(0x80, 0x80, 0x80, d.crack_alpha.clamp(0.0, 128.0) as u8);
+        for l in &d.cracks {
+            let (a, b, a2, b2) = (centre + cam_project(l.a), centre + cam_project(l.b), centre + cam_project(l.a2), centre + cam_project(l.b2));
+            g.draw(DrawCmd::Quad { tex: None, v: [vtx(a, Vec2::ZERO, c), vtx(b, Vec2::ZERO, c), vtx(a2, Vec2::ZERO, c), vtx(b2, Vec2::ZERO, c)], blend: Blend::Alpha });
+        }
+    }
 }
 
 /// Ring space point at `deg` (clockwise from the top) and radius `r`.
@@ -1321,7 +1399,52 @@ fn wedge(g: &mut dyn MenuGfx, centre: Vec2, rot: [f32; 4], ry: f32, start: f32, 
 
 /// Draw the ring (`JRing::MakePacket`: face fan, areas, pointer) at its centre; `trail` = the last 9 pointer angles.
 pub fn draw_ring(g: &mut dyn MenuGfx, art: &HitArt, r: &JRing, trail: &[f32; 9], trail_i: usize) {
+    draw_ring_inner(g, art, r, trail, trail_i);
+    for t in [&r.trial_a, &r.trial_b].into_iter().flatten() {
+        draw_combo_trial(g, art, t);
+    }
+}
+
+/// `ComboTrial::MakePacket` (JP 0x002e2b20, `decomp/D/JRing_Combo.c`): the label sprite (mode 0: its two halves slide in from opposite sides, the upper one from
+/// the right, the lower from the left; the verdict modes a single quad squashed by `cos(spin)`), GS alpha `alpha / 128`, drawn over the ring at the object's centre.
+pub fn draw_combo_trial(g: &mut dyn MenuGfx, art: &HitArt, o: &ComboTrialObj) {
+    let Some(Some(tex)) = art.combo_words.get(o.kind.clamp(0, 2) as usize) else { return };
+    if o.alpha <= 0.0 {
+        return;
+    }
+    let ((rx, ry, rw, rh), _) = ComboTrialObj::rect(o.kind);
+    let (tw, th) = (tex.1 .0 as f32, tex.1 .1 as f32);
+    let c = Rgba::new(0x80, 0x80, 0x80, o.alpha.clamp(0.0, 128.0) as u8);
+    let (hw, hh) = (rw * o.scale / 2.0, rh * o.scale / 2.0);
+    let uv = |x: f32, y: f32| Vec2::new((rx + x) / tw, (ry + y) / th);
+    if o.mode == 0 {
+        // upper half shifted right by slide / 2, lower half left
+        for (k, dx) in [o.slide / 2.0, -o.slide / 2.0].into_iter().enumerate() {
+            let (y0, y1) = (k as f32 * rh / 2.0, (k as f32 + 1.0) * rh / 2.0);
+            let (sy0, sy1) = (o.y - hh + k as f32 * hh, o.y - hh + (k as f32 + 1.0) * hh);
+            g.draw(DrawCmd::Quad {
+                tex: Some(tex.0),
+                v: [vtx(Vec2::new(o.x - hw + dx, sy0), uv(0.0, y0), c), vtx(Vec2::new(o.x - hw + dx, sy1), uv(0.0, y1), c), vtx(Vec2::new(o.x + hw + dx, sy0), uv(rw, y0), c), vtx(Vec2::new(o.x + hw + dx, sy1), uv(rw, y1), c)],
+                blend: Blend::Alpha,
+            });
+        }
+    } else {
+        let cs = o.spin.cos();
+        let (x0, x1) = (o.x - hw * cs, o.x + hw * cs);
+        g.draw(DrawCmd::Quad {
+            tex: Some(tex.0),
+            v: [vtx(Vec2::new(x0, o.y - hh), uv(0.0, 0.0), c), vtx(Vec2::new(x0, o.y + hh), uv(0.0, rh), c), vtx(Vec2::new(x1, o.y - hh), uv(rw, 0.0), c), vtx(Vec2::new(x1, o.y + hh), uv(rw, rh), c)],
+            blend: Blend::Alpha,
+        });
+    }
+}
+
+fn draw_ring_inner(g: &mut dyn MenuGfx, art: &HitArt, r: &JRing, trail: &[f32; 9], trail_i: usize) {
     if !r.ring_on && !r.ring_visible {
+        return;
+    }
+    if r.shard.is_some() {
+        draw_shard(g, art, r);
         return;
     }
     if r.scale_x <= 0.0 || r.scale_y <= 0.0 {
@@ -1346,9 +1469,10 @@ pub fn draw_ring(g: &mut dyn MenuGfx, art: &HitArt, r: &JRing, trail: &[f32; 9],
             prev = p;
         }
     }
-    // hit areas
+    // hit areas (not on the combo trial's button face: the back of the ring is a plain disc with the glyph, live retail)
+    let glyph_face = (2..=5).contains(&r.e8);
     for (i, a) in r.areas.iter().enumerate() {
-        if a.kind.is_none() || !a.visible || a.width <= 0 {
+        if glyph_face || a.kind.is_none() || !a.visible || a.width <= 0 {
             continue;
         }
         let dim = |c: [u8; 4]| [c[0] / 2, c[1] / 2, c[2] / 2, c[3]];
@@ -1477,6 +1601,26 @@ pub fn party_event_texts(hits: &mut HitFx, ev: &crate::flow::PartyEvent, is_enem
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn marked_target_panels_grow_to_nine_tenths() {
+        // `TotalHitInfo::Polling` (0x517670): scale 0.75, or 0.9 while `TurnOrderDisp` marks the fighter (`SetSelectChr`)
+        let mut p = TotalPanel::new(3);
+        for _ in 0..120 {
+            p.tick_sel(1.0 / 60.0, 0);
+        }
+        assert!((p.sx - 0.75).abs() < 0.01 && (p.sy - 0.75).abs() < 0.01);
+        let sel = 2u32 << (3 * 2); // an enemy marker on fighter 3
+        for _ in 0..120 {
+            p.tick_sel(1.0 / 60.0, sel);
+        }
+        assert!((p.sx - 0.9).abs() < 0.01 && (p.sy - 0.9).abs() < 0.01);
+        // another fighter's marker does not count
+        for _ in 0..120 {
+            p.tick_sel(1.0 / 60.0, 3u32 << 8);
+        }
+        assert!((p.sx - 0.75).abs() < 0.01);
+    }
 
     #[test]
     fn glyph_table_covers_the_alphabet() {

@@ -350,6 +350,29 @@ pub fn decode_jrc(blob: &[u8], off: usize, palette: usize) -> Result<Rgba8Image,
     decode_indexed(&blob[pix..pix + n], w, h, bpp, &pal)
 }
 
+/// [`decode_jrc`] through one 16 colour sub-palette of a 4 bit texture's CLUT (`TEX0.CSA`: the GS reads the 16 logical entries starting at `csa * 16`; textures such as
+/// `BTL_000` section 10 (the `Combo Break!` title) hold several of them in one CLUT, e.g. 96 entries = 6 sub-palettes).  Verified live: CSA 3 of that title is the crimson
+/// banner of a party actor, CSA 0 the blue one; the swizzle matters (without it CSA 3 reads an opaque gold ramp).
+pub fn decode_jrc_csa(blob: &[u8], off: usize, csa: usize) -> Result<Rgba8Image, TexError> {
+    need(blob, off, 0x10)?;
+    let w = u16le(blob, off + 4) as u32;
+    let h = u16le(blob, off + 6) as u32;
+    let fmt = blob[off + 8] & 7;
+    let entries = u16le(blob, off + 10) as usize;
+    let npal = u16le(blob, off + 12) as usize + 1;
+    if fmt != 0 || entries < (csa + 1) * 16 {
+        return decode_jrc(blob, off, 0);
+    }
+    let pal_base = off + 0x10;
+    let pix = pal_base + npal * entries * 4;
+    let n = ((w * h + 1) / 2) as usize;
+    need(blob, pix, n)?;
+    // the CLUT is stored in GS CSM1 order (entry numbers with bits 3 and 4 swapped within every 32 entries); `CSA` counts logical entries
+    let file = read_palette(blob, pal_base, entries, false)?;
+    let pal: Vec<[u8; 4]> = (0..16).map(|i| file.get(csm1_swizzle(csa * 16 + i)).copied().unwrap_or([0; 4])).collect();
+    decode_indexed(&blob[pix..pix + n], w, h, 4, &pal)
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // Font (2 bits per pixel glyphs, SJIS indexed)
 // ---------------------------------------------------------------------------------------------------------------

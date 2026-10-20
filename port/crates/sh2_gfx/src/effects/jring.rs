@@ -354,36 +354,62 @@ pub mod state {
     pub const END_STRIKE: i16 = 8;
 }
 
-/// Simple lifetime model of the `ComboTrial` helper object (the "press X!" prompt).
+/// The `ComboTrial` helper object (JP 0x002e1ac0.., `decomp/D/JRing_Combo.c`): a gold-lettered label of `COMMON/JRING.BIN` texture 6 that the ring puts up around its
+/// combo prompt.  `kind` picks the label and its colour (CSA): 0 `Combo Trial` (green, CSA 3, rect (0, 0, 161, 33)), 1 `Combo !!` (gold, CSA 0, rect (0, 36, 110, 31)),
+/// 2 `Combo Miss !!` (red, CSA 2, rect (0, 72, 174, 33)); `mode` the motion: 0 the prompt (halves slide in from the screen sides, holds above the ring until the ring
+/// fades it), 3 / 1 the verdict zooming in from 8x, 2 the failure spinning in about y.
 #[derive(Clone, Debug)]
 pub struct ComboTrialObj {
+    pub kind: i32,
     pub mode: i16,
     /// +0x40: 0 = appearing, 1 = holding, 2 = fading out
     pub phase: i32,
     pub t: f32,
+    /// GS alpha 0..128 (`+0x84`)
     pub alpha: f32,
+    /// `+0x80`
     pub scale: f32,
+    /// `+0x74`: the spin about y (radians)
+    pub spin: f32,
+    /// centre of the sprite in the 512 x 448 frame (`+0x44` / `+0x48`)
+    pub x: f32,
+    pub y: f32,
+    /// mode 0: the distance the two halves still have to close (`+0xa4`)
+    pub slide: f32,
     pub done: bool,
 }
 
 impl ComboTrialObj {
-    pub fn new(mode: i16) -> Self {
-        let (scale, alpha) = match mode {
-            3 | 1 => (8.0, 0.0),
-            2 => (1.0, 0.0),
-            _ => (1.2, 0.0),
-        };
-        ComboTrialObj { mode, phase: 0, t: 0.0, alpha, scale, done: false }
+    /// Rect of the label in texture 6 (x, y, w, h) and its CSA.
+    pub fn rect(kind: i32) -> ((f32, f32, f32, f32), usize) {
+        match kind {
+            2 => ((0.0, 72.0, 174.0, 33.0), 2),
+            1 => ((0.0, 36.0, 110.0, 31.0), 0),
+            _ => ((0.0, 0.0, 161.0, 33.0), 3),
+        }
     }
-    /// `ComboTrial::Polling` (0x002e2080), reduced to its timeline.
-    pub fn update(&mut self, dt: f32) {
+
+    /// `ComboTrial::ComboTrial(ring, kind, mode)` with the ring's centre (`+0x68` / `+0x6c`).
+    pub fn new(kind: i32, mode: i16, centre: (f32, f32)) -> Self {
+        let w = Self::rect(kind).0 .2;
+        let (alpha, scale, spin, slide) = match mode {
+            3 | 1 => (0.0, 8.0, 0.0, 0.0),
+            2 => (0.0, 1.2, 6.2831855, 0.0),
+            _ => {
+                let a = centre.0 * 2.0 + w * 1.2;
+                let b = (512.0 - centre.0) * 2.0 + w * 1.2;
+                (128.0, 1.2, 0.0, a.max(b))
+            }
+        };
+        ComboTrialObj { kind, mode, phase: 0, t: 0.0, alpha, scale, spin, x: centre.0, y: centre.1, slide, done: false }
+    }
+
+    /// `ComboTrial::Polling` (0x002e2080): `centre` / `scale_y` = the ring's `+0x68 / +0x6c` and `+0x84` (the prompt hovers `122 * scale_y` above the ring).
+    pub fn update(&mut self, dt: f32, centre: (f32, f32), scale_y: f32) {
         if self.done {
             return;
         }
-        match self.mode {
-            3 | 2 | 1 | 0 => {}
-            _ => return,
-        }
+        let w = Self::rect(self.kind).0 .2;
         match self.phase {
             2 => {
                 self.t += dt;
@@ -394,6 +420,7 @@ impl ComboTrialObj {
                 }
             }
             1 => {
+                // the verdicts hold 0.5 s; the prompt holds until the ring starts its fade
                 if self.mode == 3 || self.mode == 2 {
                     self.t += dt;
                     if 0.5 <= self.t {
@@ -408,25 +435,35 @@ impl ComboTrialObj {
                     3 | 1 => {
                         self.alpha = (self.t * 128.0 * 8.0).min(128.0);
                         self.scale = (8.0 - self.t * 7.0 * 5.0).max(1.0);
+                        if self.mode == 1 {
+                            self.y = centre.1 - scale_y * 122.0;
+                        }
                         if self.scale == 1.0 && self.alpha == 128.0 {
                             self.t = 0.0;
                             self.phase = 1;
                         }
                     }
                     2 => {
+                        self.spin = 6.2831855 - ((self.t / 0.25) * 6.2831855).min(6.2831855);
                         self.alpha = ((self.t / 0.125) * 128.0).min(128.0);
                         if 0.25 <= self.t {
+                            self.spin = 0.0;
                             self.alpha = 128.0;
                             self.phase = 1;
                             self.t = 0.0;
                         }
                     }
                     _ => {
-                        // mode 0 ("grow in from the screen edges")
-                        if self.t >= 0.25 {
+                        // the prompt: the halves close in over 0.25 s and the label rides 122 * scale_y above the ring
+                        let a = centre.0 * 2.0 + w * self.scale;
+                        let b = (512.0 - centre.0) * 2.0 + w * self.scale;
+                        self.slide = a.max(b) * (1.0 - self.t / 0.25);
+                        if self.slide <= 0.0 {
+                            self.slide = 0.0;
                             self.t = 0.0;
                             self.phase = 1;
                         }
+                        self.y = centre.1 - scale_y * 122.0;
                     }
                 }
             }
@@ -434,7 +471,8 @@ impl ComboTrialObj {
     }
 }
 
-/// `CutJRing` / `CrackJRing` shard animation: only the part the ring state machine reads.
+/// `CutJRing` / `CrackJRing` shard animation: the life / clock the ring state machine reads plus the shatter simulation
+/// ([`super::jring_shard`]) the host draws.
 #[derive(Clone, Debug)]
 pub struct ShardAnim {
     pub crack: bool,
@@ -443,16 +481,16 @@ pub struct ShardAnim {
     pub life: f32,
     /// +0x2c0/+0x18 elapsed seconds.
     pub elapsed: f32,
-    /// scale used for the decay (ring `+0xb8` at creation time; the original re-reads it).
-    scale_ref: f32,
+    pub body: super::jring_shard::ShardBody,
 }
 
 impl ShardAnim {
-    pub fn new(crack: bool, variant: i32, ring_scale_b8: f32) -> Self {
-        ShardAnim { crack, variant, life: ring_scale_b8, elapsed: 0.0, scale_ref: ring_scale_b8 }
+    pub fn new(crack: bool, variant: i32, ring_scale_b8: f32, rng: &mut dyn Rng) -> Self {
+        ShardAnim { crack, variant, life: ring_scale_b8, elapsed: 0.0, body: super::jring_shard::ShardBody::new(crack, variant, rng) }
     }
-    pub fn update(&mut self, dt: f32, ring_scale_b8: f32) {
+    pub fn update(&mut self, dt: f32, ring_scale_b8: f32, rng: &mut dyn Rng) {
         self.elapsed += dt;
+        self.body.update(dt, self.elapsed, rng);
         let decays = match self.variant {
             2 => 0.33333334 <= self.elapsed,
             _ => true,
@@ -463,7 +501,10 @@ impl ShardAnim {
                 self.life = 0.0;
             }
         }
-        let _ = self.scale_ref;
+    }
+    /// What `MakePacket` draws now (`ring_rot` = ring `+0x70`, `scale_y` = ring `+0x84`).
+    pub fn draw_list(&self, ring_rot: [f32; 4], scale_y: f32) -> super::jring_shard::ShardDraw {
+        self.body.draw(ring_rot, scale_y, self.elapsed, self.life)
     }
 }
 
@@ -2215,9 +2256,10 @@ impl JRing {
             self.dirty_ring = true;
         }
         // combo trial objects live in their own polling
+        let (center, scale_y) = (self.center, self.scale_y);
         for t in [&mut self.trial_a, &mut self.trial_b] {
             if let Some(o) = t {
-                o.update(dt);
+                o.update(dt, center, scale_y);
             }
         }
         if self.trial_a.as_ref().map_or(false, |o| o.done) {
@@ -2438,7 +2480,7 @@ impl JRing {
     }
 
     fn make_trial(&mut self, which_b: bool, kind: i32, mode: i16) {
-        let o = ComboTrialObj::new(mode);
+        let o = ComboTrialObj::new(kind, mode, self.center);
         if which_b {
             self.trial_b = Some(o);
         } else {
@@ -2478,7 +2520,7 @@ impl JRing {
             state::INTRO => self.seq_intro(rng),
             state::RUN => self.seq_run(rng),
             state::COMBO => self.seq_combo(rng),
-            6 | 7 | 8 => self.seq_end(),
+            6 | 7 | 8 => self.seq_end(rng),
             _ => {}
         }
     }
@@ -3322,7 +3364,7 @@ impl JRing {
     }
 
     /// states 6/7/8 — closing animations; sleeps the ring when done.
-    fn seq_end(&mut self) {
+    fn seq_end(&mut self, rng: &mut dyn Rng) {
         if self.event_ring {
             return; // event rings are closed by the caller (RingSleep)
         }
@@ -3348,7 +3390,7 @@ impl JRing {
                     } else {
                         0
                     };
-                    self.shard = Some(ShardAnim::new(crack, variant, self.home_scale_x));
+                    self.shard = Some(ShardAnim::new(crack, variant, self.home_scale_x, rng));
                     self.emit(JrEvent::Shatter { crack, variant });
                     self.dirty_areas = true;
                     self.dirty_bars = true;
@@ -3370,7 +3412,7 @@ impl JRing {
                 self.anim_a += dt;
                 let b8 = self.home_scale_x;
                 if let Some(s) = &mut self.shard {
-                    s.update(dt, b8);
+                    s.update(dt, b8, rng);
                 }
                 if self.shard.as_ref().map_or(false, |s| s.life == 0.0) && no_trials {
                     self.ring_sleep();

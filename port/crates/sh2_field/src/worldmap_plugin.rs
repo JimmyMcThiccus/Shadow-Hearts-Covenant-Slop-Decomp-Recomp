@@ -13,11 +13,13 @@ use sh2_core::ssh_sys::{SshApi, SshSys};
 use sh2_gfx::texture::{decode_menu_texture, Rgba8Image};
 use sh2_menu::bevy_ui::{self, layer, UiCanvas, UiTextures};
 use sh2_menu::gfx::{MenuSe, Rgba};
+use sh2_menu::plugin::MenuAssets;
 use sh2_menu::session::GameSession;
 use sh2_menu::sjis;
 
 use crate::host::FieldAudio;
 use crate::plugin::{FieldAudioQueue, FieldData};
+use crate::worldmap_ui::{self, WmUi};
 use crate::worldmap::{bundle_entry, parse_msg_table, RetailWorldTable, WmResult, WmSe, WmState, WorldMap, WorldMapRequest, WorldMapTable, WORLDMAP_NAME};
 
 /// Texture ids of one `WMAPn.DAT` (entry numbers of the bundle).
@@ -34,8 +36,15 @@ pub struct WmTextures {
     pub ring: Option<u32>,
     /// 10..: thumbnails 144x128
     pub thumbs: Vec<u32>,
-    /// 8: "ふろく版" logo
+    /// 8: the world title ("Europe"; the JP bonus disc logo)
     pub logo: Option<u32>,
+    /// 7: the carved stone frame (left half, 128 x 440)
+    pub frame: Option<u32>,
+    /// 5: the digits of the time window, 6: its "Cash Time" label
+    pub digits: Option<u32>,
+    pub time_label: Option<u32>,
+    /// `COMMON/CMNMENU.DAT`: pad icons and the cursor arrow / flare
+    pub cmn: Option<std::sync::Arc<crate::cmd_ui::CommonScene>>,
 }
 
 #[derive(Resource)]
@@ -48,6 +57,10 @@ pub struct WorldMapRuntime {
     /// nothing to show (no table): continue to this map at once
     pub passthrough: Option<String>,
     pub handled: bool,
+    /// the windows' animation state (list scroll, cursors)
+    pub ui: WmUi,
+    /// `WMAPn.DAT` entry 10: the UI strings (button hints)
+    pub ui_text: Vec<Vec<u8>>,
 }
 
 fn disc_root(cfg: Option<&AppConfig>) -> std::path::PathBuf {
@@ -69,10 +82,17 @@ fn crop(img: &Rgba8Image, x: u32, y: u32, w: u32, h: u32) -> Rgba8Image {
     out
 }
 
-/// Additive sprites (`setBlendMode(1)`) carry no alpha: black is transparent.
-fn black_to_alpha(img: &mut Rgba8Image) {
+/// The icons are drawn additively on the PS2 (`setBlendMode(1)`, no alpha channel); the canvas has no additive blend, so black becomes transparent: alpha = the
+/// brightest channel and the colour is divided by it (the alpha blend then adds the original colour back).
+fn additive_to_alpha(img: &mut Rgba8Image) {
     for p in img.pixels.chunks_mut(4) {
-        p[3] = p[0].max(p[1]).max(p[2]);
+        let m = p[0].max(p[1]).max(p[2]);
+        if m > 0 {
+            for c in 0..3 {
+                p[c] = ((p[c] as u32 * 255) / m as u32) as u8;
+            }
+        }
+        p[3] = m;
     }
 }
 
@@ -83,12 +103,12 @@ fn load_bundle_entry(b: &[u8], k: usize) -> Option<Rgba8Image> {
 }
 
 /// Decode and register the textures of `WMAPn.DAT`.
-pub fn load_textures(bundle: &[u8], textures: &mut UiTextures, images: &mut Assets<Image>) -> WmTextures {
-    load_textures_from(bundle, textures, images, 10)
+pub fn load_textures(bundle: &[u8], textures: &mut UiTextures, images: &mut Assets<Image>, assets: Option<&MenuAssets>) -> WmTextures {
+    load_textures_from(bundle, textures, images, 10, assets)
 }
 
 /// `thumb_base`: first thumbnail entry (demo bundles: 10, retail: 12 -- entries 10 / 11 are message tables there).
-pub fn load_textures_from(bundle: &[u8], textures: &mut UiTextures, images: &mut Assets<Image>, thumb_base: usize) -> WmTextures {
+pub fn load_textures_from(bundle: &[u8], textures: &mut UiTextures, images: &mut Assets<Image>, thumb_base: usize, assets: Option<&MenuAssets>) -> WmTextures {
     let mut t = WmTextures::default();
     let mut add = |img: Rgba8Image, tx: &mut UiTextures| tx.add(images, img.width, img.height, img.pixels);
     t.map = load_bundle_entry(bundle, 4).map(|i| add(i, textures));
@@ -96,17 +116,25 @@ pub fn load_textures_from(bundle: &[u8], textures: &mut UiTextures, images: &mut
     // the ray sprite (64x64, bright corner at the bottom right) carries its own alpha channel
     t.glow = load_bundle_entry(bundle, 2).map(|i| add(i, textures));
     if let Some(mut icons) = load_bundle_entry(bundle, 3) {
-        black_to_alpha(&mut icons);
+        additive_to_alpha(&mut icons);
         t.sun = Some(add(crop(&icons, 0, 0, 16, 16), textures));
         t.ring = Some(add(crop(&icons, 16, 0, 16, 16), textures));
     }
     t.logo = load_bundle_entry(bundle, 8).map(|i| add(i, textures));
+    t.frame = load_bundle_entry(bundle, 7).map(|i| add(i, textures));
+    t.digits = load_bundle_entry(bundle, 5).map(|i| add(i, textures));
+    t.time_label = load_bundle_entry(bundle, 6).map(|i| add(i, textures));
+
     let n = u32::from_le_bytes(bundle.get(0..4).and_then(|x| x.try_into().ok()).unwrap_or([0; 4])) as usize;
     for k in thumb_base..n.min(thumb_base + 40) {
         match load_bundle_entry(bundle, k) {
             Some(i) => t.thumbs.push(add(i, textures)),
             None => break,
         }
+    }
+    if let Some(disc) = assets.and_then(|a| a.disc.as_ref()) {
+        let mut reg = crate::cmd_ui::TexReg::new(textures, images);
+        t.cmn = crate::cmd_ui::CommonScene::load(disc, &mut reg).map(std::sync::Arc::new);
     }
     t
 }
@@ -123,6 +151,7 @@ fn enter_worldmap(
     mut images: Option<ResMut<Assets<Image>>>,
     mut audio: ResMut<FieldAudioQueue>,
     mut pad: ResMut<GamePad>,
+    assets: Option<Res<MenuAssets>>,
 ) {
     if req.map != WORLDMAP_NAME {
         return;
@@ -147,7 +176,7 @@ fn enter_worldmap(
     if sh2_core::boot::is_retail() {
         let saved_extra = wm_chunk_extra(&session);
         let extra = if wm_req_extra != 0 { wm_req_extra } else { saved_extra };
-        match build_retail(&root, world, sub, extra, &session, data.as_deref(), textures.as_deref_mut(), images.as_deref_mut(), &mut audio) {
+        match build_retail(&root, world, sub, extra, &session, data.as_deref(), textures.as_deref_mut(), images.as_deref_mut(), &mut audio, assets.as_deref()) {
             Some(rt) => {
                 commands.insert_resource(rt);
                 return;
@@ -172,7 +201,7 @@ fn enter_worldmap(
     let mut tex = WmTextures::default();
     if let (Some(d), Some(tx), Some(im)) = (data.as_deref(), textures.as_deref_mut(), images.as_deref_mut()) {
         if let Some(b) = d.pkb.read(&format!("WORLDMAP/WMAP{}.DAT", wm.world)) {
-            tex = load_textures(&b, tx, im);
+            tex = load_textures(&b, tx, im, assets.as_deref());
         }
     }
     // `primMusic::play("BGM601.SSQ")`
@@ -180,7 +209,8 @@ fn enter_worldmap(
     sh2_audio::post(sh2_audio::AudioRequest::PlayBgm { index: 0, mode: 0 });
     audio.0.push(FieldAudio::LoadBgm("BGM601".into()));
     log::info!("world map: world {} selection {} ({} areas)", wm.world, wm.sel, wm.maps.len());
-    commands.insert_resource(WorldMapRuntime { wm, tex, from_title, ticks: 0, passthrough: None, handled: false });
+    let ui = WmUi::new(&wm);
+    commands.insert_resource(WorldMapRuntime { wm, tex, from_title, ticks: 0, passthrough: None, handled: false, ui, ui_text: vec![] });
 }
 
 /// `{s16 world, s16 sub, u32 extra}` of the `WM` chunk: the `extra` word.
@@ -189,8 +219,7 @@ fn wm_chunk_extra(session: &GameSession) -> u32 {
 }
 
 fn passthrough_runtime(from_title: bool) -> WorldMapRuntime {
-    WorldMapRuntime {
-        wm: WorldMap::new(
+    let wm = WorldMap::new(
             &WorldMapTable {
                 worlds: vec![Default::default()],
                 maps: vec![crate::worldmap::SubMap { name: vec![], hint: vec![], map: FieldRequest::FIRST_MAP.into(), flag48: 0, thumb: 0, selectable: true, id: 0, x: 0, y: 0, state: 1, entry: 1, portal: -1 }],
@@ -199,13 +228,9 @@ fn passthrough_runtime(from_title: bool) -> WorldMapRuntime {
             },
             0,
             0,
-        ),
-        tex: WmTextures::default(),
-        from_title,
-        ticks: 0,
-        passthrough: Some(FieldRequest::FIRST_MAP.to_string()),
-        handled: false,
-    }
+        );
+    let ui = WmUi::new(&wm);
+    WorldMapRuntime { wm, tex: WmTextures::default(), from_title, ticks: 0, passthrough: Some(FieldRequest::FIRST_MAP.to_string()), handled: false, ui, ui_text: vec![] }
 }
 
 /// The retail screen for `world` / `sub` (= point id): point list, availability and names from the overlay, `WM` chunk and `WMAPn.DAT`.
@@ -221,6 +246,7 @@ pub fn build_retail(
     textures: Option<&mut UiTextures>,
     images: Option<&mut Assets<Image>>,
     audio: &mut FieldAudioQueue,
+    assets: Option<&MenuAssets>,
 ) -> Option<WorldMapRuntime> {
     let bin = std::fs::read(root.join("FIELD.BIN")).ok()?;
     let rt = RetailWorldTable::from_field_bin(&bin)?;
@@ -242,20 +268,22 @@ pub fn build_retail(
         let flags = wm_chunk.and_then(|c| c.payload.get(9).copied()).unwrap_or(0);
         wm.tutorial = crate::worldmap::tutorial_for(flags, extra);
         wm.tutorial_texts = ui.iter().take(2).cloned().collect();
+        let ui_strings = ui.clone();
         // points whose state byte is 2 ("new") play the unlock demo `mNewPointDemo` (`WorldMap::new` queues them); `SH2_WM_UNLOCK=<index>` forces one
         if let Some(n) = std::env::var("SH2_WM_UNLOCK").ok().and_then(|v| v.parse::<usize>().ok()) {
             wm.force_new_point(n);
         }
         let mut tex = WmTextures::default();
         if let (Some(tx), Some(im)) = (textures, images) {
-            tex = load_textures_from(&bundle, tx, im, 12);
+            tex = load_textures_from(&bundle, tx, im, 12, assets);
         }
         let bgm = rt.worlds[w].bgm.split('.').next().unwrap_or("BGM601").to_string();
         sh2_audio::post(sh2_audio::AudioRequest::LoadBgm { name: bgm.clone() });
         sh2_audio::post(sh2_audio::AudioRequest::PlayBgm { index: 0, mode: 0 });
         audio.0.push(FieldAudio::LoadBgm(bgm));
         log::info!("world map (retail): world {} selection {} ({} points, extra {extra:#x})", wm.world, wm.sel, wm.maps.len());
-        return Some(WorldMapRuntime { wm, tex, from_title: false, ticks: 0, passthrough: None, handled: false });
+        let ui = WmUi::new(&wm);
+        return Some(WorldMapRuntime { wm, tex, from_title: false, ticks: 0, passthrough: None, handled: false, ui, ui_text: ui_strings });
     }
     None
 }
@@ -296,7 +324,15 @@ fn ray_sprite(g: &mut dyn sh2_menu::gfx::MenuGfx, tex: sh2_menu::gfx::TextureId,
     g.draw(DrawCmd::Quad { tex: Some(tex), v: [v(-size, -size, 0.0, 0.0), v(-size, 0.0, 0.0, 1.0), v(0.0, -size, 1.0, 0.0), v(0.0, 0.0, 1.0, 1.0)], blend: Blend::Alpha });
 }
 
-fn draw(rt: &WorldMapRuntime, canvas: &mut UiCanvas) {
+/// A 16 x 16 icon drawn additively (`setBlendMode(1)`).
+fn additive_icon(g: &mut dyn sh2_menu::gfx::MenuGfx, tex: u32, x: f32, y: f32, alpha: u8) {
+    use sh2_menu::gfx::{Blend, DrawCmd, Vertex};
+    let c = Rgba::new(0x7f, 0x7f, 0x7f, alpha);
+    let v = |px: f32, py: f32, u: f32, vv: f32| Vertex { pos: glam::Vec2::new(px, py), uv: glam::Vec2::new(u, vv), color: c };
+    g.draw(DrawCmd::Quad { tex: Some(tex), v: [v(x, y, 0.0, 0.0), v(x, y + 16.0, 0.0, 1.0), v(x + 16.0, y, 1.0, 0.0), v(x + 16.0, y + 16.0, 1.0, 1.0)], blend: Blend::Add });
+}
+
+fn draw(rt: &WorldMapRuntime, canvas: &mut UiCanvas, play_ms: u32) {
     let wm = &rt.wm;
     let t = &rt.tex;
     {
@@ -310,7 +346,6 @@ fn draw(rt: &WorldMapRuntime, canvas: &mut UiCanvas) {
         // spotlight vignette around the selected point: four mirrored 216x216 quarters + four black fillers (`worldMapLight`)
         // the pulse of `worldMapLight::Polling`: the black fillers have alpha 0x80 - a, the glow a * 2 (a cycles between 0x20 and 0x40)
         let a = (0x80 - wm.light_a).clamp(0, 0x80) as u8;
-        let glow = (wm.light_a * 2).clamp(0, 0x80) as u8;
         // four black fillers outside the 432 x 432 square around the point (`worldMapLight::setPos`)
         let black = Rgba::new(0, 0, 0, a);
         bevy_ui::rect(&mut g, 0.0, ly - 216.0 - 256.0, 512.0, 256.0, black);
@@ -326,7 +361,6 @@ fn draw(rt: &WorldMapRuntime, canvas: &mut UiCanvas) {
             spot_quarter(&mut g, s, lx, ly, true, true, a);
         }
         // points
-        let pulse = 0.5 + 0.5 * (wm.tick as f32 * 0.12).sin();
         for (i, m) in wm.maps.iter().enumerate() {
             if m.state == 3 {
                 continue;
@@ -334,15 +368,14 @@ fn draw(rt: &WorldMapRuntime, canvas: &mut UiCanvas) {
             let (px, py) = wm.point_screen(i);
             if i == wm.sel {
                 if let Some(sun) = t.sun {
-                    // soft halo (the glow of `worldMapLight`): the sun icon enlarged and faint, then the icon itself
-                    let s = 26.0 + 8.0 * pulse;
-                    bevy_ui::image(&mut g, sun, px - s / 2.0, py - s / 2.0, s, s, glow / 2);
-                    bevy_ui::image(&mut g, sun, px - 8.0, py - 8.0, 16.0, 16.0, 0x80);
+                    // the sun icon of `worldMapLight` (16 x 16, additive); the live capture shows no extra halo around it
+                    additive_icon(&mut g, sun, px - 8.0, py - 8.0, 0x80);
                 } else {
                     bevy_ui::rect(&mut g, px - 4.0, py - 4.0, 8.0, 8.0, Rgba::new(0xff, 0xd0, 0x40, 0x80));
                 }
             } else if let Some(r) = t.ring {
-                bevy_ui::image(&mut g, r, px - 8.0, py - 8.0, 16.0, 16.0, 0x60);
+                // `worldMapPoint::initialize`: 16 x 16 sprite, colour 0x7f, alpha 0x40, blend mode 1 (additive; 2 for hidden points)
+                additive_icon(&mut g, r, px - 8.0, py - 8.0, 0x40);
             } else {
                 bevy_ui::rect(&mut g, px - 3.0, py - 3.0, 6.0, 6.0, Rgba::new(0xd0, 0x40, 0x40, 0x70));
             }
@@ -358,62 +391,33 @@ fn draw(rt: &WorldMapRuntime, canvas: &mut UiCanvas) {
                 }
             }
         }
-        // left panel (160 px, dark) with a soft edge
+        // left panel (`mSetupWorldMap` window: black 0..0xa0 at alpha 0x80, then a 0x50 wide gradient fading to clear)
         bevy_ui::rect(&mut g, 0.0, 0.0, 160.0, 448.0, Rgba::new(0, 0, 0, 0x80));
         for k in 0..20 {
             let a = (0x80 as f32 * (1.0 - k as f32 / 20.0)) as u8;
             bevy_ui::rect(&mut g, 160.0 + k as f32 * 4.0, 0.0, 4.0, 448.0, Rgba::new(0, 0, 0, a));
         }
-    }
-    let mut g = canvas.begin(layer::FIELD);
-    if wm.maps.is_empty() {
-        return;
-    }
-    let alpha = (wm.thm_alpha.clamp(0.0, 1.0) * 128.0) as u8;
-    // thumbnail (`worldMapThm`): entry 10 + thumb index at (56, 53)
-    let cur = &wm.maps[wm.sel];
-    if let Some(&th) = t.thumbs.get(cur.thumb as usize) {
-        bevy_ui::image(&mut g, th, 20.0, 40.0, 144.0, 128.0, alpha);
-    }
-    // name / hint centred at x = 128 (rows 208 / 230)
-    let nm = sj(&cur.name);
-    let hint = sj(&cur.hint);
-    let ncol = Rgba::new(0x80, 0x90, 0xc0, alpha);
-    bevy_ui::text(&mut g, 80.0 - nm.chars().count() as f32 * 6.5, 176.0, &nm, 0, ncol, true);
-    bevy_ui::text(&mut g, 80.0 - hint.chars().count() as f32 * 4.0, 198.0, &hint, 1, Rgba::new(0x80, 0x80, 0x80, alpha), true);
-    // list window (`mSetupSelectWin`): five rows of 22 px at (52, 268), scrolled so the selection stays visible
-    let first = wm.sel.saturating_sub(4).min(wm.maps.len().saturating_sub(5));
-    bevy_ui::panel(&mut g, 36.0, 260.0, 270.0, 124.0, 0x60);
-    for (row, i) in (first..wm.maps.len().min(first + 5)).enumerate() {
-        let m = &wm.maps[i];
-        let y = 270.0 + row as f32 * 22.0;
-        let sel = i == wm.sel;
-        if sel {
-            bevy_ui::rect(&mut g, 44.0, y - 2.0, 254.0, 22.0, Rgba::new(0x50, 0x50, 0xa0, 0x50));
+        // the arrow beside the selected point, then the windows of `mSetupMenuWin` / `worldMapThm` / `mSetupSelectWin` (carved frame, thumbnail,
+        // plaque, list with its cursor, button hints, time)
+        if let Some(cmn) = t.cmn.as_deref() {
+            worldmap_ui::draw_point_cursor(&mut g, wm, &rt.ui, cmn, 0x80);
         }
-        let c = if m.state == 3 {
-            Rgba::new(0x40, 0x40, 0x40, 0x60)
-        } else if sel {
-            Rgba::new(0x80, 0x80, 0x30, 0x80)
-        } else {
-            Rgba::NEUTRAL
+        let args = worldmap_ui::DrawArgs {
+            frame: t.frame,
+            header: t.logo,
+            thumb: wm.maps.get(wm.sel).and_then(|m| t.thumbs.get(m.thumb as usize)).copied(),
+            digits: t.digits,
+            time_label: t.time_label,
+            cmn: t.cmn.as_deref(),
+            play_ms,
+            ui: &rt.ui_text,
+            retail: wm.retail,
         };
-        bevy_ui::text(&mut g, 52.0, y, &sj(&m.name), 0, c, true);
-        if sel {
-            bevy_ui::text(&mut g, 36.0, y, ">", 0, c, false);
-        }
+        worldmap_ui::draw(&mut g, wm, &rt.ui, &args, 0x80);
     }
-    // note of the area and the button hints (bottom bar)
-    bevy_ui::rect(&mut g, 0.0, 414.0, 512.0, 34.0, Rgba::new(0, 0, 0, 0x50));
-    if let Some(n) = wm.notes.get(wm.sel) {
-        bevy_ui::text(&mut g, 16.0, 420.0, &sj(n), 1, Rgba::NEUTRAL, true);
+    if !matches!(wm.state, WmState::Tutorial(_)) {
+        canvas.clear(layer::FIELD);
     }
-    bevy_ui::text(&mut g, 380.0, 370.0, &format!("\u{25cb}{}", sj(&wm.menu_text[0])), 1, Rgba::NEUTRAL, true);
-    bevy_ui::text(&mut g, 380.0, 392.0, &format!("{}{}", if wm.retail { "\u{25b3}" } else { "\u{00d7}" }, sj(&wm.menu_text[1])), 1, Rgba::NEUTRAL, true);
-    if let Some(l) = t.logo {
-        bevy_ui::image(&mut g, l, 360.0, 6.0, 136.0, 48.0, 0x60);
-    }
-    drop(g);
     if let WmState::Tutorial(phase) = wm.state {
         // `mSetupTutorialWin`: a full-screen veil (alpha 0x40 over the map) and a window at (0x60, 0x9b) 0x140 x 0x8a with the text
         let k = match phase {
@@ -458,6 +462,7 @@ fn worldmap_tick(
     mut images: Option<ResMut<Assets<Image>>>,
     mut audio: ResMut<FieldAudioQueue>,
     mut menu: ResMut<crate::menu_overlay::InGameMenu>,
+    assets: Option<Res<MenuAssets>>,
 ) {
     let Some(mut rt) = rt else { return };
     let rt = &mut *rt;
@@ -494,6 +499,7 @@ fn worldmap_tick(
         return;
     }
     rt.wm.tick(pad.press());
+    rt.ui.tick(&rt.wm);
     // the unlock demo opened these points: the "new" bit of their `WM` chunk byte is cleared (`+0x129 = 1`)
     for p in std::mem::take(&mut rt.wm.demo.unlocked) {
         let id = rt.wm.maps.get(p).map(|m| m.id).unwrap_or(-1);
@@ -513,7 +519,7 @@ fn worldmap_tick(
             WmSe::NewPoint => MenuSe::Other(0x1007),
         });
     }
-    draw(rt, &mut canvas);
+    draw(rt, &mut canvas, session.play_ms.min(u32::MAX as u64) as u32);
     if rt.wm.state == WmState::Done && !rt.handled {
         rt.handled = true;
         // remember the selection in the save's WM chunk (`GetWorldMapInfo`)
@@ -532,7 +538,7 @@ fn worldmap_tick(
                 let root = disc_root(cfg.as_deref());
                 let extra = rt.wm.extra;
                 let sub = point.unwrap_or_else(|| retail_enter_point(&root, world));
-                match build_retail(&root, world, sub, extra, &session, data.as_deref(), textures.as_deref_mut(), images.as_deref_mut(), &mut audio) {
+                match build_retail(&root, world, sub, extra, &session, data.as_deref(), textures.as_deref_mut(), images.as_deref_mut(), &mut audio, assets.as_deref()) {
                     Some(next) if next.wm.world == world => {
                         log::info!("world map: -> world {world} point {sub}");
                         commands.insert_resource(next);
