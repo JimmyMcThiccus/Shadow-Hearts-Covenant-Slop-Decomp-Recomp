@@ -3,10 +3,10 @@ REM Launch the Rust/Bevy port on the US retail disc. Works from any directory.
 REM Extra args are passed through (e.g. --autoplay --boost 80)
 
 set "ROOT=%~dp0"
-REM Use hardcoded paths since folder structure is fixed
-set "SH2_DISC_DIR=C:\Users\jamie\Documents\SH2\Sh2 Decomp\SH2JP"
-set "SH2_US_DISC_DIR=C:\Users\jamie\Documents\SH2\Sh2 Decomp\SH2US"
-set "SH2_US_DISC2_DIR=C:\Users\jamie\Documents\SH2\Sh2 Decomp\disk2extracted"
+REM Disc folders default to siblings of this repo; set the variables beforehand to override
+if not defined SH2_DISC_DIR set "SH2_DISC_DIR=%~dp0..\SH2JP"
+if not defined SH2_US_DISC_DIR set "SH2_US_DISC_DIR=%~dp0..\SH2US"
+if not defined SH2_US_DISC2_DIR set "SH2_US_DISC2_DIR=%~dp0..\disk2extracted"
 set "CARGO_TARGET_DIR=%USERPROFILE%\.cache\sh2-decomp-target"
 
 cd /d "%ROOT%port"

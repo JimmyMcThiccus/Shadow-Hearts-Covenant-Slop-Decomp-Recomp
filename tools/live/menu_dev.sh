@@ -4,7 +4,8 @@
 set -e
 OUT="$1"; STEPS="${2:-w70,shot:01_top}"; MAP="${3:-AP_02_U}"
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$USERPROFILE/.cache/sh2-decomp-target}"
-export SH2_DISC_DIR="C:\Users\jamie\Documents\SH2\Sh2 Decomp\SH2JP" SH2_US_DISC_DIR="C:\Users\jamie\Documents\SH2\Sh2 Decomp\SH2US"
+REPO="$(cd "$(dirname "$0")/../.." && pwd)"
+export SH2_DISC_DIR="${SH2_DISC_DIR:-$REPO/../SH2JP}" SH2_US_DISC_DIR="${SH2_US_DISC_DIR:-$REPO/../SH2US}"
 mkdir -p "$OUT"
 cd "$(dirname "$0")/../../port"
 cargo build -q -p sh2_app

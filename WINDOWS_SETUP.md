@@ -38,12 +38,13 @@ run-us.bat --autoplay --boost 80
 
 ## Configuration
 
-The scripts use these hardcoded paths:
-- JP Disc: `C:\Users\jamie\Documents\SH2\Sh2 Decomp\SH2JP`
-- US Disc: `C:\Users\jamie\Documents\SH2\Sh2 Decomp\SH2US`
+By default the scripts look for the extracted discs next to the repo (in its parent folder):
+- JP Disc: `..\SH2JP` (`SH2_DISC_DIR`)
+- US Disc: `..\SH2US` (`SH2_US_DISC_DIR`)
+- US Disc 2: `..\disk2extracted` (`SH2_US_DISC2_DIR`, US scripts only)
 - Build Cache: `%USERPROFILE%\.cache\sh2-decomp-target`
 
-To override, set environment variables before running:
+To use other locations, set the environment variables before running:
 
 **Batch:**
 ```batch
@@ -62,9 +63,10 @@ $env:SH2_US_DISC_DIR = "C:\Games\SH2\US"
 ## Troubleshooting
 
 ### "Disc not found" errors
-Ensure the folder structure matches:
+Ensure the folder structure matches (or point the variables above at your folders):
 ```
-sh2-decomp\
+<parent folder>\
+  sh2-decomp\        (this repo)
   SH2JP\
     SLPM_602.19
     SYSTEM.CNF

@@ -2,9 +2,9 @@
 # Extra args are passed through (e.g. --autoplay --boost 80)
 
 $ROOT = Split-Path -Parent $MyInvocation.MyCommand.Path
-$env:SH2_DISC_DIR = "C:\Users\jamie\Documents\SH2\Sh2 Decomp\SH2JP"
-$env:SH2_US_DISC_DIR = "C:\Users\jamie\Documents\SH2\Sh2 Decomp\SH2US"
-$env:SH2_US_DISC2_DIR = "C:\Users\jamie\Documents\SH2\Sh2 Decomp\disk2extracted"
+if (-not $env:SH2_DISC_DIR) { $env:SH2_DISC_DIR = "$ROOT\..\SH2JP" }
+if (-not $env:SH2_US_DISC_DIR) { $env:SH2_US_DISC_DIR = "$ROOT\..\SH2US" }
+if (-not $env:SH2_US_DISC2_DIR) { $env:SH2_US_DISC2_DIR = "$ROOT\..\disk2extracted" }
 $env:CARGO_TARGET_DIR = "$HOME\.cache\sh2-decomp-target"
 
 Set-Location "$ROOT\port"

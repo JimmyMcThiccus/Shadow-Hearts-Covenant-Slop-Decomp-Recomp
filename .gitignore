@@ -18,3 +18,11 @@ __pycache__/
 # game binaries extracted from the discs (stay on disk, never committed)
 /overlays/*.BIN
 *.ELF
+
+# audio rendered from the discs (regenerate with the cs2_chr_se example, `--wav DIR`)
+*.wav
+# per-machine cargo config (target-dir points at a local cache)
+/port/.cargo/config.toml
+# stray build output / backups
+/warn.txt
+*.bak
