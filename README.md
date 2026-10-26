@@ -25,7 +25,12 @@ Install Rust, drag your disc images (`.iso`, any file names) into this folder ne
 ```bat
 run-us.bat --autoplay --boost 80
 ```
+For MacOS/Linux you will need to chmod the .sh
 
+```.sh
+chmod +x ./run-us.sh
+./run-us.sh
+```
 The port reads the images directly; nothing needs extracting. It tells the discs apart by their boot executable (US disc 1 `SLUS_210.41`, US disc 2 `SLUS_210.44`, JP demo `SLPM_602.19`). `run-us.ps1` and `run-us.sh` do the same on PowerShell and macOS/Linux; the `run-jp.*` scripts launch the Japanese demo. [WINDOWS_SETUP.md](WINDOWS_SETUP.md) covers other locations and troubleshooting.
 
 ## License
