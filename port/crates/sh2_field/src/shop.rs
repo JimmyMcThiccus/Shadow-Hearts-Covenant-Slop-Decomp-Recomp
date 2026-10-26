@@ -266,7 +266,7 @@ impl ShopData {
         let disc = env.assets.disc.as_ref()?;
         let root = std::env::var_os("SH2_DISC_DIR").map(std::path::PathBuf::from)?;
         let retail = sh2_core::boot::is_retail();
-        let img = OverlayImage::new(std::fs::read(root.join("FIELD.BIN")).ok()?).ok()?;
+        let img = OverlayImage::new(sh2_core::fileio::read_disc_file(&root, "FIELD.BIN").ok()?).ok()?;
         let tables = ShopTables::from_overlay(&img, retail)?;
         let text = if retail {
             let bundle = disc.read("SHOP/SHOP.DAT")?;
@@ -1920,7 +1920,7 @@ mod tests {
     fn real_tables_if_present() {
         for (var, retail, shops, max_rank) in [("SH2_DISC_DIR", false, 3usize, 3usize), ("SH2_US_DISC_DIR", true, 25, 4)] {
             let Some(dir) = std::env::var_os(var) else { continue };
-            let Ok(bytes) = std::fs::read(std::path::Path::new(&dir).join("FIELD.BIN")) else { continue };
+            let Ok(bytes) = sh2_core::fileio::read_disc_file(std::path::Path::new(&dir), "FIELD.BIN") else { continue };
             let img = OverlayImage::new(bytes).unwrap();
             let t = ShopTables::from_overlay(&img, retail).unwrap();
             assert_eq!(t.items.len(), shops);

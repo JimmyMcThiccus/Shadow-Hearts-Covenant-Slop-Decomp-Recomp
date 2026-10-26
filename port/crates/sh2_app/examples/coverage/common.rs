@@ -427,5 +427,5 @@ pub fn disc_dir() -> PathBuf {
 /// US disc 2 (`SH2_US_DISC2_DIR`, default `../disk2extracted` next to the disc 1 folder): only `LSD.PKB` / `PKFINFO.TBL` differ.
 pub fn disc2_dir() -> Option<PathBuf> {
     let p = std::env::var_os("SH2_US_DISC2_DIR").map(PathBuf::from).unwrap_or_else(|| disc_dir().join("../disk2extracted"));
-    p.join("PKFINFO.TBL").exists().then_some(p)
+    sh2_core::fileio::disc_file_exists(&p, "PKFINFO.TBL").then_some(p)
 }

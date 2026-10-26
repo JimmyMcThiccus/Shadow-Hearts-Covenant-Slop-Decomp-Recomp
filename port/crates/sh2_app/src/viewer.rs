@@ -189,7 +189,7 @@ struct Hud;
 
 pub fn run(opts: ViewerOptions) {
     let Some(disc) = Sh2Disc::from_env(opts.us) else {
-        eprintln!("{} is not set or does not point at a disc folder with PKFINFO.TBL", if opts.us { "SH2_US_DISC_DIR" } else { "SH2_DISC_DIR" });
+        eprintln!("{} is not set or does not point at a disc image (.iso) or a disc folder with PKFINFO.TBL", if opts.us { "SH2_US_DISC_DIR" } else { "SH2_DISC_DIR" });
         std::process::exit(2);
     };
     let mut app = App::new();
@@ -214,17 +214,17 @@ pub fn run(opts: ViewerOptions) {
     app.run();
 }
 
-/// Read a window of a disc-folder file around `offset` (the PKBs are hundreds of MB).
+/// Read a window of a disc file around `offset` (the PKBs are hundreds of MB); `file` is a name on the disc (folder or `.iso`) or an
+/// absolute host path.
 fn read_window(disc_root: &std::path::Path, file: &str, offset: usize) -> std::io::Result<(Vec<u8>, usize)> {
-    use std::io::{Read, Seek, SeekFrom};
-    let path = if std::path::Path::new(file).is_absolute() { PathBuf::from(file) } else { disc_root.join(file) };
-    let mut f = std::fs::File::open(&path)?;
-    let len = f.metadata()?.len() as usize;
     let base = offset.saturating_sub(0x40_0000);
-    let end = (offset + 0x100_0000).min(len);
-    f.seek(SeekFrom::Start(base as u64))?;
-    let mut buf = vec![0u8; end - base];
-    f.read_exact(&mut buf)?;
+    let span = (offset + 0x100_0000 - base) as u64;
+    let buf = if std::path::Path::new(file).is_absolute() {
+        let p = std::path::Path::new(file);
+        sh2_core::fileio::DiscSource::Dir(p.parent().unwrap_or(p).to_path_buf()).read_range(&p.file_name().unwrap_or_default().to_string_lossy(), base as u64, span)?
+    } else {
+        sh2_core::fileio::DiscSource::open(disc_root)?.read_range(file, base as u64, span)?
+    };
     Ok((buf, base))
 }
 

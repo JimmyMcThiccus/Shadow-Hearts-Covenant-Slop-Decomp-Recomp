@@ -4,7 +4,7 @@ A decompilation of *Shadow Hearts II* / *Shadow Hearts: Covenant* (PS2) and a na
 
 The Japanese demo executable `SLPM_602.19` ships with a full symbol table. It is the main source for names, class layouts and the call graph, and those names are carried over to the stripped US retail build `SLUS_210.41`, which is what the port targets.
 
-**This repository contains no game data.** You need your own copy of the game. Extract the disc contents to folders on disk (see [WINDOWS_SETUP.md](WINDOWS_SETUP.md)).
+**This repository contains no game data.** You need your own copy of the game as `.iso` disc images (or extracted disc folders). See [WINDOWS_SETUP.md](WINDOWS_SETUP.md).
 
 ## Layout
 
@@ -20,13 +20,13 @@ The Japanese demo executable `SLPM_602.19` ships with a full symbol table. It is
 
 ## Running the port
 
-Install Rust, extract the discs next to this repo (`../SH2JP`, `../SH2US`, `../disk2extracted`) or set `SH2_DISC_DIR` / `SH2_US_DISC_DIR` / `SH2_US_DISC2_DIR`, then run:
+Install Rust, drag your disc images (`.iso`, any file names) into this folder next to `run-us.bat`, and run:
 
 ```bat
 run-us.bat --autoplay --boost 80
 ```
 
-`run-us.ps1` and `run-us.sh` do the same on PowerShell and macOS/Linux; the `run-jp.*` scripts launch the Japanese demo. [WINDOWS_SETUP.md](WINDOWS_SETUP.md) lists the options and troubleshooting steps.
+The port reads the images directly; nothing needs extracting. It tells the discs apart by their boot executable (US disc 1 `SLUS_210.41`, US disc 2 `SLUS_210.44`, JP demo `SLPM_602.19`). `run-us.ps1` and `run-us.sh` do the same on PowerShell and macOS/Linux; the `run-jp.*` scripts launch the Japanese demo. [WINDOWS_SETUP.md](WINDOWS_SETUP.md) covers other locations and troubleshooting.
 
 ## License
 

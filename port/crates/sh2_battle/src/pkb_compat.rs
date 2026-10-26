@@ -53,7 +53,7 @@ mod tests {
         info.walk(|p, f| {
             n += 1;
             if f.in_archive {
-                let len = std::fs::metadata(d.root().join(format!("{}.PKB", f.container))).unwrap().len();
+                let len = d.source().len(&format!("{}.PKB", f.container)).unwrap();
                 assert!(f.byte_offset + f.size as u64 <= len, "{p} out of range");
             }
         });

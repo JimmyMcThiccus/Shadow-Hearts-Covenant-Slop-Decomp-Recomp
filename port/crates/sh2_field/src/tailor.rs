@@ -102,7 +102,7 @@ impl TailorText {
                 star_pos: [(0, 0); 5],
             })
         } else {
-            let img = OverlayImage::new(std::fs::read(root.join("FIELD.BIN")).ok()?).ok()?;
+            let img = OverlayImage::new(sh2_core::fileio::read_disc_file(&root, "FIELD.BIN").ok()?).ok()?;
             let dec = |b: &[u8]| sh2_menu::sjis::decode(b);
             let tbl = |n: &str| -> Option<Vec<String>> { Some(img.strings(n)?.iter().map(|b| dec(b)).collect()) };
             let mess = tbl("tailorMess_mess_J")?;

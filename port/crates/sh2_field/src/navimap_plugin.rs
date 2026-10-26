@@ -75,7 +75,7 @@ impl Plugin for NaviMapPlugin {
 
 fn load_art(mut art: ResMut<NaviArtRes>, cfg: Option<Res<sh2_core::app::AppConfig>>) {
     let root = crate::plugin::disc_root(cfg.as_deref());
-    match std::fs::read(root.join("FIELD.BIN")) {
+    match sh2_core::fileio::read_disc_file(&root, "FIELD.BIN") {
         Ok(b) => art.0 = NaviArt::from_overlay(&b),
         Err(e) => log::warn!("navimap: cannot read FIELD.BIN under {}: {e}", root.display()),
     }

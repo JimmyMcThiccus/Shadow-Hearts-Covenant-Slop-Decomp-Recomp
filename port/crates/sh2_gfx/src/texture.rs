@@ -504,8 +504,7 @@ mod tests {
     #[test]
     fn savedata_background_decodes() {
         let Ok(dir) = std::env::var("SH2_DISC_DIR") else { return };
-        let p = std::path::Path::new(&dir).join("SAVELOAD.PKB");
-        let Ok(b) = std::fs::read(p) else { return };
+        let Ok(b) = sh2_core::fileio::read_disc_file(&dir, "SAVELOAD.PKB") else { return };
         let img = decode_menu_texture(&b, 0xb0).unwrap();
         assert_eq!((img.width, img.height), (256, 224));
         // CSM1 order restores the ramp: colours of consecutive logical indices 0..24 are non-decreasing in red.

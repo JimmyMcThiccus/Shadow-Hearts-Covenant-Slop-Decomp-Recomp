@@ -299,7 +299,7 @@ mod tests {
     fn table_matches_the_executables() {
         for (var, name, vaddr) in [("SH2_DISC_DIR", "SLPM_602.19", 0x003f_96a0usize), ("SH2_US_DISC_DIR", "SLUS_210.41", 0x0042_e6a0usize)] {
             let Some(dir) = std::env::var_os(var) else { continue };
-            let Ok(elf) = std::fs::read(std::path::Path::new(&dir).join(name)) else { continue };
+            let Ok(elf) = sh2_core::fileio::read_disc_file(std::path::Path::new(&dir), name) else { continue };
             // 32-bit little endian ELF: program headers at e_phoff, entries of 32 bytes
             let rd32 = |o: usize| u32::from_le_bytes([elf[o], elf[o + 1], elf[o + 2], elf[o + 3]]) as usize;
             let rd16 = |o: usize| u16::from_le_bytes([elf[o], elf[o + 1]]) as usize;

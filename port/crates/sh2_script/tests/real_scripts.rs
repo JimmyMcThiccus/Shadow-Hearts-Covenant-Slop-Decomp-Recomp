@@ -1,13 +1,12 @@
 //! Smoke tests against retail data (skipped when the disc folder is not present).
 use sh2_script::cscript::*;
 use sh2_script::opcodes::{FIELD_SUBOPS, LSD_SUBOPS};
-use std::io::{Read, Seek, SeekFrom};
 
 fn disc_dir() -> Option<std::path::PathBuf> {
     let p = std::env::var("SH2_DISC_DIR")
         .unwrap_or_else(|_| "/Volumes/work/Sh2 Decomp/Shadow Hearts II (Japan) (Furokuban)".into());
     let p = std::path::PathBuf::from(p);
-    p.join("FIELD.PKB").exists().then_some(p)
+    sh2_core::fileio::disc_file_exists(&p, "FIELD.PKB").then_some(p)
 }
 
 struct LogHost {
@@ -29,10 +28,7 @@ impl ScriptHost for LogHost {
 #[test]
 fn field_script_start_function_runs() {
     let Some(d) = disc_dir() else { return };
-    let mut f = std::fs::File::open(d.join("FIELD.PKB")).unwrap();
-    f.seek(SeekFrom::Start(0x21a8000)).unwrap();
-    let mut buf = vec![0u8; 0x8000];
-    f.read_exact(&mut buf).unwrap();
+    let buf = sh2_core::fileio::DiscSource::open(&d).unwrap().read_range("FIELD.PKB", 0x21a8000, 0x8000).unwrap();
     let mut vm = CScript::new(64, 0x400, 4000);
     vm.init_script(Some("test"), &buf).expect("parse");
     let mut host = LogHost { calls: vec![] };
@@ -50,10 +46,7 @@ fn field_script_start_function_runs() {
 #[test]
 fn lsd_script_track_events() {
     let Some(d) = disc_dir() else { return };
-    let mut f = std::fs::File::open(d.join("LSD.PKB")).unwrap();
-    f.seek(SeekFrom::Start(0x14f0 + 0x20)).unwrap();
-    let mut buf = vec![0u8; 0x60];
-    f.read_exact(&mut buf).unwrap();
+    let buf = sh2_core::fileio::DiscSource::open(&d).unwrap().read_range("LSD.PKB", 0x14f0 + 0x20, 0x60).unwrap();
     let mut vm = CScript::new(16, 0x200, 4000);
     vm.init_script(Some("lscr"), &buf).expect("parse");
     let mut host = LogHost { calls: vec![] };
@@ -77,7 +70,7 @@ fn lsd_script_track_events() {
 #[test]
 fn all_field_scripts_run_without_panics() {
     let Some(d) = disc_dir() else { return };
-    let data = std::fs::read(d.join("FIELD.PKB")).unwrap();
+    let data = sh2_core::fileio::read_disc_file(&d, "FIELD.PKB").unwrap();
     let mut pos = 0usize;
     let mut n = 0;
     while let Some(i) = data[pos..].windows(4).position(|w| w == b"EVNT") {

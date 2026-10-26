@@ -51,6 +51,8 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
+use crate::iso::IsoImage;
+
 /// Alphabet used by `enCode`/`deCode` (JP 0x003fda00, index 0 is the NUL padding digit).
 /// digit value = position in this string; value 0 terminates a name.
 pub const NAME_ALPHABET: &[u8; 39] = b"\0.0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_";
@@ -403,7 +405,147 @@ impl PkfInfo {
     }
 }
 
-/// A disc image rooted at a host directory (`SH2_DISC_DIR`) that contains `PKFINFO.TBL`, `*.PKB`,
+/// Where a disc's files come from: an extracted folder or a `.iso` image of the disc ([`crate::iso`]).  Every `SH2_*_DISC*_DIR`
+/// variable and every `root: &Path` handed around the crates may name either; [`read_disc_file`] & co. take such a root.
+#[derive(Debug, Clone)]
+pub enum DiscSource {
+    Dir(PathBuf),
+    Iso(std::sync::Arc<IsoImage>),
+}
+
+/// Parsed images by path, so the many loaders that each open "the disc" index an image's directory tree once.
+fn iso_cache() -> &'static std::sync::Mutex<std::collections::HashMap<PathBuf, std::sync::Arc<IsoImage>>> {
+    static CACHE: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<PathBuf, std::sync::Arc<IsoImage>>>> = std::sync::OnceLock::new();
+    CACHE.get_or_init(Default::default)
+}
+
+impl DiscSource {
+    /// A folder, or a file holding an ISO 9660 image.
+    pub fn open(root: impl AsRef<Path>) -> std::io::Result<DiscSource> {
+        let root = root.as_ref();
+        if !root.is_file() {
+            return Ok(DiscSource::Dir(root.to_path_buf()));
+        }
+        let mut cache = iso_cache().lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(i) = cache.get(root) {
+            return Ok(DiscSource::Iso(i.clone()));
+        }
+        let i = std::sync::Arc::new(IsoImage::open(root)?);
+        cache.insert(root.to_path_buf(), i.clone());
+        Ok(DiscSource::Iso(i))
+    }
+
+    /// The folder or image path.
+    pub fn path(&self) -> &Path {
+        match self {
+            DiscSource::Dir(p) => p,
+            DiscSource::Iso(i) => i.path(),
+        }
+    }
+
+    /// Does the disc hold top-level (or `DIR/NAME`) file `name`?
+    pub fn exists(&self, name: &str) -> bool {
+        match self {
+            DiscSource::Dir(p) => p.join(name).is_file(),
+            DiscSource::Iso(i) => i.find(name).is_some(),
+        }
+    }
+
+    /// Size in bytes of file `name`.
+    pub fn len(&self, name: &str) -> std::io::Result<u64> {
+        match self {
+            DiscSource::Dir(p) => Ok(std::fs::metadata(p.join(name))?.len()),
+            DiscSource::Iso(i) => i.find(name).map(|f| f.size).ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, name.to_string())),
+        }
+    }
+
+    /// `len` bytes of file `name` from `offset` (clamped to the end of the file).
+    pub fn read_range(&self, name: &str, offset: u64, len: u64) -> std::io::Result<Vec<u8>> {
+        match self {
+            DiscSource::Dir(p) => {
+                let mut f = File::open(p.join(name))?;
+                let size = f.metadata()?.len();
+                let start = offset.min(size);
+                f.seek(SeekFrom::Start(start))?;
+                let mut buf = vec![0u8; len.min(size - start) as usize];
+                f.read_exact(&mut buf)?;
+                Ok(buf)
+            }
+            DiscSource::Iso(i) => i.read_range(name, offset, len),
+        }
+    }
+
+    pub fn read(&self, name: &str) -> std::io::Result<Vec<u8>> {
+        match self {
+            DiscSource::Dir(p) => std::fs::read(p.join(name)),
+            DiscSource::Iso(i) => i.read(name),
+        }
+    }
+
+    /// Upper-case names of the files in the disc's root directory.
+    pub fn root_files(&self) -> Vec<String> {
+        match self {
+            DiscSource::Dir(p) => std::fs::read_dir(p)
+                .map(|rd| rd.flatten().filter(|e| e.path().is_file()).map(|e| e.file_name().to_string_lossy().to_ascii_uppercase()).collect())
+                .unwrap_or_default(),
+            DiscSource::Iso(i) => i.names().filter(|n| !n.contains('/')).map(str::to_string).collect(),
+        }
+    }
+}
+
+/// `std::fs::read(root.join(name))` for a disc root that is a folder or a `.iso` image.
+pub fn read_disc_file(root: impl AsRef<Path>, name: &str) -> std::io::Result<Vec<u8>> {
+    DiscSource::open(root)?.read(name)
+}
+
+/// `root.join(name).exists()` for a disc root that is a folder or a `.iso` image.
+pub fn disc_file_exists(root: impl AsRef<Path>, name: &str) -> bool {
+    DiscSource::open(root).map(|s| s.exists(name)).unwrap_or(false)
+}
+
+/// The disc variable a disc image or folder belongs in, by the boot ELF on it: `SLPM_602.19` = the JP Furokuban demo (`SH2_DISC_DIR`),
+/// `SLUS_210.41` / `SLUS_210.44` = US retail disc 1 / 2 (`SH2_US_DISC_DIR` / `SH2_US_DISC2_DIR`); `None` for any other disc.
+pub fn disc_env_var(root: impl AsRef<Path>) -> Option<&'static str> {
+    let src = DiscSource::open(root).ok()?;
+    if !src.exists("PKFINFO.TBL") {
+        return None;
+    }
+    [("SLPM_602.19", "SH2_DISC_DIR"), ("SLUS_210.41", "SH2_US_DISC_DIR"), ("SLUS_210.44", "SH2_US_DISC2_DIR")]
+        .into_iter()
+        .find(|(elf, _)| src.exists(elf))
+        .map(|(_, var)| var)
+}
+
+/// Drag-and-drop discs: the user's disc images (`*.iso`, any file names) in the folder of the running executable, and in the folder
+/// named by `SH2_DISCS` when set (searched first).  Each image is identified by its boot ELF ([`disc_env_var`]) and fills that disc
+/// variable when it is unset, so the port runs from the images without extracting anything.  Returns the `(variable, image)` pairs it set.
+pub fn discover_disc_images() -> Vec<(&'static str, PathBuf)> {
+    let exe_dir = std::env::current_exe().ok().and_then(|p| p.parent().map(Path::to_path_buf));
+    let dirs: Vec<PathBuf> = std::env::var_os("SH2_DISCS").map(PathBuf::from).into_iter().chain(exe_dir).collect();
+    let mut images = Vec::new();
+    for dir in dirs {
+        let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+        let mut found: Vec<PathBuf> = rd
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.is_file() && p.extension().is_some_and(|x| x.eq_ignore_ascii_case("iso")) && crate::iso::is_iso(p))
+            .collect();
+        found.sort();
+        images.extend(found);
+    }
+    let mut set = Vec::new();
+    for p in images {
+        if let Some(var) = disc_env_var(&p) {
+            if std::env::var_os(var).is_none() {
+                std::env::set_var(var, &p);
+                set.push((var, p));
+            }
+        }
+    }
+    set
+}
+
+/// A disc rooted at a host directory or `.iso` image (`SH2_DISC_DIR`) that contains `PKFINFO.TBL`, `*.PKB`,
 /// `FIELD.BIN`, `BATTLE.BIN`, `SLPM_602.19`, ...
 ///
 /// **Two-disc set (US retail, round 5 CS)**: the US game ships on two discs whose files are byte-identical except `LSD.PKB` /
@@ -414,6 +556,7 @@ impl PkfInfo {
 /// disc 2 cut scenes without a disc swap.  [`Disc::disc_of`] tells which disc holds a path (the console's `DiskChange` prompt).
 pub struct Disc {
     root: PathBuf,
+    src: DiscSource,
     info: PkfInfo,
     /// the other disc of a two-disc set (see above)
     other: Option<Box<Disc>>,
@@ -421,11 +564,15 @@ pub struct Disc {
     number: u8,
 }
 
-/// Disc number of a folder by its boot ELF: `SLUS_210.41` = US disc 1, `SLUS_210.44` = US disc 2.
+/// Disc number of a folder or image by its boot ELF: `SLUS_210.41` = US disc 1, `SLUS_210.44` = US disc 2.
 pub fn disc_number(root: &Path) -> u8 {
-    if root.join("SLUS_210.41").exists() {
+    DiscSource::open(root).map(|s| source_disc_number(&s)).unwrap_or(0)
+}
+
+fn source_disc_number(src: &DiscSource) -> u8 {
+    if src.exists("SLUS_210.41") {
         1
-    } else if root.join("SLUS_210.44").exists() {
+    } else if src.exists("SLUS_210.44") {
         2
     } else {
         0
@@ -435,10 +582,11 @@ pub fn disc_number(root: &Path) -> u8 {
 impl Disc {
     fn open_single(root: &Path) -> Result<Self, FileIoError> {
         let root = root.to_path_buf();
-        let p = root.join("PKFINFO.TBL");
-        let bytes = std::fs::read(&p).map_err(|source| FileIoError::Io { path: p, source })?;
-        let number = disc_number(&root);
-        Ok(Disc { info: PkfInfo::parse(&bytes)?, root, other: None, number })
+        let io = |source| FileIoError::Io { path: root.join("PKFINFO.TBL"), source };
+        let src = DiscSource::open(&root).map_err(io)?;
+        let bytes = src.read("PKFINFO.TBL").map_err(io)?;
+        let number = source_disc_number(&src);
+        Ok(Disc { info: PkfInfo::parse(&bytes)?, root, src, other: None, number })
     }
 
     pub fn open(root: impl AsRef<Path>) -> Result<Self, FileIoError> {
@@ -497,19 +645,24 @@ impl Disc {
     pub fn from_env() -> Option<Self> {
         Self::from_env_var("SH2_DISC_DIR")
     }
+    /// The folder or `.iso` image this disc was opened from.
     pub fn root(&self) -> &Path {
         &self.root
+    }
+    /// Raw access to the disc's own files (`FIELD.BIN`, the boot ELF, `*.PKB`).
+    pub fn source(&self) -> &DiscSource {
+        &self.src
     }
     /// Convenience for loaders that only care whether a file exists: `read` as an `Option`.
     pub fn read_opt(&self, path: &str) -> Option<Vec<u8>> {
         self.read(path).ok()
     }
 
-    fn container_path(&self, loc: &FileLoc) -> PathBuf {
+    fn container_name(loc: &FileLoc) -> String {
         if loc.in_archive {
-            self.root.join(format!("{}.PKB", loc.container))
+            format!("{}.PKB", loc.container)
         } else {
-            self.root.join(&loc.container)
+            loc.container.clone()
         }
     }
 
@@ -521,12 +674,12 @@ impl Disc {
                 None => Err(FileIoError::NotFound(path.to_string())),
             };
         };
-        let p = self.container_path(&loc);
-        let io = |source| FileIoError::Io { path: p.clone(), source };
-        let mut f = File::open(&p).map_err(io)?;
-        f.seek(SeekFrom::Start(loc.byte_offset)).map_err(io)?;
-        let mut buf = vec![0u8; loc.size as usize];
-        f.read_exact(&mut buf).map_err(io)?;
+        let name = Self::container_name(&loc);
+        let io = |source| FileIoError::Io { path: self.root.join(&name), source };
+        let buf = self.src.read_range(&name, loc.byte_offset, loc.size as u64).map_err(io)?;
+        if buf.len() != loc.size as usize {
+            return Err(io(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, format!("{path}: container ends early"))));
+        }
         Ok(buf)
     }
 
@@ -749,6 +902,35 @@ mod tests {
         }
     }
 
+    /// Images and folders are told apart by their boot ELF (`SH2_ISO_TEST` / `SH2_ISO_TEST_DIR` as below).
+    #[test]
+    fn disc_env_var_by_boot_elf() {
+        let (Some(iso), Some(dir)) = (std::env::var_os("SH2_ISO_TEST"), std::env::var_os("SH2_ISO_TEST_DIR")) else { return };
+        assert!(disc_env_var(&iso).is_some());
+        assert_eq!(disc_env_var(&iso), disc_env_var(&dir));
+        assert_eq!(disc_env_var(std::env::temp_dir()), None);
+    }
+
+    /// `SH2_ISO_TEST=<image>` + `SH2_ISO_TEST_DIR=<the same disc extracted>`: every table file and every root file reads the same from
+    /// the image as from the folder, and the image's disc number matches.
+    #[test]
+    fn iso_matches_folder() {
+        let (Some(iso), Some(dir)) = (std::env::var_os("SH2_ISO_TEST"), std::env::var_os("SH2_ISO_TEST_DIR")) else { return };
+        let (a, b) = (Disc::open_one(&iso).unwrap(), Disc::open_one(&dir).unwrap());
+        assert!(matches!(a.source(), DiscSource::Iso(_)));
+        assert_eq!(a.number(), b.number());
+        let mut n = 0;
+        a.info().walk(|p, _| {
+            assert_eq!(a.read(p).unwrap(), b.read(p).unwrap(), "{p}");
+            n += 1;
+        });
+        assert!(n > 1000, "{n} files");
+        for name in ["FIELD.BIN", "BATTLE.BIN", "SYSTEM.CNF"] {
+            assert_eq!(read_disc_file(&iso, name).unwrap(), read_disc_file(&dir, name).unwrap(), "{name}");
+        }
+        assert!(disc_file_exists(&iso, "pkfinfo.tbl;1") && !disc_file_exists(&iso, "NOPE.BIN"));
+    }
+
     /// Runs against the real disc when `SH2_DISC_DIR` is set; verifies archive sizes add up exactly.
     #[test]
     fn real_disc_archives_are_exact() {
@@ -760,7 +942,7 @@ mod tests {
             n += files.len();
             if let Some((_, l)) = files.first() {
                 if l.in_archive {
-                    let sz = std::fs::metadata(Path::new(&dir).join(format!("{cont}.PKB"))).unwrap().len();
+                    let sz = disc.source().len(&format!("{cont}.PKB")).unwrap();
                     let end = files.iter().map(|(_, l)| l.byte_offset + l.size as u64).max().unwrap();
                     assert_eq!(sz, end, "{cont}");
                 }

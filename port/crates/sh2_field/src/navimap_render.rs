@@ -294,8 +294,7 @@ mod tests {
     fn art() -> Option<NaviArt> {
         // the overlay art is identical on both discs; look it up by signature in whichever FIELD.BIN is available
         ["SH2_US_DISC_DIR", "SH2_DISC_DIR"].iter().find_map(|k| {
-            let p = std::path::Path::new(&std::env::var_os(k)?).join("FIELD.BIN");
-            NaviArt::from_overlay(&std::fs::read(p).ok()?)
+            NaviArt::from_overlay(&sh2_core::fileio::read_disc_file(std::env::var_os(k)?, "FIELD.BIN").ok()?)
         })
     }
 

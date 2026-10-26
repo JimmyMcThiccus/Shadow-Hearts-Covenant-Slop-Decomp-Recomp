@@ -38,7 +38,7 @@ impl CoreHost for Host {
 #[test]
 fn all_effects_run_through_effect_core() {
     let dir = std::env::var("SH2_DISC_DIR").unwrap_or_else(|_| DEFAULT_DIR.to_string());
-    let Ok(d) = std::fs::read(std::path::Path::new(&dir).join("EFFECT.PKB")) else { return };
+    let Ok(d) = sh2_core::fileio::read_disc_file(std::path::Path::new(&dir), "EFFECT.PKB") else { return };
     let offs: Vec<usize> = (0..d.len()).step_by(0x800).filter(|&o| d.get(o..o + 4) == Some(b"EFMG")).collect();
     assert_eq!(offs.len(), 261);
     let mut host = Host::default();

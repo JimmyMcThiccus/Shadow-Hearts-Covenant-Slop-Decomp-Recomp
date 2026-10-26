@@ -8,7 +8,7 @@ fn load() -> Option<Vec<u8>> {
     let dir = std::env::var_os("SH2_DISC_DIR")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| "/Volumes/work/Sh2 Decomp/Shadow Hearts II (Japan) (Furokuban)".into());
-    std::fs::read(dir.join("BTLDATA.PKB")).ok()
+    sh2_core::fileio::read_disc_file(&dir, "BTLDATA.PKB").ok()
 }
 
 #[test]

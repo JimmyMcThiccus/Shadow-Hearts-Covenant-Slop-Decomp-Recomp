@@ -18,7 +18,7 @@ fn main() {
     let dir = std::env::var(if us { "SH2_US_DISC_DIR" } else { "SH2_DISC_DIR" }).unwrap();
     let mps = Mps::parse(disc.read(&format!("FIELD/MPS/{map}.MPS")).unwrap()).unwrap();
     let navi = NaviData::from_mps(&mps).expect("no navimap");
-    let art = NaviArt::from_overlay(&std::fs::read(std::path::Path::new(&dir).join("FIELD.BIN")).unwrap()).expect("art");
+    let art = NaviArt::from_overlay(&sh2_core::fileio::read_disc_file(std::path::Path::new(&dir), "FIELD.BIN").unwrap()).expect("art");
     let o = Orient { flip_y, flip_x, yaw_sign };
     let t0 = std::time::Instant::now();
     let mut floor = navi.render_floor(o, &NaviView { player: [px, 0.0, pz], heading: 0.0 });

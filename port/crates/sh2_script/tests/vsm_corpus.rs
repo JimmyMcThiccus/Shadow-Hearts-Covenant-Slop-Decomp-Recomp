@@ -76,8 +76,7 @@ fn efmg_offsets(d: &[u8]) -> Vec<usize> {
 #[test]
 fn run_all_261_effects() {
     let dir = std::env::var("SH2_DISC_DIR").unwrap_or_else(|_| DEFAULT_DIR.to_string());
-    let path = std::path::Path::new(&dir).join("EFFECT.PKB");
-    let Ok(d) = std::fs::read(&path) else { return };
+    let Ok(d) = sh2_core::fileio::read_disc_file(&dir, "EFFECT.PKB") else { return };
     let frames: u64 = std::env::var("SH2_VEC_FRAMES").ok().and_then(|v| v.parse().ok()).unwrap_or(600);
     let offs = efmg_offsets(&d);
     assert_eq!(offs.len(), 261, "EFFECT.PKB holds 261 EFMG files");
@@ -173,7 +172,7 @@ fn run_all_261_effects() {
 #[test]
 fn corpus_opcode_census() {
     let dir = std::env::var("SH2_DISC_DIR").unwrap_or_else(|_| DEFAULT_DIR.to_string());
-    let Ok(d) = std::fs::read(std::path::Path::new(&dir).join("EFFECT.PKB")) else { return };
+    let Ok(d) = sh2_core::fileio::read_disc_file(std::path::Path::new(&dir), "EFFECT.PKB") else { return };
     let offs = efmg_offsets(&d);
     let mut census = [0u64; 256];
     for (n, &o) in offs.iter().enumerate() {

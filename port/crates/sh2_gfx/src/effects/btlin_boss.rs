@@ -88,7 +88,7 @@ impl BossInData {
     }
 
     pub fn load(root: &Path) -> Option<BossInData> {
-        Self::from_field_bin(&std::fs::read(root.join("FIELD.BIN")).ok()?)
+        Self::from_field_bin(&sh2_core::fileio::read_disc_file(&root, "FIELD.BIN").ok()?)
     }
 }
 
@@ -371,7 +371,7 @@ mod tests {
 
     #[test]
     fn us_boss_models_in_field_bin() {
-        let Some(root) = std::env::var_os("SH2_US_DISC_DIR").map(std::path::PathBuf::from).filter(|p| p.join("FIELD.BIN").exists()) else { return };
+        let Some(root) = std::env::var_os("SH2_US_DISC_DIR").map(std::path::PathBuf::from).filter(|p| sh2_core::fileio::disc_file_exists(&p, "FIELD.BIN")) else { return };
         let d = BossInData::load(&root).expect("boss_in models");
         assert_eq!(d.models.len(), 2);
         assert_eq!(d.models[0].1.name, "boss_in");

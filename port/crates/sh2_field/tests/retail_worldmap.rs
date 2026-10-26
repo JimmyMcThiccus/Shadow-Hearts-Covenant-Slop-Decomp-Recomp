@@ -8,7 +8,7 @@ fn disc() -> Option<std::path::PathBuf> {
 }
 
 fn table() -> Option<RetailWorldTable> {
-    RetailWorldTable::from_field_bin(&std::fs::read(disc()?.join("FIELD.BIN")).ok()?)
+    RetailWorldTable::from_field_bin(&sh2_core::fileio::read_disc_file(disc()?, "FIELD.BIN").ok()?)
 }
 
 #[test]

@@ -13,7 +13,7 @@ fn disc(name: &str) -> Option<Vec<u8>> {
     let dir = std::env::var_os("SH2_DISC_DIR")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| "/Volumes/work/Sh2 Decomp/Shadow Hearts II (Japan) (Furokuban)".into());
-    std::fs::read(dir.join(name)).ok()
+    sh2_core::fileio::read_disc_file(&dir, name).ok()
 }
 
 fn load(d: &[u8], off: usize) -> (Arc<Model>, Vec<Arc<Motion>>) {

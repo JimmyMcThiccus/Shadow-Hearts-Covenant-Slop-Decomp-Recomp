@@ -98,7 +98,7 @@ impl SolomonData {
         let disc = env.assets.disc.as_ref()?;
         let retail = sh2_core::boot::is_retail();
         let root = std::env::var_os("SH2_DISC_DIR").map(std::path::PathBuf::from)?;
-        let img = OverlayImage::new(std::fs::read(root.join("FIELD.BIN")).ok()?).ok()?;
+        let img = OverlayImage::new(sh2_core::fileio::read_disc_file(&root, "FIELD.BIN").ok()?).ok()?;
         let (sa, aa) = if retail { (addr::US_SLOTS, addr::US_ATTR) } else { (addr::JP_SLOTS, addr::JP_ATTR) };
         let raw = img.bytes_at(sa, SLOT_COUNT * 12)?;
         let slots = (0..SLOT_COUNT)
@@ -1180,7 +1180,7 @@ mod tests {
     fn real_tables_if_present() {
         for (var, retail) in [("SH2_DISC_DIR", false), ("SH2_US_DISC_DIR", true)] {
             let Some(dir) = std::env::var_os(var) else { continue };
-            let Ok(bytes) = std::fs::read(std::path::Path::new(&dir).join("FIELD.BIN")) else { continue };
+            let Ok(bytes) = sh2_core::fileio::read_disc_file(std::path::Path::new(&dir), "FIELD.BIN") else { continue };
             let img = OverlayImage::new(bytes).unwrap();
             let (sa, aa) = if retail { (addr::US_SLOTS, addr::US_ATTR) } else { (addr::JP_SLOTS, addr::JP_ATTR) };
             let raw = img.bytes_at(sa, SLOT_COUNT * 12).unwrap();

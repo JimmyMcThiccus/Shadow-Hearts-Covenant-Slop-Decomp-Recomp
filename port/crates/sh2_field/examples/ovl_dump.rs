@@ -3,7 +3,7 @@ use sh2_field::overlay_data::{DataKind, OverlayImage, DATA_SYMS};
 fn main() {
     let pre = std::env::args().nth(1).unwrap_or_default();
     let dir = std::env::var("SH2_DISC_DIR").unwrap();
-    let img = OverlayImage::new(std::fs::read(std::path::Path::new(&dir).join("FIELD.BIN")).unwrap()).unwrap();
+    let img = OverlayImage::new(sh2_core::fileio::read_disc_file(std::path::Path::new(&dir), "FIELD.BIN").unwrap()).unwrap();
     for s in DATA_SYMS.iter().filter(|s| s.name.starts_with(&pre)) {
         println!("== {} @{:#x} size {} {:?}", s.name, s.addr, s.size, s.kind);
         match s.kind {

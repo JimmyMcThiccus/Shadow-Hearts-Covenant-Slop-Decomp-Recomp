@@ -206,7 +206,7 @@ impl Env {
         }
         t.names = crate::plugin::name_lookup(&pkb);
         t.us_rd = crate::plugin::us_regdat(&pkb);
-        let wm = std::fs::read(dir.as_ref().join("FIELD.BIN")).ok().and_then(|b| RetailWorldTable::from_field_bin(&b));
+        let wm = sh2_core::fileio::read_disc_file(dir.as_ref(), "FIELD.BIN").ok().and_then(|b| RetailWorldTable::from_field_bin(&b));
         let battle = sh2_battle::pkb_compat::PkbDisc::open(dir.as_ref()).ok().and_then(|d| sh2_battle::data::BattleData::load(&d).ok()).map(Arc::new);
         Some(Env { pkb, tables: Arc::new(t), wm, battle })
     }

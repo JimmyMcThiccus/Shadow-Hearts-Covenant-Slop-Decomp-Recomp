@@ -186,7 +186,7 @@ fn enter_worldmap(
         commands.insert_resource(passthrough_runtime(false));
         return;
     }
-    let table = std::fs::read(root.join("FIELD.BIN")).ok().and_then(|b| WorldMapTable::from_field_bin(&b)).filter(|_| std::env::var_os("SH2_SKIP_WORLDMAP").is_none());
+    let table = sh2_core::fileio::read_disc_file(&root, "FIELD.BIN").ok().and_then(|b| WorldMapTable::from_field_bin(&b)).filter(|_| std::env::var_os("SH2_SKIP_WORLDMAP").is_none());
     let Some(table) = table else {
         // no trial table: nothing to choose from, go to the first map
         log::warn!("world map: no area table in FIELD.BIN, continuing to {}", FieldRequest::FIRST_MAP);
@@ -248,7 +248,7 @@ pub fn build_retail(
     audio: &mut FieldAudioQueue,
     assets: Option<&MenuAssets>,
 ) -> Option<WorldMapRuntime> {
-    let bin = std::fs::read(root.join("FIELD.BIN")).ok()?;
+    let bin = sh2_core::fileio::read_disc_file(&root, "FIELD.BIN").ok()?;
     let rt = RetailWorldTable::from_field_bin(&bin)?;
     let wm_chunk = session.save.field.find(sh2_menu::save::FieldSave::TAG_WM);
     let byte = |id: usize| wm_chunk.and_then(|c| c.payload.get(0xc + id).copied()).unwrap_or(0);
@@ -564,7 +564,7 @@ fn worldmap_tick(
 
 /// `DAT_0060fe97[world * 0x30]`: the point selected when a world is entered through a portal / L1 / R1.
 fn retail_enter_point(root: &std::path::Path, world: i32) -> i32 {
-    std::fs::read(root.join("FIELD.BIN"))
+    sh2_core::fileio::read_disc_file(&root, "FIELD.BIN")
         .ok()
         .and_then(|b| RetailWorldTable::from_field_bin(&b))
         .and_then(|t| t.worlds.get(world.max(0) as usize).map(|w| w.links.enter_point as i32))

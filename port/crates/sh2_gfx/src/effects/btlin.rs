@@ -157,21 +157,21 @@ impl BtlInData {
         Some([one(&clut_add)?, one(&clut_sub)?])
     }
 
-    /// Load from a disc folder (boot ELF + FIELD.BIN); `None` when the ELF tables are missing.
+    /// Load from a disc folder or `.iso` image (boot ELF + FIELD.BIN); `None` when the ELF tables are missing.
     pub fn load(root: &Path) -> Option<BtlInData> {
-        let elf = ["SLUS_210.41", "SLUS_210.44", "SLPS_255.11", "SLPS_255.12"].iter().find_map(|n| std::fs::read(root.join(n)).ok()).or_else(|| {
-            // any boot ELF in the folder
-            std::fs::read_dir(root).ok()?.flatten().find_map(|e| {
-                let n = e.file_name().to_string_lossy().to_ascii_uppercase();
+        let src = sh2_core::fileio::DiscSource::open(root).ok()?;
+        let elf = ["SLUS_210.41", "SLUS_210.44", "SLPS_255.11", "SLPS_255.12"].iter().find_map(|n| src.read(n).ok()).or_else(|| {
+            // any boot ELF on the disc
+            src.root_files().into_iter().find_map(|n| {
                 if (n.starts_with("SLUS_") || n.starts_with("SLPS_") || n.starts_with("SLPM_")) && n.len() == 11 {
-                    std::fs::read(e.path()).ok()
+                    src.read(&n).ok()
                 } else {
                     None
                 }
             })
         })?;
         let mut d = Self::from_elf(&elf)?;
-        d.cracks = std::fs::read(root.join("FIELD.BIN")).ok().and_then(|b| Self::cracks_from_field_bin(&b));
+        d.cracks = src.read("FIELD.BIN").ok().and_then(|b| Self::cracks_from_field_bin(&b));
         Some(d)
     }
 }
@@ -859,7 +859,7 @@ mod tests {
     use super::*;
 
     fn disc() -> Option<std::path::PathBuf> {
-        std::env::var_os("SH2_US_DISC_DIR").map(std::path::PathBuf::from).filter(|p| p.join("SLUS_210.41").exists())
+        std::env::var_os("SH2_US_DISC_DIR").map(std::path::PathBuf::from).filter(|p| sh2_core::fileio::disc_file_exists(p, "SLUS_210.41"))
     }
 
     #[test]

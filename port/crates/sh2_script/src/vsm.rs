@@ -1170,8 +1170,7 @@ mod tests {
     #[test]
     fn real_effect_terminates() {
         let Ok(dir) = std::env::var("SH2_DISC_DIR") else { return };
-        let path = std::path::Path::new(&dir).join("EFFECT.PKB");
-        let Ok(bytes) = std::fs::read(&path) else { return };
+        let Ok(bytes) = sh2_core::fileio::read_disc_file(&dir, "EFFECT.PKB") else { return };
         let efmg = crate::efmg::Efmg::parse(&bytes[..0x2d000]).unwrap();
         let heco = Heco::parse(efmg.find(b'C', 0).unwrap()).unwrap();
         assert_eq!(heco.code.len(), 4870);

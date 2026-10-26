@@ -4,9 +4,11 @@
 
 ### Prerequisites
 1. **Rust** - Install from [rustup.rs](https://rustup.rs/)
-2. **Game Discs** - Extract PS2 disc data to folders:
-   - JP Demo: `SH2JP` (Shadow Hearts II Japan demo)
-   - US Retail: `SH2US` (Shadow Hearts Covenant USA)
+2. **Game Discs** - Your own `.iso` images of the discs (any file names). Nothing needs extracting:
+   - US Retail: Shadow Hearts: Covenant (USA) Disc 1 and Disc 2
+   - JP Demo (optional, for `run-jp`): Shadow Hearts II (Japan) Furokuban demo
+
+   Drag the `.iso` files into the `sh2-decomp` folder, next to `run-us.bat`. (A standalone `sh2_app.exe` also finds images placed next to itself.) Git ignores `*.iso`, so they never get committed.
 
 ### Running the Port
 
@@ -38,44 +40,41 @@ run-us.bat --autoplay --boost 80
 
 ## Configuration
 
-By default the scripts look for the extracted discs next to the repo (in its parent folder):
-- JP Disc: `..\SH2JP` (`SH2_DISC_DIR`)
-- US Disc: `..\SH2US` (`SH2_US_DISC_DIR`)
-- US Disc 2: `..\disk2extracted` (`SH2_US_DISC2_DIR`, US scripts only)
-- Build Cache: `%USERPROFILE%\.cache\sh2-decomp-target`
+The port finds each disc in this order:
+1. The environment variable for that disc, if set: `SH2_DISC_DIR` (JP demo), `SH2_US_DISC_DIR` (US disc 1), `SH2_US_DISC2_DIR` (US disc 2). Each can name an `.iso` image or an extracted disc folder.
+2. `.iso` images in the folder named by `SH2_DISCS` (the `run-*` scripts set it to their own folder, `sh2-decomp`).
+3. `.iso` images next to `sh2_app.exe`.
+
+Images are identified by their boot executable, so the file names don't matter: `SLPM_602.19` = JP demo, `SLUS_210.41` = US disc 1, `SLUS_210.44` = US disc 2. At startup the port prints a `disc: ...` line for each image it picked up.
+
+Build Cache: `%USERPROFILE%\.cache\sh2-decomp-target`
 
 To use other locations, set the environment variables before running:
 
 **Batch:**
 ```batch
-set SH2_DISC_DIR=C:\Games\SH2\JP
-set SH2_US_DISC_DIR=C:\Games\SH2\US
-run-jp.bat --autoplay
+set SH2_DISCS=C:\Games\PS2
+run-us.bat --autoplay
 ```
 
 **PowerShell:**
 ```powershell
-$env:SH2_DISC_DIR = "C:\Games\SH2\JP"
-$env:SH2_US_DISC_DIR = "C:\Games\SH2\US"
-.\run-jp.ps1 --autoplay
+$env:SH2_US_DISC_DIR = "C:\Games\PS2\Shadow Hearts - Covenant (USA) (Disc 1).iso"
+$env:SH2_US_DISC2_DIR = "C:\Games\PS2\Shadow Hearts - Covenant (USA) (Disc 2).iso"
+.\run-us.ps1 --autoplay
 ```
 
 ## Troubleshooting
 
 ### "Disc not found" errors
-Ensure the folder structure matches (or point the variables above at your folders):
+Check the `disc: ...` lines the port prints at startup. If a disc is missing, make sure its `.iso` sits next to `run-us.bat` (or next to `sh2_app.exe` when you run the exe directly), or point that disc's variable straight at the image:
 ```
-<parent folder>\
-  sh2-decomp\        (this repo)
-  SH2JP\
-    SLPM_602.19
-    SYSTEM.CNF
-    *.PKB files
-  SH2US\
-    SLUS_210.41
-    SYSTEM.CNF
-    *.PKB files
+sh2-decomp\
+  run-us.bat
+  Shadow Hearts - Covenant (USA) (Disc 1).iso
+  Shadow Hearts - Covenant (USA) (Disc 2).iso
 ```
+Images must be plain 2048-byte-sector `.iso` files (the usual PS2 DVD dump format). Compressed formats such as `.chd` or `.cso` need converting to `.iso` first.
 
 ### Build errors
 Clear and rebuild:

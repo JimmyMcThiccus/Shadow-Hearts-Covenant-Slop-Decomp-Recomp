@@ -63,6 +63,11 @@ impl Plugin for RetailOnly {
 /// CApp::app->StartThread(); SleepThread(); mwExit();
 /// ```
 fn main() {
+    // Run straight from the user's .iso images dropped next to this executable (or in `SH2_DISCS`); each fills the disc variable
+    // (SH2_DISC_DIR, SH2_US_DISC_DIR, SH2_US_DISC2_DIR) its boot ELF belongs to, unless that variable is already set.
+    for (var, image) in sh2_core::fileio::discover_disc_images() {
+        eprintln!("disc: {var} = {}", image.display());
+    }
     // Asset viewer: `--view-map <NAME>` / `--view-model [spec]` (see viewer.rs); the normal game boot below is untouched.
     if let Some(opts) = viewer::ViewerOptions::from_args(std::env::args().skip(1)) {
         // the viewers build their own app: only the hard limit of SH2_MAX_SECONDS applies (exit code 124)
@@ -77,13 +82,13 @@ fn main() {
     }
     let reboot = RebootPath::from_argv(std::env::args().next());
     // `--us` / `SH2_BUILD=retail`: play the US retail disc (`SH2_US_DISC_DIR`).  Every crate reads "the disc" from `SH2_DISC_DIR`, so the
-    // retail run points it at the US folder and tells the port which build it is (`sh2_core::boot::active_region`).
+    // retail run points it at the US disc and tells the port which build it is (`sh2_core::boot::active_region`).
     let region = sh2_core::boot::Region::from_args_env(std::env::args().skip(1));
     if region.is_retail() {
         match std::env::var_os("SH2_US_DISC_DIR") {
             Some(us) => std::env::set_var("SH2_DISC_DIR", us),
             None => {
-                eprintln!("--us needs SH2_US_DISC_DIR (the US retail disc folder: PKFINFO.TBL, FIELD.PKB, SLUS_210.41 ...)");
+                eprintln!("--us needs the US retail disc 1: put its .iso next to sh2_app.exe, or set SH2_US_DISC_DIR to the .iso or an extracted folder (PKFINFO.TBL, FIELD.PKB, SLUS_210.41 ...)");
                 std::process::exit(2);
             }
         }

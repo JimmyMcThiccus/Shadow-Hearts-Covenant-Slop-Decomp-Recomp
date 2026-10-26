@@ -3,7 +3,7 @@ use sh2_menu::movie::{split_lsd, MovieStream};
 use std::path::PathBuf;
 
 fn root() -> Option<PathBuf> {
-    std::env::var_os("SH2_DISC_DIR").map(PathBuf::from).filter(|p| p.join("PKFINFO.TBL").exists())
+    std::env::var_os("SH2_DISC_DIR").map(PathBuf::from).filter(|p| sh2_core::fileio::disc_file_exists(&p, "PKFINFO.TBL"))
 }
 
 #[test]

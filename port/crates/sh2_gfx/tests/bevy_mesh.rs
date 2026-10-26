@@ -3,22 +3,19 @@
 use bevy::mesh::VertexAttributeValues;
 use sh2_formats::model::Model;
 use sh2_gfx::bevy::mesh::{atomics_mesh, drawable};
-use std::io::{Read, Seek, SeekFrom};
 
 fn disc() -> Option<std::path::PathBuf> {
     let d = std::env::var_os("SH2_DISC_DIR")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| "/Volumes/work/Sh2 Decomp/Shadow Hearts II (Japan) (Furokuban)".into());
-    d.join("BTLDATA.PKB").exists().then_some(d)
+    sh2_core::fileio::disc_file_exists(&d, "BTLDATA.PKB").then_some(d)
 }
 
 #[test]
 fn character_atomics_become_valid_meshes() {
     let Some(dir) = disc() else { return };
-    let mut f = std::fs::File::open(dir.join("BTLDATA.PKB")).unwrap();
-    f.seek(SeekFrom::Start(0x1bf2860)).unwrap();
-    let mut d = vec![0u8; 0x200000];
-    let n = f.read(&mut d).unwrap();
+    let d = sh2_core::fileio::DiscSource::open(&dir).unwrap().read_range("BTLDATA.PKB", 0x1bf2860, 0x200000).unwrap();
+    let n = d.len();
     let m = Model::parse(&d[..n]).unwrap();
     let mut total = 0;
     for a in m.atomics.iter().filter(|a| drawable(a)) {

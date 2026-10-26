@@ -446,21 +446,16 @@ fn spawn_debug_character(commands: &mut Commands, gpu: &mut GpuCtx, disc: &Sh2Di
     use sh2_formats::motion::Motion;
     use sh2_formats::pkb;
     use sh2_gfx::bevy::model::{spawn_animated_model, ModelMaterials};
-    use std::io::{Read, Seek, SeekFrom};
     let spec = std::env::var("SH2_DEBUG_CHAR").unwrap_or_default();
     let (file, offset) = match spec.rsplit_once('@') {
         Some((f, o)) => (f.to_owned(), usize::from_str_radix(o.trim_start_matches("0x"), 16).unwrap_or(0x1bf2860)),
         None => ("BTLDATA.PKB".to_owned(), 0x1bf2860),
     };
-    // SH2_DEBUG_CHAR_DISC: read the model from another disc folder (the default offsets are the JP demo's)
+    // SH2_DEBUG_CHAR_DISC: read the model from another disc folder or image (the default offsets are the JP demo's)
     let root = std::env::var_os("SH2_DEBUG_CHAR_DISC").map(std::path::PathBuf::from).unwrap_or_else(|| disc.0.root().to_path_buf());
-    let path = root.join(&file);
-    let Ok(mut f) = std::fs::File::open(&path) else { return };
-    let len = f.metadata().map(|m| m.len() as usize).unwrap_or(0);
     let base = offset.saturating_sub(0x40_0000);
-    let end = (offset + 0x100_0000).min(len);
-    let mut buf = vec![0u8; end - base];
-    if f.seek(SeekFrom::Start(base as u64)).is_err() || f.read_exact(&mut buf).is_err() {
+    let Ok(buf) = sh2_core::fileio::DiscSource::open(&root).and_then(|s| s.read_range(&file, base as u64, (offset + 0x100_0000 - base) as u64)) else { return };
+    if buf.len() <= offset - base {
         return;
     }
     let rel = offset - base;

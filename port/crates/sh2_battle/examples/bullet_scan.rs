@@ -73,7 +73,7 @@ fn main() {
         }
     }
     if let Some(dir) = std::env::var_os("SH2_US_DISC_DIR") {
-        if let Ok(b) = std::fs::read(std::path::Path::new(&dir).join("BATTLE.BIN")) {
+        if let Ok(b) = sh2_core::fileio::read_disc_file(std::path::Path::new(&dir), "BATTLE.BIN") {
             for (t, rows) in sh2_gfx::effects::bullet::bullet_table(&b, true).iter().enumerate() {
                 for (k, r) in rows.iter().enumerate() {
                     println!("bullet table {t} row {k}: kind {} source {} bbox {} pair {} offset {:?} dir {:?}", r.kind, r.source, r.bbox, r.pair, r.offset, r.dir);

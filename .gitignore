@@ -26,3 +26,6 @@ __pycache__/
 # stray build output / backups
 /warn.txt
 *.bak
+# the user's own disc images, dropped next to the launch scripts / sh2_app.exe (never committed)
+*.iso
+*.ISO

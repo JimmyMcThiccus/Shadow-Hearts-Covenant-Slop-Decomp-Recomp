@@ -13,7 +13,7 @@ fn disc() -> Option<std::path::PathBuf> {
 #[test]
 fn tihd_blocks_decode_and_match() {
     let Some(dir) = disc() else { return };
-    let Ok(d) = std::fs::read(dir.join("COMMON.PKB")) else { return };
+    let Ok(d) = sh2_core::fileio::read_disc_file(&dir, "COMMON.PKB") else { return };
     let mut checked = 0;
     let mut ipu = 0;
     let mut i = 0;

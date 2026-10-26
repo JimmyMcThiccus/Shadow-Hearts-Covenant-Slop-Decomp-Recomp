@@ -64,7 +64,7 @@ impl SysCalls for Stub {
 #[test]
 fn run_all_us_effects() {
     let Ok(dir) = std::env::var("SH2_US_DISC_DIR") else { return };
-    let Ok(d) = std::fs::read(std::path::Path::new(&dir).join("EFFECT.PKB")) else { return };
+    let Ok(d) = sh2_core::fileio::read_disc_file(std::path::Path::new(&dir), "EFFECT.PKB") else { return };
     let offs: Vec<usize> = (0..d.len()).step_by(0x800).filter(|&o| d.get(o..o + 4) == Some(b"EFMG")).collect();
     assert!(offs.len() >= 261, "US EFFECT.PKB holds {} EFMG files", offs.len());
     let mut stub = Stub::default();

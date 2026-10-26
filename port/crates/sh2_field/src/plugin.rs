@@ -139,7 +139,7 @@ fn load_field_data(mut commands: Commands, cfg: Option<Res<AppConfig>>) {
     let root = disc_root(cfg.as_deref());
     match PkbSet::open(&root) {
         Ok(pkb) => {
-            let enc_table = std::fs::read(root.join("FIELD.BIN")).ok().and_then(|b| read_enc_dist(&b));
+            let enc_table = sh2_core::fileio::read_disc_file(&root, "FIELD.BIN").ok().and_then(|b| read_enc_dist(&b));
             let mut tables = FieldTables::default();
             if let Some(d) = read_field_t(&pkb) {
                 tables.from_field_t(&d);

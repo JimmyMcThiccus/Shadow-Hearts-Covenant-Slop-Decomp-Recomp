@@ -15,6 +15,7 @@ pub mod fileio;
 /// Bevy scene/schedule glue (needs the `bevy` feature).
 #[cfg(feature = "bevy")]
 pub mod game;
+pub mod iso;
 pub mod overlay;
 pub mod pad;
 pub mod pause;

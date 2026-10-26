@@ -930,7 +930,7 @@ mod tests {
     #[test]
     fn real_jp_tables_if_present() {
         let Some(dir) = std::env::var_os("SH2_DISC_DIR") else { return };
-        let Ok(bytes) = std::fs::read(std::path::Path::new(&dir).join("FIELD.BIN")) else { return };
+        let Ok(bytes) = sh2_core::fileio::read_disc_file(std::path::Path::new(&dir), "FIELD.BIN") else { return };
         let t = WorldMapTable::from_field_bin(&bytes).expect("tables");
         assert_eq!(t.maps.len(), 4);
         assert_eq!(t.maps[0].map, "AP_00_U");
