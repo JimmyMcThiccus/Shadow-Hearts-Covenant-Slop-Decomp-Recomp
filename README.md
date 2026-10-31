@@ -2,6 +2,9 @@
 
 A decompilation of *Shadow Hearts II* / *Shadow Hearts: Covenant* (PS2) and a native Rust/Bevy reimplementation built from it.
 
+# This is a shitty thing I made to test out claude since it was being touted as doing as much, now it's for anyone to fork/maintain to finish up the process with people who actually know what they're doing and not just AI Agents
+
+
 The Japanese demo executable `SLPM_602.19` ships with a full symbol table. It is the main source for names, class layouts and the call graph, and those names are carried over to the stripped US retail build `SLUS_210.41`, which is what the port targets.
 
 **This repository contains no game data.** You need your own copy of the game as `.iso` disc images (or extracted disc folders). See [WINDOWS_SETUP.md](WINDOWS_SETUP.md).
